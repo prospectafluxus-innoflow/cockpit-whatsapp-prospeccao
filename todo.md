@@ -71,3 +71,21 @@
 - [x] Seção "Fila do Dia" no Cockpit mostrando os leads sugeridos para cada janela
 - [x] Ativação/desativação do agendamento por janela
 - [x] Indicador visual de qual janela está ativa no momento
+
+## Autenticação Própria (Email + Senha)
+
+- [ ] Schema: adicionar campos `passwordHash`, `resetToken`, `resetTokenExpiresAt` na tabela users
+- [ ] Migration SQL aplicada
+- [ ] Backend: endpoint POST /api/auth/register (nome, email, senha)
+- [ ] Backend: endpoint POST /api/auth/login (email, senha → JWT cookie)
+- [ ] Backend: endpoint POST /api/auth/logout
+- [ ] Backend: endpoint POST /api/auth/forgot-password (gera token)
+- [ ] Backend: endpoint POST /api/auth/reset-password (valida token, redefine senha)
+- [ ] Remover dependência do Manus OAuth do fluxo principal
+- [ ] Tela de Login com email e senha
+- [ ] Tela de Cadastro com nome, email e senha
+- [ ] Tela de Recuperação de senha (solicitar)
+- [ ] Tela de Redefinição de senha (com token)
+- [ ] Painel de Admin: lista de usuários, data de cadastro, status
+- [ ] Proteção de rotas: redirecionar para login se não autenticado
+- [ ] Testes Vitest para register, login e logout

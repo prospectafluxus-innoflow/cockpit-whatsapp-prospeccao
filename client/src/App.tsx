@@ -8,21 +8,38 @@ import CockpitPage from "./pages/CockpitPage";
 import KanbanPage from "./pages/KanbanPage";
 import DashboardPage from "./pages/DashboardPage";
 import SchedulePage from "./pages/SchedulePage";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import AdminPage from "./pages/AdminPage";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
   return (
-    <DashboardLayout>
-      <Switch>
-        <Route path="/" component={CockpitPage} />
-        <Route path="/cockpit" component={CockpitPage} />
-        <Route path="/kanban" component={KanbanPage} />
-        <Route path="/dashboard" component={DashboardPage} />
-        <Route path="/schedule" component={SchedulePage} />
-        <Route path="/404" component={NotFound} />
-        <Route component={NotFound} />
-      </Switch>
-    </DashboardLayout>
+    <Switch>
+      {/* Rotas públicas — sem DashboardLayout */}
+      <Route path="/login" component={LoginPage} />
+      <Route path="/register" component={RegisterPage} />
+      <Route path="/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/reset-password" component={ResetPasswordPage} />
+
+      {/* Rotas protegidas — com DashboardLayout */}
+      <Route>
+        <DashboardLayout>
+          <Switch>
+            <Route path="/" component={CockpitPage} />
+            <Route path="/cockpit" component={CockpitPage} />
+            <Route path="/kanban" component={KanbanPage} />
+            <Route path="/dashboard" component={DashboardPage} />
+            <Route path="/schedule" component={SchedulePage} />
+            <Route path="/admin" component={AdminPage} />
+            <Route path="/404" component={NotFound} />
+            <Route component={NotFound} />
+          </Switch>
+        </DashboardLayout>
+      </Route>
+    </Switch>
   );
 }
 

@@ -20,6 +20,7 @@ import {
 import { parse as parseCookie } from "cookie";
 import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
 import { invokeLLM } from "./_core/llm";
+import { authOwnRouter } from "./routers/authOwn";
 
 const DAILY_LIMIT = 30;
 
@@ -62,6 +63,7 @@ function buildWaLink(whatsapp: string, toque: number, lead: { name: string; firs
 // ─── Router ───────────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
+  authOwn: authOwnRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

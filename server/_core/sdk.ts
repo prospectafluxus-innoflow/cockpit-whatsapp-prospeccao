@@ -257,11 +257,33 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<AuthenticatedUser> {
-    // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
-    const session = await this.verifySession(sessionCookie);
 
+    if (!sessionCookie) {
+      throw ForbiddenError("Invalid session cookie");
+    }
+
+    // ── Tenta verificar como token próprio (sub = userId numérico) ──────────
+    try {
+      const secretKey = this.getSessionSecret();
+      const { payload } = await jwtVerify(sessionCookie, secretKey, { algorithms: ["HS256"] });
+      const sub = payload.sub;
+      // Token próprio: sub é um número em string (ex: "42")
+      if (sub && /^\d+$/.test(sub)) {
+        const userId = parseInt(sub, 10);
+        const user = await db.getUserById(userId);
+        if (!user) throw ForbiddenError("User not found");
+        return user as AuthenticatedUser;
+      }
+    } catch (ownErr: any) {
+      // Se falhou por razão diferente de "payload não numérico", propaga
+      if (ownErr?.code === "FORBIDDEN") throw ownErr;
+      // Caso contrário, tenta o fluxo Manus OAuth abaixo
+    }
+
+    // ── Fluxo Manus OAuth (openId string) ──────────────────────────────────
+    const session = await this.verifySession(sessionCookie);
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
     }
@@ -279,7 +301,6 @@ class SDKServer {
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
-    // If user not in DB, sync from OAuth server automatically
     if (!user) {
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
@@ -297,14 +318,11 @@ class SDKServer {
       }
     }
 
-    if (!user) {
-      throw ForbiddenError("User not found");
-    }
+    if (!user) throw ForbiddenError("User not found");
 
-    await db.upsertUser({
-      openId: user.openId,
-      lastSignedIn: signedInAt,
-    });
+    if (user.openId) {
+      await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+    }
 
     return user;
   }

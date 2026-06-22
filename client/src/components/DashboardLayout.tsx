@@ -19,9 +19,9 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
+
 import { useIsMobile } from "@/hooks/useMobile";
-import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Zap } from "lucide-react";
+import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield, Zap } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -32,6 +32,10 @@ const menuItems = [
   { icon: Kanban, label: "Kanban CRM", path: "/kanban" },
   { icon: BarChart3, label: "Dashboard", path: "/dashboard" },
   { icon: Bell, label: "Agendamento", path: "/schedule" },
+];
+
+const adminMenuItems = [
+  { icon: Shield, label: "Administração", path: "/admin" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -61,7 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Zap className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-foreground">Cockpit WhatsApp</p>
+              <p className="font-semibold text-foreground">ProspectaFluxus</p>
               <p className="text-xs text-muted-foreground">Prospecção Ativa</p>
             </div>
           </div>
@@ -72,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </p>
           </div>
           <Button
-            onClick={() => { window.location.href = getLoginUrl(); }}
+            onClick={() => { window.location.href = "/login"; }}
             size="lg"
             className="w-full"
           >
@@ -152,7 +156,7 @@ function DashboardLayoutContent({
                     <Zap className="h-3.5 w-3.5 text-primary" />
                   </div>
                   <span className="font-semibold text-sm tracking-tight truncate">
-                    Cockpit WA
+                    ProspectaFluxus
                   </span>
                 </div>
               )}
@@ -178,6 +182,31 @@ function DashboardLayoutContent({
                 );
               })}
             </SidebarMenu>
+
+            {/* Menu de administração — visível apenas para admins */}
+            {user?.role === "admin" && (
+              <>
+                <div className="mx-3 my-2 border-t border-border/30" />
+                <SidebarMenu className="px-2">
+                  {adminMenuItems.map((item) => {
+                    const isActive = location === item.path;
+                    return (
+                      <SidebarMenuItem key={item.path}>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          onClick={() => setLocation(item.path)}
+                          tooltip={item.label}
+                          className="h-10 font-normal"
+                        >
+                          <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-amber-400"}`} />
+                          <span className="text-amber-400">{item.label}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              </>
+            )}
           </SidebarContent>
 
           <SidebarFooter className="p-3 border-t border-border/50">

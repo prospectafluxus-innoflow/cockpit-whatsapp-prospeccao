@@ -74,18 +74,18 @@
 
 ## Autenticação Própria (Email + Senha)
 
-- [ ] Schema: adicionar campos `passwordHash`, `resetToken`, `resetTokenExpiresAt` na tabela users
-- [ ] Migration SQL aplicada
-- [ ] Backend: endpoint POST /api/auth/register (nome, email, senha)
-- [ ] Backend: endpoint POST /api/auth/login (email, senha → JWT cookie)
-- [ ] Backend: endpoint POST /api/auth/logout
-- [ ] Backend: endpoint POST /api/auth/forgot-password (gera token)
-- [ ] Backend: endpoint POST /api/auth/reset-password (valida token, redefine senha)
-- [ ] Remover dependência do Manus OAuth do fluxo principal
-- [ ] Tela de Login com email e senha
-- [ ] Tela de Cadastro com nome, email e senha
-- [ ] Tela de Recuperação de senha (solicitar)
-- [ ] Tela de Redefinição de senha (com token)
-- [ ] Painel de Admin: lista de usuários, data de cadastro, status
-- [ ] Proteção de rotas: redirecionar para login se não autenticado
-- [ ] Testes Vitest para register, login e logout
+- [x] Schema: adicionar campos `passwordHash`, `resetToken`, `resetTokenExpiresAt` na tabela users
+- [x] Migration SQL aplicada
+- [x] Backend: endpoint POST /api/auth/register (nome, email, senha)
+- [x] Backend: endpoint POST /api/auth/login (email, senha → JWT cookie)
+- [x] Backend: endpoint POST /api/auth/logout
+- [x] Backend: endpoint POST /api/auth/forgot-password (gera token)
+- [x] Backend: endpoint POST /api/auth/reset-password (valida token, redefine senha)
+- [x] Remover dependência do Manus OAuth do fluxo principal
+- [x] Tela de Login com email e senha
+- [x] Tela de Cadastro com nome, email e senha
+- [x] Tela de Recuperação de senha (solicitar)
+- [x] Tela de Redefinição de senha (com token)
+- [x] Painel de Admin: lista de usuários, data de cadastro, status
+- [x] Proteção de rotas: redirecionar para login se não autenticado
+- [x] Testes Vitest para register, login e logout

@@ -100,3 +100,35 @@ export const dailySends = mysqlTable("daily_sends", {
 
 export type DailySend = typeof dailySends.$inferSelect;
 export type InsertDailySend = typeof dailySends.$inferInsert;
+
+// ─── Configuração de agendamento de lembretes ─────────────────────────────────
+export const sendSchedules = mysqlTable("send_schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+
+  // Janela da manhã
+  morningEnabled: int("morningEnabled").default(1).notNull(), // 0 ou 1
+  morningHour: int("morningHour").default(8).notNull(),       // hora UTC-3
+  morningCount: int("morningCount").default(2).notNull(),     // qtd de leads
+
+  // Janela do almoço
+  lunchEnabled: int("lunchEnabled").default(1).notNull(),
+  lunchHour: int("lunchHour").default(12).notNull(),
+  lunchCount: int("lunchCount").default(2).notNull(),
+
+  // Janela do fim do dia
+  eveningEnabled: int("eveningEnabled").default(1).notNull(),
+  eveningHour: int("eveningHour").default(17).notNull(),
+  eveningCount: int("eveningCount").default(2).notNull(),
+
+  // UIDs dos jobs Heartbeat (para gerenciar os crons)
+  morningTaskUid: varchar("morningTaskUid", { length: 65 }),
+  lunchTaskUid: varchar("lunchTaskUid", { length: 65 }),
+  eveningTaskUid: varchar("eveningTaskUid", { length: 65 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SendSchedule = typeof sendSchedules.$inferSelect;
+export type InsertSendSchedule = typeof sendSchedules.$inferInsert;

@@ -15,6 +15,13 @@
       "when": 1782148793402,
       "tag": "0001_magenta_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1782149891330,
+      "tag": "0002_charming_ultragirl",
+      "breakpoints": true
     }
   ]
 }

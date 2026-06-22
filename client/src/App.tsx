@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import CockpitPage from "./pages/CockpitPage";
 import KanbanPage from "./pages/KanbanPage";
 import DashboardPage from "./pages/DashboardPage";
+import SchedulePage from "./pages/SchedulePage";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
         <Route path="/cockpit" component={CockpitPage} />
         <Route path="/kanban" component={KanbanPage} />
         <Route path="/dashboard" component={DashboardPage} />
+        <Route path="/schedule" component={SchedulePage} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>

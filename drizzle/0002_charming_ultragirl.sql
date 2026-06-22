@@ -1,0 +1,20 @@
+CREATE TABLE `send_schedules` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`morningEnabled` int NOT NULL DEFAULT 1,
+	`morningHour` int NOT NULL DEFAULT 8,
+	`morningCount` int NOT NULL DEFAULT 2,
+	`lunchEnabled` int NOT NULL DEFAULT 1,
+	`lunchHour` int NOT NULL DEFAULT 12,
+	`lunchCount` int NOT NULL DEFAULT 2,
+	`eveningEnabled` int NOT NULL DEFAULT 1,
+	`eveningHour` int NOT NULL DEFAULT 17,
+	`eveningCount` int NOT NULL DEFAULT 2,
+	`morningTaskUid` varchar(65),
+	`lunchTaskUid` varchar(65),
+	`eveningTaskUid` varchar(65),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `send_schedules_id` PRIMARY KEY(`id`),
+	CONSTRAINT `send_schedules_userId_unique` UNIQUE(`userId`)
+);

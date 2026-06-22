@@ -58,3 +58,16 @@
 ## Testes
 - [x] Vitest: teste do router de leads (14 testes passando)
 - [x] Vitest: teste da lógica de liberação de toques
+
+## Agendamento Inteligente de Lembretes
+- [x] Schema: tabela `send_schedules` com configuração de janelas de horário por usuário
+- [x] Migration SQL aplicada para a nova tabela
+- [x] Router tRPC: schedule.get (buscar configuração atual)
+- [x] Router tRPC: schedule.save (salvar/atualizar configuração de janelas)
+- [x] Router tRPC: schedule.getQueue (retornar fila sugerida por janela do dia)
+- [x] Handler Heartbeat: /api/scheduled/send-reminder (envia notificação ao usuário)
+- [x] Lógica de seleção inteligente de leads por janela (prioridade: camada A > B > C, toque mais urgente primeiro)
+- [x] Página de Agendamento com configuração de horários e preview da fila
+- [x] Seção "Fila do Dia" no Cockpit mostrando os leads sugeridos para cada janela
+- [x] Ativação/desativação do agendamento por janela
+- [x] Indicador visual de qual janela está ativa no momento

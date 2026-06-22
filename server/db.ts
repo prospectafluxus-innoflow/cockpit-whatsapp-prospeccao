@@ -1,6 +1,6 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, leads, dailySends, InsertLead, Lead } from "../drizzle/schema";
+import { InsertUser, users, leads, dailySends, sendSchedules, InsertLead, Lead, SendSchedule } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -132,6 +132,91 @@ export async function registerDailySend(userId: number, leadId: number, touchNum
 }
 
 // ─── Dashboard Metrics ────────────────────────────────────────────────────────
+// --- Send Schedules ---
+export async function getScheduleByUser(userId: number): Promise<SendSchedule | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(sendSchedules).where(eq(sendSchedules.userId, userId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function upsertSchedule(userId: number, data: Partial<SendSchedule>) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await getScheduleByUser(userId);
+  if (existing) {
+    await db.update(sendSchedules).set({ ...data, updatedAt: new Date() }).where(eq(sendSchedules.userId, userId));
+  } else {
+    await db.insert(sendSchedules).values({ userId, ...data } as any);
+  }
+}
+
+export async function getDistributedQueueForDay(
+  userId: number,
+  morningCount: number,
+  lunchCount: number,
+  eveningCount: number
+): Promise<{ morning: Lead[]; lunch: Lead[]; evening: Lead[] }> {
+  const db = await getDb();
+  if (!db) return { morning: [], lunch: [], evening: [] };
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const allLeads = await db.select().from(leads).where(and(
+    eq(leads.userId, userId),
+    inArray(leads.status, ["novo", "toque1_enviado", "toque2_enviado", "toque3_enviado"])
+  ));
+  const ready = allLeads.filter((lead) => {
+    if (lead.status === "novo") return true;
+    if (lead.status === "toque1_enviado" && lead.toque1SentAt)
+      return now - new Date(lead.toque1SentAt).getTime() >= 3 * DAY;
+    if (lead.status === "toque2_enviado" && lead.toque2SentAt)
+      return now - new Date(lead.toque2SentAt).getTime() >= 4 * DAY;
+    return false;
+  });
+  const layerOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
+  const statusOrder: Record<string, number> = { toque2_enviado: 0, toque1_enviado: 1, novo: 2 };
+  ready.sort((a, b) => {
+    const la = layerOrder[a.layer] ?? 3;
+    const lb = layerOrder[b.layer] ?? 3;
+    if (la !== lb) return la - lb;
+    return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+  });
+  // Distribui sem repetição: manhã primeiro, depois almoço, depois fim do dia
+  const morning = ready.slice(0, morningCount);
+  const lunch = ready.slice(morningCount, morningCount + lunchCount);
+  const evening = ready.slice(morningCount + lunchCount, morningCount + lunchCount + eveningCount);
+  return { morning, lunch, evening };
+}
+
+export async function getQueueForWindow(userId: number, count: number): Promise<Lead[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const allLeads = await db.select().from(leads).where(and(
+    eq(leads.userId, userId),
+    inArray(leads.status, ["novo", "toque1_enviado", "toque2_enviado", "toque3_enviado"])
+  ));
+  const ready = allLeads.filter((lead) => {
+    if (lead.status === "novo") return true;
+    if (lead.status === "toque1_enviado" && lead.toque1SentAt)
+      return now - new Date(lead.toque1SentAt).getTime() >= 3 * DAY;
+    if (lead.status === "toque2_enviado" && lead.toque2SentAt)
+      return now - new Date(lead.toque2SentAt).getTime() >= 4 * DAY;
+    return false;
+  });
+  const layerOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
+  const statusOrder: Record<string, number> = { toque2_enviado: 0, toque1_enviado: 1, novo: 2 };
+  ready.sort((a, b) => {
+    const la = layerOrder[a.layer] ?? 3;
+    const lb = layerOrder[b.layer] ?? 3;
+    if (la !== lb) return la - lb;
+    return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
+  });
+  return ready.slice(0, count);
+}
+
+// --- Dashboard Metrics ---
 export async function getMetrics(userId: number) {
   const db = await getDb();
   if (!db) return null;

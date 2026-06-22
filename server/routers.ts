@@ -12,7 +12,13 @@ import {
   getDailySendCount,
   registerDailySend,
   getMetrics,
+  getScheduleByUser,
+  upsertSchedule,
+  getQueueForWindow,
+  getDistributedQueueForDay,
 } from "./db";
+import { parse as parseCookie } from "cookie";
+import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
 import { invokeLLM } from "./_core/llm";
 
 const DAILY_LIMIT = 30;
@@ -309,6 +315,118 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
   }),
 
   // ─── Dashboard ────────────────────────────────────────────────────────────
+  // --- Schedule ---
+  schedule: router({
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const s = await getScheduleByUser(ctx.user.id);
+      return s ?? {
+        morningEnabled: 1, morningHour: 8, morningCount: 2,
+        lunchEnabled: 1, lunchHour: 12, lunchCount: 2,
+        eveningEnabled: 1, eveningHour: 17, eveningCount: 2,
+        morningTaskUid: null, lunchTaskUid: null, eveningTaskUid: null,
+      };
+    }),
+
+    getQueue: protectedProcedure.query(async ({ ctx }) => {
+      const schedule = await getScheduleByUser(ctx.user.id);
+      const now = new Date();
+      const hourBRT = (now.getUTCHours() - 3 + 24) % 24;
+      const morningH = schedule?.morningHour ?? 8;
+      const lunchH = schedule?.lunchHour ?? 12;
+      const eveningH = schedule?.eveningHour ?? 17;
+
+      let activeWindow: "morning" | "lunch" | "evening" | null = null;
+      if (hourBRT >= morningH && hourBRT < morningH + 2) activeWindow = "morning";
+      else if (hourBRT >= lunchH && hourBRT < lunchH + 2) activeWindow = "lunch";
+      else if (hourBRT >= eveningH && hourBRT < eveningH + 2) activeWindow = "evening";
+
+      const morningCount = schedule?.morningCount ?? 2;
+      const lunchCount = schedule?.lunchCount ?? 2;
+      const eveningCount = schedule?.eveningCount ?? 2;
+
+      // Distribui leads sem duplicidade entre as janelas
+      const distributed = await getDistributedQueueForDay(
+        ctx.user.id,
+        (schedule?.morningEnabled ?? 1) ? morningCount : 0,
+        (schedule?.lunchEnabled ?? 1) ? lunchCount : 0,
+        (schedule?.eveningEnabled ?? 1) ? eveningCount : 0
+      );
+
+      return {
+        activeWindow,
+        hourBRT,
+        windows: {
+          morning: { hour: morningH, count: morningCount, enabled: !!(schedule?.morningEnabled ?? 1), leads: distributed.morning },
+          lunch: { hour: lunchH, count: lunchCount, enabled: !!(schedule?.lunchEnabled ?? 1), leads: distributed.lunch },
+          evening: { hour: eveningH, count: eveningCount, enabled: !!(schedule?.eveningEnabled ?? 1), leads: distributed.evening },
+        },
+      };
+    }),
+
+    save: protectedProcedure
+      .input(z.object({
+        morningEnabled: z.number().int().min(0).max(1),
+        morningHour: z.number().int().min(6).max(11),
+        morningCount: z.number().int().min(1).max(5),
+        lunchEnabled: z.number().int().min(0).max(1),
+        lunchHour: z.number().int().min(11).max(14),
+        lunchCount: z.number().int().min(1).max(5),
+        eveningEnabled: z.number().int().min(0).max(1),
+        eveningHour: z.number().int().min(15).max(20),
+        eveningCount: z.number().int().min(1).max(5),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await upsertSchedule(ctx.user.id, input);
+        return { ok: true };
+      }),
+
+    activate: protectedProcedure.mutation(async ({ ctx }) => {
+      const sessionToken = parseCookie(ctx.req.headers.cookie ?? "")[COOKIE_NAME] ?? "";
+      const schedule = await getScheduleByUser(ctx.user.id);
+      const toUtcH = (h: number) => (h + 3) % 24;
+
+      const jobs = [
+        { key: "morning" as const, enabled: !!(schedule?.morningEnabled ?? 1), hour: schedule?.morningHour ?? 8, uid: schedule?.morningTaskUid },
+        { key: "lunch" as const, enabled: !!(schedule?.lunchEnabled ?? 1), hour: schedule?.lunchHour ?? 12, uid: schedule?.lunchTaskUid },
+        { key: "evening" as const, enabled: !!(schedule?.eveningEnabled ?? 1), hour: schedule?.eveningHour ?? 17, uid: schedule?.eveningTaskUid },
+      ];
+
+      const result: Record<string, string | null> = {};
+
+      for (const job of jobs) {
+        if (!job.enabled) {
+          if (job.uid) { try { await updateHeartbeatJob(job.uid, { enable: false }, sessionToken); } catch {} }
+          result[job.key] = job.uid ?? null;
+          continue;
+        }
+        const cron = `0 0 ${toUtcH(job.hour)} * * *`;
+        const label = job.key === "morning" ? "Manhã" : job.key === "lunch" ? "Almoço" : "Fim do dia";
+        if (job.uid) {
+          try { await updateHeartbeatJob(job.uid, { cron, enable: true }, sessionToken); } catch {}
+          result[job.key] = job.uid;
+        } else {
+          const created = await createHeartbeatJob({
+            name: `prospeccao-${job.key}-${ctx.user.id}`,
+            cron,
+            path: "/api/scheduled/send-reminder",
+            payload: { window: job.key, userId: ctx.user.id },
+            description: `Lembrete de prospecção - ${label}`,
+          }, sessionToken);
+          result[job.key] = created.taskUid;
+        }
+      }
+
+      await upsertSchedule(ctx.user.id, {
+        morningTaskUid: result.morning ?? undefined,
+        lunchTaskUid: result.lunch ?? undefined,
+        eveningTaskUid: result.evening ?? undefined,
+      });
+
+      return { ok: true, taskUids: result };
+    }),
+  }),
+
+  // --- Dashboard ---
   dashboard: router({
     metrics: protectedProcedure.query(async ({ ctx }) => {
       return getMetrics(ctx.user.id);

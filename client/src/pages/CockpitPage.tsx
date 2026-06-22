@@ -38,6 +38,10 @@ import {
   Star,
   Clock,
   AlertTriangle,
+  Sun,
+  Coffee,
+  Sunset,
+  Bell,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -101,6 +105,7 @@ export default function CockpitPage() {
   });
 
   const { data: metrics } = trpc.dashboard.metrics.useQuery();
+  const { data: queueData } = trpc.schedule.getQueue.useQuery();
 
   const registerSend = trpc.leads.registerSend.useMutation({
     onSuccess: (data) => {
@@ -301,6 +306,48 @@ export default function CockpitPage() {
 
       {/* Conteúdo */}
       <div className="px-6 py-6 space-y-8">
+        {/* Fila do Dia */}
+        {queueData && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <h2 className="text-sm font-semibold text-foreground">Fila do Dia</h2>
+              <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {([
+                { key: "morning" as const, label: "Manhã", icon: Sun, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
+                { key: "lunch" as const, label: "Almoço", icon: Coffee, color: "text-orange-400", bg: "bg-orange-400/10 border-orange-400/20" },
+                { key: "evening" as const, label: "Fim do dia", icon: Sunset, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
+              ]).map(({ key, label, icon: Icon, color, bg }) => {
+                const win = queueData.windows[key];
+                const isActive = queueData.activeWindow === key;
+                if (!win.enabled) return null;
+                return (
+                  <div key={key} className={`rounded-xl border p-3 ${isActive ? bg.replace("/10", "/20").replace("/20", "/40") : bg}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className={`h-3.5 w-3.5 ${color}`} />
+                      <span className="text-xs font-semibold">{label}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono ml-auto">{String(win.hour).padStart(2, "0")}:00</span>
+                      {isActive && <span className="text-[10px] text-emerald-400 font-semibold">● ativa</span>}
+                    </div>
+                    {win.leads.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground/60">Nenhum lead disponível</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {win.leads.map((l) => (
+                          <li key={l.id} className="text-[11px] text-foreground/80 truncate">
+                            {l.name}{l.company ? ` · ${l.company}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Leads ativos */}
         <section>
           <div className="flex items-center gap-2 mb-4">

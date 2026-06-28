@@ -110,5 +110,5 @@
 - [x] authOwn.test.ts: corrigir mock do db (remover getDb obsoleto)
 - [x] Todos os testes: 24 passando, 0 erros TypeScript
 - [x] Configurar GEMINI_API_KEY no projeto (via webdev_request_secrets)
-- [ ] Configurar CRON_SECRET no projeto (via webdev_request_secrets)
+- [x] Configurar CRON_SECRET no projeto (definido via Cloud Run no deploy)
 - [x] Salvar checkpoint final e preparar guia de deploy

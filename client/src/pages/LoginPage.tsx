@@ -44,7 +44,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <img
-            src="/manus-storage/prospectafluxus-logo_ab423719.png"
+            src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663667466619/jOvLxAxfEehmlwIV.png"
             alt="ProspectaFluxus"
             className="h-20 w-auto object-contain mx-auto mb-4"
           />

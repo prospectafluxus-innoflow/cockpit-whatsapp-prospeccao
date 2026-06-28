@@ -172,43 +172,78 @@ export default function CockpitPage() {
         const data = new Uint8Array(ev.target?.result as ArrayBuffer);
         const wb = XLSX.read(data, { type: "array" });
 
+        // Mapeamento de abas para camadas
+        // Suporta: "Camada A — ICP", "Camada B — ICP", "Camada C — ICP" (com travessão especial)
+        // e variações como "Camada A", "Camada B", "Camada C"
         const layerSheets: Record<string, "A" | "B" | "C"> = {};
         for (const name of wb.SheetNames) {
-          if (name.includes("Camada A") || name.toLowerCase().includes("icp")) layerSheets[name] = "A";
-          else if (name.includes("Camada B") || name.toLowerCase().includes("quase")) layerSheets[name] = "B";
-          else if (name.includes("Camada C") || name.toLowerCase().includes("academia")) layerSheets[name] = "C";
+          const normalized = name.toLowerCase().replace(/[\u2014\u2013\-]/g, "-").trim();
+          if (normalized.includes("camada a")) layerSheets[name] = "A";
+          else if (normalized.includes("camada b")) layerSheets[name] = "B";
+          else if (normalized.includes("camada c")) layerSheets[name] = "C";
+        }
+
+        if (Object.keys(layerSheets).length === 0) {
+          toast.error(`Nenhuma aba de camada encontrada. Abas encontradas: ${wb.SheetNames.join(", ")}. Certifique-se de que as abas se chamam "Camada A — ICP", "Camada B — ICP" ou "Camada C — ICP".`);
+          setUploading(false);
+          return;
         }
 
         const allLeads: any[] = [];
 
         for (const [sheetName, layer] of Object.entries(layerSheets)) {
           const ws = wb.Sheets[sheetName]!;
-          const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+          // header: 2 = usa a linha 2 como cabeçalho (linha 1 é título da aba)
+          const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "", header: 1 });
 
-          for (const row of rows) {
-            const name = row["Nome"] || row["name"] || row["NOME"] || "";
-            const whatsapp = String(row["WhatsApp"] || row["whatsapp"] || row["Telefone"] || row["telefone"] || "").replace(/\D/g, "");
+          if (rows.length < 2) continue;
+
+          // Linha 0 pode ser título, linha 1 é o cabeçalho real
+          // Detecta automaticamente qual linha é o cabeçalho (procura por "Nome" ou "WhatsApp")
+          let headerRowIndex = 0;
+          for (let i = 0; i < Math.min(3, rows.length); i++) {
+            const row = rows[i] as any[];
+            const rowStr = row.map(String).join(" ").toLowerCase();
+            if (rowStr.includes("nome") || rowStr.includes("whatsapp") || rowStr.includes("telefone")) {
+              headerRowIndex = i;
+              break;
+            }
+          }
+
+          const headers = (rows[headerRowIndex] as any[]).map(String);
+          const dataRows = rows.slice(headerRowIndex + 1);
+
+          for (const rawRow of dataRows) {
+            const row: Record<string, string> = {};
+            headers.forEach((h, i) => { row[h] = String((rawRow as any[])[i] ?? ""); });
+
+            const name = row["Nome"] || row["NOME"] || row["name"] || "";
+            const whatsapp = String(
+              row["WhatsApp"] || row["Whatsapp"] || row["whatsapp"] ||
+              row["Telefone"] || row["telefone"] || row["Celular"] || ""
+            ).replace(/\D/g, "");
+
             if (!name || !whatsapp || whatsapp.length < 10) continue;
 
             allLeads.push({
               name: String(name).trim(),
               firstName: String(name).split(" ")[0] ?? String(name),
-              company: String(row["Empresa"] || row["empresa"] || "").trim() || undefined,
+              company: String(row["Empresa"] || row["empresa"] || row["Razão Social"] || "").trim() || undefined,
               whatsapp,
-              score: Number(row["Score"] || row["score"] || 0) || 0,
+              score: Number(row["Score"] || row["score"] || row["Pontuação"] || 0) || 0,
               layer,
               size: String(row["Porte"] || row["porte"] || "").trim() || undefined,
-              employees: Number(row["Func."] || row["Funcionários"] || row["funcionarios"] || 0) || undefined,
-              investment: String(row["Investe Mkt"] || row["investment"] || "").trim() || undefined,
-              taxRegime: String(row["Regime"] || row["regime"] || "").trim() || undefined,
-              participations: Number(row["Part."] || row["participacoes"] || 0) || undefined,
-              lastEvent: String(row["Último evento"] || row["ultimo_evento"] || "").trim() || undefined,
+              employees: Number(row["Func."] || row["Funcionários"] || row["funcionarios"] || row["Colaboradores"] || 0) || undefined,
+              investment: String(row["Investe Mkt"] || row["Investimento Mkt"] || row["investment"] || "").trim() || undefined,
+              taxRegime: String(row["Regime"] || row["Regime Tributário"] || row["regime"] || "").trim() || undefined,
+              participations: Number(row["Part."] || row["Participações"] || row["participacoes"] || 0) || undefined,
+              lastEvent: String(row["Último evento"] || row["Ultimo Evento"] || row["ultimo_evento"] || "").trim() || undefined,
             });
           }
         }
 
         if (allLeads.length === 0) {
-          toast.error("Nenhum lead encontrado. Verifique se a planilha tem abas com 'Camada A', 'Camada B' ou 'Camada C'.");
+          toast.error("Nenhum lead encontrado nas abas. Verifique se os cabeçalhos incluem 'Nome' e 'WhatsApp'.");
           setUploading(false);
           return;
         }
@@ -544,40 +579,63 @@ function LeadCard({
         </div>
       </div>
 
-      {/* Toques */}
-      <div className="flex items-center gap-2 mt-4 flex-wrap">
+      {/* Linha do tempo de toques */}
+      <div className="mt-4 space-y-1">
         {[1, 2, 3].map((t) => {
-          const sent = t === 1 ? !!lead.toque1SentAt : t === 2 ? !!lead.toque2SentAt : !!lead.toque3SentAt;
+          const sentAt = t === 1 ? lead.toque1SentAt : t === 2 ? lead.toque2SentAt : lead.toque3SentAt;
+          const sent = !!sentAt;
           const isCurrent = lead.nextToque === t && lead.canSendNow;
           const isPending = lead.nextToque === t && !lead.canSendNow;
+          const days = daysAgo(sentAt);
+          const waitDays = t === 2 ? 3 : 4;
+          const daysLeft = days !== null ? Math.max(0, waitDays - days) : null;
+
           return (
-            <div
-              key={t}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+            <div key={t} className="flex items-center gap-3">
+              {/* Indicador visual */}
+              <div className={`h-5 w-5 rounded-full flex items-center justify-center shrink-0 border ${
                 sent
-                  ? "bg-primary/10 border-primary/30 text-primary"
+                  ? "bg-primary/20 border-primary/50 text-primary"
                   : isCurrent
-                  ? "bg-emerald-400/15 border-emerald-400/50 text-emerald-300 ring-1 ring-emerald-400/30"
+                  ? "bg-emerald-400/20 border-emerald-400/50 text-emerald-400"
                   : isPending
                   ? "bg-amber-400/10 border-amber-400/30 text-amber-400"
-                  : "bg-muted/30 border-border/40 text-muted-foreground/50"
-              }`}
-            >
-              Toque {t}
-              {sent && <span className="ml-1 opacity-60">✓</span>}
-              {isCurrent && <span className="ml-1">→</span>}
+                  : "bg-muted/20 border-border/30 text-muted-foreground/30"
+              }`}>
+                <span className="text-[9px] font-bold">{t}</span>
+              </div>
+
+              {/* Linha conectora */}
+              <div className="flex-1 flex items-center gap-2">
+                <span className={`text-xs font-medium ${
+                  sent ? "text-primary" : isCurrent ? "text-emerald-400" : isPending ? "text-amber-400" : "text-muted-foreground/40"
+                }`}>
+                  Toque {t}
+                </span>
+
+                {sent && sentAt && (
+                  <span className="text-xs text-muted-foreground">
+                    ✓ {new Date(sentAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                    {days !== null && days > 0 && (
+                      <span className="ml-1 opacity-60">({days}d atrás)</span>
+                    )}
+                  </span>
+                )}
+
+                {isCurrent && (
+                  <span className="text-xs text-emerald-400 font-semibold">→ Pronto para enviar</span>
+                )}
+
+                {isPending && daysLeft !== null && (
+                  <span className="text-xs text-amber-400">
+                    <Clock className="h-3 w-3 inline mr-0.5" />
+                    libera em {daysLeft}d
+                  </span>
+                )}
+              </div>
             </div>
           );
         })}
-        {toqueDays !== null && !lead.canSendNow && lead.nextToque > 1 && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="h-3 w-3" />
-            <span>
-              {toqueDays}d — libera em{" "}
-              {lead.nextToque === 2 ? Math.max(0, 3 - toqueDays) : Math.max(0, 4 - toqueDays)}d
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Ações */}

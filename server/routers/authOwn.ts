@@ -4,14 +4,21 @@
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import {
+  getUserByEmail,
+  getUserByResetToken,
+  createUser,
+  updateUser,
+  listUsers,
+  db,
+} from "../db";
 import { users } from "../../drizzle/schema";
-import { getDb } from "../db";
+import { eq, asc } from "drizzle-orm";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
-import { SignJWT, jwtVerify } from "jose";
+import { SignJWT } from "jose";
 import { ENV } from "../_core/env";
 import { COOKIE_NAME } from "../../shared/const";
 
@@ -36,23 +43,17 @@ export const authOwnRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
-
-      // Verificar se email já existe
-      const existing = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.email, input.email))
-        .limit(1);
-
-      if (existing.length > 0) {
-        throw new TRPCError({ code: "CONFLICT", message: "Este email já está cadastrado." });
+      const existing = await getUserByEmail(input.email);
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Este email já está cadastrado.",
+        });
       }
 
       const passwordHash = await bcrypt.hash(input.password, 12);
 
-      const result = await db.insert(users).values({
+      const newUser = await createUser({
         name: input.name,
         email: input.email,
         passwordHash,
@@ -61,10 +62,12 @@ export const authOwnRouter = router({
         lastSignedIn: new Date(),
       });
 
-      const userId = Number((result as any).insertId);
-      const token = await signToken(userId, "user");
+      const token = await signToken(newUser.id, "user");
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 });
+      ctx.res.cookie(COOKIE_NAME, token, {
+        ...cookieOptions,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
 
       return { success: true, name: input.name };
     }),
@@ -78,31 +81,31 @@ export const authOwnRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Banco indisponível" });
+      const user = await getUserByEmail(input.email);
 
-      const rows = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, input.email))
-        .limit(1);
-
-      const user = rows[0];
       if (!user || !user.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Email ou senha incorretos." });
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Email ou senha incorretos.",
+        });
       }
 
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Email ou senha incorretos." });
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Email ou senha incorretos.",
+        });
       }
 
-      // Atualizar lastSignedIn
-      await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, user.id));
+      await updateUser(user.id, { lastSignedIn: new Date() });
 
       const token = await signToken(user.id, user.role);
       const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: 30 * 24 * 60 * 60 * 1000 });
+      ctx.res.cookie(COOKIE_NAME, token, {
+        ...cookieOptions,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      });
 
       return { success: true, name: user.name, role: user.role };
     }),
@@ -118,26 +121,18 @@ export const authOwnRouter = router({
   forgotPassword: publicProcedure
     .input(z.object({ email: z.string().email() }))
     .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-      const rows = await db
-        .select({ id: users.id, name: users.name })
-        .from(users)
-        .where(eq(users.email, input.email))
-        .limit(1);
+      const user = await getUserByEmail(input.email);
 
       // Sempre retornar sucesso para não revelar se email existe
-      if (rows.length === 0) return { success: true };
+      if (!user) return { success: true };
 
-      const user = rows[0];
       const resetToken = nanoid(48);
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2h
 
-      await db
-        .update(users)
-        .set({ resetToken, resetTokenExpiresAt: expiresAt })
-        .where(eq(users.id, user.id));
+      await updateUser(user.id, {
+        resetToken,
+        resetTokenExpiresAt: expiresAt,
+      });
 
       // Em produção, enviar email. Por ora, retornamos o token para exibição.
       return { success: true, resetToken };
@@ -152,29 +147,31 @@ export const authOwnRouter = router({
       })
     )
     .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const user = await getUserByResetToken(input.token);
 
-      const rows = await db
-        .select({ id: users.id, resetTokenExpiresAt: users.resetTokenExpiresAt })
-        .from(users)
-        .where(eq(users.resetToken, input.token))
-        .limit(1);
-
-      const user = rows[0];
       if (!user) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Token inválido ou expirado." });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Token inválido ou expirado.",
+        });
       }
 
-      if (!user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Token expirado. Solicite um novo." });
+      if (
+        !user.resetTokenExpiresAt ||
+        user.resetTokenExpiresAt < new Date()
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Token expirado. Solicite um novo.",
+        });
       }
 
       const passwordHash = await bcrypt.hash(input.newPassword, 12);
-      await db
-        .update(users)
-        .set({ passwordHash, resetToken: null, resetTokenExpiresAt: null })
-        .where(eq(users.id, user.id));
+      await updateUser(user.id, {
+        passwordHash,
+        resetToken: null,
+        resetTokenExpiresAt: null,
+      });
 
       return { success: true };
     }),
@@ -182,11 +179,11 @@ export const authOwnRouter = router({
   // ─── Listar usuários (admin) ───────────────────────────────────────────────
   listUsers: protectedProcedure.query(async ({ ctx }) => {
     if (ctx.user.role !== "admin") {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito a administradores." });
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Acesso restrito a administradores.",
+      });
     }
-
-    const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
     const rows = await db
       .select({
@@ -199,7 +196,7 @@ export const authOwnRouter = router({
         lastSignedIn: users.lastSignedIn,
       })
       .from(users)
-      .orderBy(users.createdAt);
+      .orderBy(asc(users.createdAt));
 
     return rows;
   }),
@@ -211,10 +208,12 @@ export const authOwnRouter = router({
       if (ctx.user.role !== "admin") {
         throw new TRPCError({ code: "FORBIDDEN" });
       }
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      await db.update(users).set({ role: "admin" }).where(eq(users.id, input.userId));
+      await db
+        .update(users)
+        .set({ role: "admin" })
+        .where(eq(users.id, input.userId));
+
       return { success: true };
     }),
 });

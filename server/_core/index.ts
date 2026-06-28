@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { sendReminderHandler } from "../scheduleHandler";
+import { cronSendReminderHandler } from "../cronHandler";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,8 +38,10 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
-  // Heartbeat scheduled endpoints
+  // Heartbeat scheduled endpoints (Manus)
   app.post("/api/scheduled/send-reminder", sendReminderHandler);
+  // Render Cron Jobs endpoint (independente)
+  app.post("/api/cron/send-reminder", cronSendReminderHandler);
 
   // tRPC API
   app.use(

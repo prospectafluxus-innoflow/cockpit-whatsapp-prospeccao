@@ -99,7 +99,7 @@ export default function DashboardPage() {
 
   if (!metrics) return null;
 
-  const { total, byLayer, byStatus, todaySends, dailyLimit, responseRateByLayer } = metrics;
+  const { total, byLayer, byStatus, todaySends, dailyLimit } = metrics;
 
   const respondidos = byStatus["respondeu"] ?? 0;
   const taxaGeral = total > 0 ? Math.round((respondidos / total) * 100) : 0;
@@ -107,9 +107,9 @@ export default function DashboardPage() {
   const progressColor = todaySends >= 28 ? "#ef4444" : todaySends >= 22 ? "#fbbf24" : "#34d399";
 
   const layerData = [
-    { name: "Camada A", leads: byLayer.A, taxa: responseRateByLayer.A },
-    { name: "Camada B", leads: byLayer.B, taxa: responseRateByLayer.B },
-    { name: "Camada C", leads: byLayer.C, taxa: responseRateByLayer.C },
+    { name: "Camada A", leads: byLayer.A.contacted, taxa: byLayer.A.rate },
+    { name: "Camada B", leads: byLayer.B.contacted, taxa: byLayer.B.rate },
+    { name: "Camada C", leads: byLayer.C.contacted, taxa: byLayer.C.rate },
   ];
 
   const statusData = Object.entries(byStatus)
@@ -283,7 +283,8 @@ export default function DashboardPage() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             {(["A", "B", "C"] as const).map((l) => {
-              const count = byLayer[l];
+              const layerInfo = byLayer[l];
+              const count = layerInfo.contacted + layerInfo.responded;
               const pct = total > 0 ? Math.round((count / total) * 100) : 0;
               const color = LAYER_COLORS[l]!;
               return (
@@ -292,7 +293,7 @@ export default function DashboardPage() {
                   <p className="text-2xl font-bold font-mono" style={{ color }}>{count}</p>
                   <p className="text-xs text-muted-foreground mt-1">{pct}% do total</p>
                   <p className="text-xs mt-1" style={{ color }}>
-                    {responseRateByLayer[l]}% responderam
+                    {layerInfo.rate}% responderam
                   </p>
                 </div>
               );

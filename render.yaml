@@ -1,0 +1,99 @@
+services:
+  # ─── Web Service (aplicação principal) ───────────────────────────────────────
+  - type: web
+    name: prospectafluxus
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install --frozen-lockfile && pnpm run build:prod
+    startCommand: pnpm run start:prod
+    healthCheckPath: /api/trpc/auth.me
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false  # Definir manualmente no painel do Render
+      - key: JWT_SECRET
+        generateValue: true  # Render gera automaticamente
+      - key: GEMINI_API_KEY
+        sync: false  # Definir manualmente no painel do Render
+      - key: CRON_SECRET
+        generateValue: true  # Render gera automaticamente
+      - key: NOTIFICATION_EMAIL
+        sync: false  # Email para receber notificações (opcional)
+      - key: RESEND_API_KEY
+        sync: false  # Chave da API Resend (opcional)
+      # Variáveis legadas do Manus (deixar vazias para deploy independente)
+      - key: VITE_APP_ID
+        value: ""
+      - key: OAUTH_SERVER_URL
+        value: ""
+      - key: OWNER_OPEN_ID
+        value: ""
+      - key: BUILT_IN_FORGE_API_URL
+        value: ""
+      - key: BUILT_IN_FORGE_API_KEY
+        value: ""
+      - key: VITE_FRONTEND_FORGE_API_KEY
+        value: ""
+      - key: VITE_FRONTEND_FORGE_API_URL
+        value: ""
+
+  # ─── Cron Jobs (agendamento de lembretes) ─────────────────────────────────────
+  # Nota: Os cron jobs abaixo chamam o endpoint /api/cron/send-reminder
+  # com o header Authorization: Bearer $CRON_SECRET
+  # Configure os horários conforme o fuso horário BRT (UTC-3)
+  #
+  # Manhã: 8h BRT = 11h UTC
+  - type: cron
+    name: prospectafluxus-morning
+    runtime: node
+    plan: free
+    region: oregon
+    schedule: "0 11 * * 1-5"  # 8h BRT (UTC-3), seg-sex
+    buildCommand: echo "cron job"
+    startCommand: |
+      curl -X POST \
+        -H "Authorization: Bearer $CRON_SECRET" \
+        -H "Content-Type: application/json" \
+        -d '{"window":"morning"}' \
+        https://prospectafluxus.onrender.com/api/cron/send-reminder
+    envVars:
+      - key: CRON_SECRET
+        sync: false
+
+  # Almoço: 12h BRT = 15h UTC
+  - type: cron
+    name: prospectafluxus-lunch
+    runtime: node
+    plan: free
+    region: oregon
+    schedule: "0 15 * * 1-5"  # 12h BRT (UTC-3), seg-sex
+    buildCommand: echo "cron job"
+    startCommand: |
+      curl -X POST \
+        -H "Authorization: Bearer $CRON_SECRET" \
+        -H "Content-Type: application/json" \
+        -d '{"window":"lunch"}' \
+        https://prospectafluxus.onrender.com/api/cron/send-reminder
+    envVars:
+      - key: CRON_SECRET
+        sync: false
+
+  # Fim do dia: 17h BRT = 20h UTC
+  - type: cron
+    name: prospectafluxus-evening
+    runtime: node
+    plan: free
+    region: oregon
+    schedule: "0 20 * * 1-5"  # 17h BRT (UTC-3), seg-sex
+    buildCommand: echo "cron job"
+    startCommand: |
+      curl -X POST \
+        -H "Authorization: Bearer $CRON_SECRET" \
+        -H "Content-Type: application/json" \
+        -d '{"window":"evening"}' \
+        https://prospectafluxus.onrender.com/api/cron/send-reminder
+    envVars:
+      - key: CRON_SECRET
+        sync: false

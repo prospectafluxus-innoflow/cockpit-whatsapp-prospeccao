@@ -1,269 +1,387 @@
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, leads, dailySends, sendSchedules, InsertLead, Lead, SendSchedule } from "../drizzle/schema";
-import { ENV } from "./_core/env";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+import { eq, and, sql, count, or, desc, asc } from "drizzle-orm";
+import {
+  users,
+  leads,
+  dailySends,
+  sendSchedules,
+  type User,
+  type InsertUser,
+  type Lead,
+  type InsertLead,
+  type InsertDailySend,
+  type SendSchedule,
+  type InsertSendSchedule,
+} from "../drizzle/schema";
 
-let _db: ReturnType<typeof drizzle> | null = null;
+// ─── Conexão com o banco ──────────────────────────────────────────────────────
+const connectionString =
+  process.env.DATABASE_URL ||
+  "postgresql://postgres:postgres@localhost:5432/postgres";
 
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
-      console.warn("[Database] Failed to connect:", error);
-      _db = null;
-    }
+const client = postgres(connectionString, {
+  ssl:
+    process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
+  max: 5,
+});
+
+export const db = drizzle(client);
+
+// ─── Helpers de usuário ───────────────────────────────────────────────────────
+export async function getUserById(id: number): Promise<User | null> {
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getUserByOpenId(openId: string): Promise<User | null> {
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertUser(data: InsertUser): Promise<User> {
+  const existing = data.openId ? await getUserByOpenId(data.openId) : null;
+  if (existing) {
+    const updated = await db
+      .update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, existing.id))
+      .returning();
+    return updated[0];
   }
-  return _db;
+  const inserted = await db.insert(users).values(data).returning();
+  return inserted[0];
 }
 
-// ─── Users ────────────────────────────────────────────────────────────────────
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
-  const db = await getDb();
-  if (!db) return;
+export async function createUser(data: InsertUser): Promise<User> {
+  const inserted = await db.insert(users).values(data).returning();
+  return inserted[0];
+}
 
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  const textFields = ["name", "email", "loginMethod"] as const;
+export async function updateUser(
+  id: number,
+  data: Partial<InsertUser>
+): Promise<User | null> {
+  const updated = await db
+    .update(users)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(users.id, id))
+    .returning();
+  return updated[0] ?? null;
+}
 
-  textFields.forEach((field) => {
-    const value = user[field];
-    if (value === undefined) return;
-    const normalized = value ?? null;
-    values[field] = normalized;
-    updateSet[field] = normalized;
-  });
+export async function listUsers(): Promise<User[]> {
+  return db.select().from(users).orderBy(asc(users.createdAt));
+}
 
-  if (user.lastSignedIn !== undefined) {
-    values.lastSignedIn = user.lastSignedIn;
-    updateSet.lastSignedIn = user.lastSignedIn;
+export async function getUserByResetToken(token: string): Promise<User | null> {
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.resetToken, token))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── Helpers de leads ─────────────────────────────────────────────────────────
+export async function getLeadsByUser(
+  userId: number,
+  filters?: { layer?: "A" | "B" | "C"; status?: string; search?: string }
+): Promise<Lead[]> {
+  let query = db.select().from(leads).where(eq(leads.userId, userId)).$dynamic();
+
+  if (filters?.layer) {
+    query = query.where(
+      and(eq(leads.userId, userId), eq(leads.layer, filters.layer))
+    );
   }
-  if (user.role !== undefined) {
-    values.role = user.role;
-    updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
-  }
 
-  if (!values.lastSignedIn) values.lastSignedIn = new Date();
-  if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+  const results = await query.orderBy(desc(leads.createdAt));
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
-}
-
-export async function getUserByOpenId(openId: string) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function getUserById(id: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function getAllUsers() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(users).orderBy(users.createdAt);
-}
-
-// ─── Leads ────────────────────────────────────────────────────────────────────
-export async function getLeadsByUser(userId: number, filters?: {
-  layer?: "A" | "B" | "C";
-  status?: string;
-  search?: string;
-}) {
-  const db = await getDb();
-  if (!db) return [];
-
-  let query = db.select().from(leads).where(eq(leads.userId, userId));
-  const result = await query;
-
-  return result.filter((lead) => {
-    if (filters?.layer && lead.layer !== filters.layer) return false;
-    if (filters?.status && lead.status !== filters.status) return false;
+  // Filter in memory for status and search (simpler than complex SQL)
+  return results.filter((l) => {
+    if (filters?.status && l.status !== filters.status) return false;
     if (filters?.search) {
       const s = filters.search.toLowerCase();
-      if (!lead.name.toLowerCase().includes(s) && !(lead.company ?? "").toLowerCase().includes(s)) return false;
+      return (
+        l.name.toLowerCase().includes(s) ||
+        (l.company ?? "").toLowerCase().includes(s) ||
+        l.whatsapp.includes(s)
+      );
     }
     return true;
   });
 }
 
-export async function getLeadById(id: number, userId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db.select().from(leads)
+export async function getLeadById(
+  id: number,
+  userId: number
+): Promise<Lead | null> {
+  const rows = await db
+    .select()
+    .from(leads)
     .where(and(eq(leads.id, id), eq(leads.userId, userId)))
     .limit(1);
-  return result[0];
+  return rows[0] ?? null;
 }
 
-export async function insertLeads(data: InsertLead[]) {
-  const db = await getDb();
-  if (!db) return;
-  if (data.length === 0) return;
-  await db.insert(leads).values(data);
+export async function insertLeads(data: InsertLead[]): Promise<Lead[]> {
+  if (data.length === 0) return [];
+  return db.insert(leads).values(data).returning();
 }
 
-export async function updateLead(id: number, userId: number, data: Partial<Lead>) {
-  const db = await getDb();
-  if (!db) return;
-  await db.update(leads)
+export async function updateLead(
+  id: number,
+  userId: number,
+  data: Partial<InsertLead>
+): Promise<Lead | null> {
+  const updated = await db
+    .update(leads)
     .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(leads.id, id), eq(leads.userId, userId)));
+    .where(and(eq(leads.id, id), eq(leads.userId, userId)))
+    .returning();
+  return updated[0] ?? null;
 }
 
-export async function deleteLeadsByUser(userId: number) {
-  const db = await getDb();
-  if (!db) return;
+export async function deleteLeadsByUser(userId: number): Promise<void> {
   await db.delete(leads).where(eq(leads.userId, userId));
 }
 
-// ─── Daily Sends ──────────────────────────────────────────────────────────────
-export async function getDailySendCount(userId: number, date: string): Promise<number> {
-  const db = await getDb();
-  if (!db) return 0;
-  const result = await db.select({ count: sql<number>`count(*)` })
+// ─── Helpers de envios diários ────────────────────────────────────────────────
+export async function getDailySendCount(
+  userId: number,
+  date: string
+): Promise<number> {
+  const rows = await db
+    .select({ total: count() })
     .from(dailySends)
-    .where(and(eq(dailySends.userId, userId), eq(dailySends.sentDate, new Date(date + "T00:00:00Z"))));
-  return Number(result[0]?.count ?? 0);
+    .where(
+      and(eq(dailySends.userId, userId), eq(dailySends.sentDate, date))
+    );
+  return rows[0]?.total ?? 0;
 }
 
-export async function registerDailySend(userId: number, leadId: number, touchNumber: number, date: string) {
-  const db = await getDb();
-  if (!db) return;
-  // sentDate column is `date` type — pass a Date object
-  const dateObj = new Date(date + "T00:00:00Z");
-  await db.insert(dailySends).values({ userId, leadId, touchNumber, sentDate: dateObj });
+export async function registerDailySend(
+  userId: number,
+  leadId: number,
+  touchNumber: number,
+  sentDate: string
+): Promise<void> {
+  await db.insert(dailySends).values({ userId, leadId, touchNumber, sentDate });
 }
 
-// ─── Dashboard Metrics ────────────────────────────────────────────────────────
-// --- Send Schedules ---
-export async function getScheduleByUser(userId: number): Promise<SendSchedule | null> {
-  const db = await getDb();
-  if (!db) return null;
-  const result = await db.select().from(sendSchedules).where(eq(sendSchedules.userId, userId)).limit(1);
-  return result[0] ?? null;
+// ─── Helpers de agendamento ───────────────────────────────────────────────────
+export async function getScheduleByUser(
+  userId: number
+): Promise<SendSchedule | null> {
+  const rows = await db
+    .select()
+    .from(sendSchedules)
+    .where(eq(sendSchedules.userId, userId))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export async function upsertSchedule(userId: number, data: Partial<SendSchedule>) {
-  const db = await getDb();
-  if (!db) return;
+export async function upsertSchedule(
+  userId: number,
+  data: Partial<InsertSendSchedule>
+): Promise<SendSchedule> {
   const existing = await getScheduleByUser(userId);
   if (existing) {
-    await db.update(sendSchedules).set({ ...data, updatedAt: new Date() }).where(eq(sendSchedules.userId, userId));
-  } else {
-    await db.insert(sendSchedules).values({ userId, ...data } as any);
+    const updated = await db
+      .update(sendSchedules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(sendSchedules.userId, userId))
+      .returning();
+    return updated[0];
   }
+  const inserted = await db
+    .insert(sendSchedules)
+    .values({ userId, ...data } as InsertSendSchedule)
+    .returning();
+  return inserted[0];
 }
 
+export async function getAllSchedules(): Promise<SendSchedule[]> {
+  return db.select().from(sendSchedules);
+}
+
+export async function getScheduleByTaskUid(
+  taskUid: string
+): Promise<SendSchedule | null> {
+  const rows = await db
+    .select()
+    .from(sendSchedules)
+    .where(
+      or(
+        eq(sendSchedules.morningTaskUid, taskUid),
+        eq(sendSchedules.lunchTaskUid, taskUid),
+        eq(sendSchedules.eveningTaskUid, taskUid)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+// ─── Fila distribuída por janela ──────────────────────────────────────────────
 export async function getDistributedQueueForDay(
   userId: number,
   morningCount: number,
   lunchCount: number,
   eveningCount: number
 ): Promise<{ morning: Lead[]; lunch: Lead[]; evening: Lead[] }> {
-  const db = await getDb();
-  if (!db) return { morning: [], lunch: [], evening: [] };
+  const total = morningCount + lunchCount + eveningCount;
+  if (total === 0) return { morning: [], lunch: [], evening: [] };
+
+  const today = new Date().toISOString().split("T")[0]!;
+
+  // Busca leads já enviados hoje para evitar duplicidade
+  const sentTodayRows = await db
+    .select({ leadId: dailySends.leadId })
+    .from(dailySends)
+    .where(
+      and(eq(dailySends.userId, userId), eq(dailySends.sentDate, today))
+    );
+  const sentTodayIds = new Set(sentTodayRows.map((r) => r.leadId));
+
+  // Busca leads prontos para envio (status novo ou aguardando próximo toque)
+  const allLeads = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.userId, userId))
+    .orderBy(desc(leads.score), asc(leads.createdAt));
+
   const now = Date.now();
   const DAY = 86_400_000;
-  const allLeads = await db.select().from(leads).where(and(
-    eq(leads.userId, userId),
-    inArray(leads.status, ["novo", "toque1_enviado", "toque2_enviado", "toque3_enviado"])
-  ));
-  const ready = allLeads.filter((lead) => {
-    if (lead.status === "novo") return true;
-    if (lead.status === "toque1_enviado" && lead.toque1SentAt)
-      return now - new Date(lead.toque1SentAt).getTime() >= 3 * DAY;
-    if (lead.status === "toque2_enviado" && lead.toque2SentAt)
-      return now - new Date(lead.toque2SentAt).getTime() >= 4 * DAY;
+
+  const readyLeads = allLeads.filter((l) => {
+    if (sentTodayIds.has(l.id)) return false;
+    if (l.status === "respondeu" || l.status === "fechado" || l.status === "descartado") return false;
+    if (l.status === "novo") return true;
+    if (l.status === "toque1_enviado" && l.toque1SentAt) {
+      return now - new Date(l.toque1SentAt).getTime() >= 3 * DAY;
+    }
+    if (l.status === "toque2_enviado" && l.toque2SentAt) {
+      return now - new Date(l.toque2SentAt).getTime() >= 4 * DAY;
+    }
     return false;
   });
-  const layerOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
-  const statusOrder: Record<string, number> = { toque2_enviado: 0, toque1_enviado: 1, novo: 2 };
-  ready.sort((a, b) => {
-    const la = layerOrder[a.layer] ?? 3;
-    const lb = layerOrder[b.layer] ?? 3;
-    if (la !== lb) return la - lb;
-    return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
-  });
-  // Distribui sem repetição: manhã primeiro, depois almoço, depois fim do dia
-  const morning = ready.slice(0, morningCount);
-  const lunch = ready.slice(morningCount, morningCount + lunchCount);
-  const evening = ready.slice(morningCount + lunchCount, morningCount + lunchCount + eveningCount);
+
+  // Distribui sem sobreposição
+  const morning = readyLeads.slice(0, morningCount);
+  const lunch = readyLeads.slice(morningCount, morningCount + lunchCount);
+  const evening = readyLeads.slice(
+    morningCount + lunchCount,
+    morningCount + lunchCount + eveningCount
+  );
+
   return { morning, lunch, evening };
 }
 
-export async function getQueueForWindow(userId: number, count: number): Promise<Lead[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const now = Date.now();
-  const DAY = 86_400_000;
-  const allLeads = await db.select().from(leads).where(and(
-    eq(leads.userId, userId),
-    inArray(leads.status, ["novo", "toque1_enviado", "toque2_enviado", "toque3_enviado"])
-  ));
-  const ready = allLeads.filter((lead) => {
-    if (lead.status === "novo") return true;
-    if (lead.status === "toque1_enviado" && lead.toque1SentAt)
-      return now - new Date(lead.toque1SentAt).getTime() >= 3 * DAY;
-    if (lead.status === "toque2_enviado" && lead.toque2SentAt)
-      return now - new Date(lead.toque2SentAt).getTime() >= 4 * DAY;
-    return false;
-  });
-  const layerOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
-  const statusOrder: Record<string, number> = { toque2_enviado: 0, toque1_enviado: 1, novo: 2 };
-  ready.sort((a, b) => {
-    const la = layerOrder[a.layer] ?? 3;
-    const lb = layerOrder[b.layer] ?? 3;
-    if (la !== lb) return la - lb;
-    return (statusOrder[a.status] ?? 3) - (statusOrder[b.status] ?? 3);
-  });
-  return ready.slice(0, count);
-}
-
-// --- Dashboard Metrics ---
+// ─── Métricas do dashboard ────────────────────────────────────────────────────
 export async function getMetrics(userId: number) {
-  const db = await getDb();
-  if (!db) return null;
-
-  const today = new Date().toISOString().split("T")[0];
-
-  const allLeads = await db.select().from(leads).where(eq(leads.userId, userId));
-  const todaySends = await getDailySendCount(userId, today!);
+  const allLeads = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.userId, userId));
 
   const total = allLeads.length;
-  const byLayer = { A: 0, B: 0, C: 0 };
-  const byStatus: Record<string, number> = {};
-  const respondedByLayer = { A: 0, B: 0, C: 0 };
-  const totalByLayer = { A: 0, B: 0, C: 0 };
+  const byStatus = {
+    novo: 0,
+    toque1_enviado: 0,
+    toque2_enviado: 0,
+    toque3_enviado: 0,
+    respondeu: 0,
+    fechado: 0,
+    descartado: 0,
+  };
 
-  for (const lead of allLeads) {
-    byLayer[lead.layer]++;
-    totalByLayer[lead.layer]++;
-    byStatus[lead.status] = (byStatus[lead.status] ?? 0) + 1;
-    if (lead.status === "respondeu") respondedByLayer[lead.layer]++;
+  for (const l of allLeads) {
+    if (l.status in byStatus) {
+      byStatus[l.status as keyof typeof byStatus]++;
+    }
   }
 
-  const responseRateByLayer = {
-    A: totalByLayer.A > 0 ? Math.round((respondedByLayer.A / totalByLayer.A) * 100) : 0,
-    B: totalByLayer.B > 0 ? Math.round((respondedByLayer.B / totalByLayer.B) * 100) : 0,
-    C: totalByLayer.C > 0 ? Math.round((respondedByLayer.C / totalByLayer.C) * 100) : 0,
+  const respondeuCount = byStatus.respondeu + byStatus.fechado;
+  const totalContacted =
+    byStatus.toque1_enviado +
+    byStatus.toque2_enviado +
+    byStatus.toque3_enviado +
+    respondeuCount;
+
+  const responseRate =
+    totalContacted > 0 ? Math.round((respondeuCount / totalContacted) * 100) : 0;
+
+  // Taxa de resposta por camada
+  const byLayer: Record<"A" | "B" | "C", { contacted: number; responded: number }> = {
+    A: { contacted: 0, responded: 0 },
+    B: { contacted: 0, responded: 0 },
+    C: { contacted: 0, responded: 0 },
   };
+
+  for (const l of allLeads) {
+    const layer = l.layer as "A" | "B" | "C";
+    if (l.status !== "novo" && l.status !== "descartado") {
+      byLayer[layer].contacted++;
+      if (l.status === "respondeu" || l.status === "fechado") {
+        byLayer[layer].responded++;
+      }
+    }
+  }
+
+  const today = new Date().toISOString().split("T")[0]!;
+  const todaySends = await getDailySendCount(userId, today);
 
   return {
     total,
-    byLayer,
     byStatus,
+    responseRate,
     todaySends,
     dailyLimit: 30,
-    responseRateByLayer,
+    byLayer: {
+      A: {
+        ...byLayer.A,
+        rate:
+          byLayer.A.contacted > 0
+            ? Math.round((byLayer.A.responded / byLayer.A.contacted) * 100)
+            : 0,
+      },
+      B: {
+        ...byLayer.B,
+        rate:
+          byLayer.B.contacted > 0
+            ? Math.round((byLayer.B.responded / byLayer.B.contacted) * 100)
+            : 0,
+      },
+      C: {
+        ...byLayer.C,
+        rate:
+          byLayer.C.contacted > 0
+            ? Math.round((byLayer.C.responded / byLayer.C.contacted) * 100)
+            : 0,
+      },
+    },
   };
 }
+
+// ─── Alias para compatibilidade ───────────────────────────────────────────────
+export { getLeadsByUser as getQueueForWindow };

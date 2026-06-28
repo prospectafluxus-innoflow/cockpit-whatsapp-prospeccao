@@ -89,3 +89,26 @@
 - [x] Painel de Admin: lista de usuários, data de cadastro, status
 - [x] Proteção de rotas: redirecionar para login se não autenticado
 - [x] Testes Vitest para register, login e logout
+
+## Migração para Deploy Independente (Supabase + Render + OpenRouter)
+
+- [x] Schema PostgreSQL: converter MySQL → PostgreSQL (drizzle dialect, tipos, enums)
+- [x] Conexão com banco via postgres.js (compatível com Supabase)
+- [x] drizzle.config.ts: atualizado para dialect "postgresql"
+- [x] IA: substituir LLM Manus por OpenRouter (fetch nativo, sem SDK, funciona no Brasil)
+- [x] Heartbeat: stub independente do Manus Forge (modo simulado quando FORGE não disponível)
+- [x] Notificações: substituir Forge por console.log + Resend opcional
+- [x] env.ts: adicionar OPENROUTER_API_KEY, CRON_SECRET
+- [x] Endpoint /api/cron/send-reminder para Render Cron Jobs
+- [x] cronHandler.ts: handler do endpoint de cron independente
+- [x] render.yaml: configuração de deploy no Render (web service + 3 cron jobs)
+- [x] scripts/migrate.mjs: script de criação das tabelas no Supabase
+- [x] env.example.txt: template de variáveis de ambiente
+- [x] package.json: scripts build:prod, start:prod, db:migrate, db:generate
+- [x] CockpitPage: linha do tempo de toques com datas nos cards
+- [x] CockpitPage: import de planilha corrigido (suporte a "Camada A — ICP" com travessão)
+- [x] authOwn.test.ts: corrigir mock do db (remover getDb obsoleto)
+- [x] Todos os testes: 24 passando, 0 erros TypeScript
+- [x] Configurar GEMINI_API_KEY no projeto (via webdev_request_secrets)
+- [ ] Configurar CRON_SECRET no projeto (via webdev_request_secrets)
+- [x] Salvar checkpoint final e preparar guia de deploy

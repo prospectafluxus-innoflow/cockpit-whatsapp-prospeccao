@@ -1,28 +1,50 @@
 import {
-  int,
-  mysqlEnum,
-  mysqlTable,
+  integer,
+  pgEnum,
+  pgTable,
   text,
   timestamp,
   varchar,
-  float,
-  bigint,
+  real,
+  serial,
   date,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
 
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+// ─── Enums ────────────────────────────────────────────────────────────────────
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const layerEnum = pgEnum("layer", ["A", "B", "C"]);
+export const statusEnum = pgEnum("status", [
+  "novo",
+  "toque1_enviado",
+  "toque2_enviado",
+  "toque3_enviado",
+  "respondeu",
+  "fechado",
+  "descartado",
+]);
+export const kanbanColumnEnum = pgEnum("kanban_column", [
+  "Novo",
+  "Toque 1 Enviado",
+  "Toque 2 Enviado",
+  "Toque 3 Enviado",
+  "Respondeu",
+  "Fechado",
+]);
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }).unique(),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: roleEnum("role").default("user").notNull(),
   // Autenticação própria
   passwordHash: varchar("passwordHash", { length: 255 }),
   resetToken: varchar("resetToken", { length: 128 }),
   resetTokenExpiresAt: timestamp("resetTokenExpiresAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -30,50 +52,31 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
-export const leads = mysqlTable("leads", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const leads = pgTable("leads", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
 
   // Dados do lead
   name: varchar("name", { length: 255 }).notNull(),
   firstName: varchar("firstName", { length: 100 }),
   company: varchar("company", { length: 255 }),
   whatsapp: varchar("whatsapp", { length: 30 }).notNull(),
-  score: int("score").default(0),
-  layer: mysqlEnum("layer", ["A", "B", "C"]).notNull().default("B"),
+  score: integer("score").default(0),
+  layer: layerEnum("layer").notNull().default("B"),
 
   // Dados extras da planilha
-  size: varchar("size", { length: 100 }),        // Porte
-  employees: int("employees"),                    // Funcionários
-  investment: varchar("investment", { length: 100 }), // Investe em Mkt
-  taxRegime: varchar("taxRegime", { length: 100 }), // Regime tributário
-  participations: int("participations"),          // Participações
-  lastEvent: varchar("lastEvent", { length: 100 }), // Último evento
+  size: varchar("size", { length: 100 }),
+  employees: integer("employees"),
+  investment: varchar("investment", { length: 100 }),
+  taxRegime: varchar("taxRegime", { length: 100 }),
+  participations: integer("participations"),
+  lastEvent: varchar("lastEvent", { length: 100 }),
 
   // Status e ciclo de abordagem
-  status: mysqlEnum("status", [
-    "novo",
-    "toque1_enviado",
-    "toque2_enviado",
-    "toque3_enviado",
-    "respondeu",
-    "fechado",
-    "descartado",
-  ])
-    .notNull()
-    .default("novo"),
+  status: statusEnum("status").notNull().default("novo"),
 
-  // Kanban column (pode divergir do status em casos manuais)
-  kanbanColumn: mysqlEnum("kanbanColumn", [
-    "Novo",
-    "Toque 1 Enviado",
-    "Toque 2 Enviado",
-    "Toque 3 Enviado",
-    "Respondeu",
-    "Fechado",
-  ])
-    .notNull()
-    .default("Novo"),
+  // Kanban column
+  kanbanColumn: kanbanColumnEnum("kanbanColumn").notNull().default("Novo"),
 
   // Controle de toques
   toque1SentAt: timestamp("toque1SentAt"),
@@ -86,52 +89,48 @@ export const leads = mysqlTable("leads", {
   lastAiSuggestion: text("lastAiSuggestion"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
 
 // ─── Envios diários ───────────────────────────────────────────────────────────
-export const dailySends = mysqlTable("daily_sends", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  leadId: int("leadId").notNull(),
-  touchNumber: int("touchNumber").notNull(), // 1, 2 ou 3
-  sentDate: date("sentDate").notNull(),       // YYYY-MM-DD
+export const dailySends = pgTable("daily_sends", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  leadId: integer("leadId").notNull(),
+  touchNumber: integer("touchNumber").notNull(),
+  sentDate: date("sentDate").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type DailySend = typeof dailySends.$inferSelect;
 export type InsertDailySend = typeof dailySends.$inferInsert;
 
-// ─── Configuração de agendamento de lembretes ─────────────────────────────────
-export const sendSchedules = mysqlTable("send_schedules", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
+// ─── Configuração de agendamento ──────────────────────────────────────────────
+export const sendSchedules = pgTable("send_schedules", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
 
-  // Janela da manhã
-  morningEnabled: int("morningEnabled").default(1).notNull(), // 0 ou 1
-  morningHour: int("morningHour").default(8).notNull(),       // hora UTC-3
-  morningCount: int("morningCount").default(2).notNull(),     // qtd de leads
+  morningEnabled: integer("morningEnabled").default(1).notNull(),
+  morningHour: integer("morningHour").default(8).notNull(),
+  morningCount: integer("morningCount").default(2).notNull(),
 
-  // Janela do almoço
-  lunchEnabled: int("lunchEnabled").default(1).notNull(),
-  lunchHour: int("lunchHour").default(12).notNull(),
-  lunchCount: int("lunchCount").default(2).notNull(),
+  lunchEnabled: integer("lunchEnabled").default(1).notNull(),
+  lunchHour: integer("lunchHour").default(12).notNull(),
+  lunchCount: integer("lunchCount").default(2).notNull(),
 
-  // Janela do fim do dia
-  eveningEnabled: int("eveningEnabled").default(1).notNull(),
-  eveningHour: int("eveningHour").default(17).notNull(),
-  eveningCount: int("eveningCount").default(2).notNull(),
+  eveningEnabled: integer("eveningEnabled").default(1).notNull(),
+  eveningHour: integer("eveningHour").default(17).notNull(),
+  eveningCount: integer("eveningCount").default(2).notNull(),
 
-  // UIDs dos jobs Heartbeat (para gerenciar os crons)
   morningTaskUid: varchar("morningTaskUid", { length: 65 }),
   lunchTaskUid: varchar("lunchTaskUid", { length: 65 }),
   eveningTaskUid: varchar("eveningTaskUid", { length: 65 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type SendSchedule = typeof sendSchedules.$inferSelect;

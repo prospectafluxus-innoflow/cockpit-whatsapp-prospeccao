@@ -19,7 +19,7 @@ import {
 } from "./db";
 import { parse as parseCookie } from "cookie";
 import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM } from "./_core/gemini";
 import { authOwnRouter } from "./routers/authOwn";
 
 const DAILY_LIMIT = 30;

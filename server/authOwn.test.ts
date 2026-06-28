@@ -8,9 +8,11 @@ import { COOKIE_NAME } from "../shared/const";
 
 // Mock do banco de dados
 vi.mock("./db", () => ({
-  getDb: vi.fn(),
   getUserByOpenId: vi.fn(),
   getUserById: vi.fn(),
+  getUserByEmail: vi.fn(),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
 // Mock do bcrypt para testes rápidos
@@ -22,7 +24,6 @@ vi.mock("bcryptjs", () => ({
 }));
 
 import bcrypt from "bcryptjs";
-import { getDb } from "./db";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,8 +70,6 @@ describe("authOwn — lógica de registro", () => {
     const mockDb = createMockDb({
       limit: vi.fn().mockResolvedValue([{ id: 1 }]), // email já existe
     });
-    vi.mocked(getDb).mockResolvedValue(mockDb as ReturnType<typeof createMockDb> as any);
-
     // Simula a verificação de duplicidade
     const existing = await mockDb.select().from({}).where({}).limit(1);
     expect(existing.length).toBeGreaterThan(0);
@@ -91,7 +90,6 @@ describe("authOwn — lógica de login", () => {
     const mockDb = createMockDb({
       limit: vi.fn().mockResolvedValue([]), // usuário não encontrado
     });
-    vi.mocked(getDb).mockResolvedValue(mockDb as any);
 
     const user = await mockDb.select().from({}).where({}).limit(1);
     expect(user.length).toBe(0);

@@ -43,10 +43,11 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-            <MessageSquare className="w-7 h-7 text-emerald-400" />
-          </div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">ProspectaFluxus</h1>
+          <img
+            src="/manus-storage/prospectafluxus-logo_ab423719.png"
+            alt="ProspectaFluxus"
+            className="h-20 w-auto object-contain mx-auto mb-4"
+          />
           <p className="text-sm text-zinc-500 mt-1">Acesse sua conta para continuar</p>
         </div>
 

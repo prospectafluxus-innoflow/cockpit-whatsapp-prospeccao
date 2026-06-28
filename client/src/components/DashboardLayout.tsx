@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useIsMobile } from "@/hooks/useMobile";
-import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield, Zap } from "lucide-react";
+import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -60,14 +60,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-sm w-full">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center">
-              <Zap className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="font-semibold text-foreground">ProspectaFluxus</p>
-              <p className="text-xs text-muted-foreground">Prospecção Ativa</p>
-            </div>
+          <div className="flex flex-col items-center gap-2 mb-2">
+            <img
+              src="/manus-storage/prospectafluxus-logo_ab423719.png"
+              alt="ProspectaFluxus"
+              className="h-16 w-auto object-contain"
+            />
           </div>
           <div className="flex flex-col items-center gap-3 text-center">
             <h1 className="text-xl font-semibold tracking-tight">Acesse sua conta</h1>
@@ -152,12 +150,11 @@ function DashboardLayoutContent({
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center shrink-0">
-                    <Zap className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  <span className="font-semibold text-sm tracking-tight truncate">
-                    ProspectaFluxus
-                  </span>
+                  <img
+                    src="/manus-storage/prospectafluxus-logo_ab423719.png"
+                    alt="ProspectaFluxus"
+                    className="h-7 w-auto object-contain shrink-0"
+                  />
                 </div>
               )}
             </div>

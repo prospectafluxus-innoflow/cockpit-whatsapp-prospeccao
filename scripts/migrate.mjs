@@ -140,6 +140,15 @@ CREATE TABLE IF NOT EXISTS "send_schedules" (
 CREATE INDEX IF NOT EXISTS "leads_userId_idx" ON "leads" ("userId");
 CREATE INDEX IF NOT EXISTS "leads_status_idx" ON "leads" ("status");
 CREATE INDEX IF NOT EXISTS "daily_sends_userId_date_idx" ON "daily_sends" ("userId", "sentDate");
+
+CREATE TABLE IF NOT EXISTS "message_templates" (
+  "id" serial PRIMARY KEY NOT NULL,
+  "userId" integer NOT NULL,
+  "toque" integer NOT NULL,
+  "text" text NOT NULL,
+  "createdAt" timestamp DEFAULT now() NOT NULL,
+  "updatedAt" timestamp DEFAULT now() NOT NULL
+);
 `;
 
 async function migrate() {

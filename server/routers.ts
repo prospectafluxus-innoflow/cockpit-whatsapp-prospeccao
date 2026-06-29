@@ -16,6 +16,9 @@ import {
   upsertSchedule,
   getQueueForWindow,
   getDistributedQueueForDay,
+  getMessageTemplates,
+  upsertMessageTemplate,
+  DEFAULT_TEMPLATES,
 } from "./db";
 import { parse as parseCookie } from "cookie";
 import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
@@ -45,17 +48,25 @@ function canSendToque(lead: { status: string; toque1SentAt: Date | null; toque2S
   return { can: false, toque: 0 };
 }
 
-function buildWaLink(whatsapp: string, toque: number, lead: { name: string; firstName: string | null; company: string | null }) {
+function buildWaLink(
+  whatsapp: string,
+  toque: number,
+  lead: { name: string; firstName: string | null; company: string | null },
+  customTemplates?: Record<number, string>
+) {
   const firstName = lead.firstName ?? lead.name.split(" ")[0] ?? lead.name;
-  const company = lead.company ? ` da ${lead.company}` : "";
+  const companyStr = lead.company ? ` da ${lead.company}` : "";
 
-  const messages: Record<number, string> = {
-    1: `Olá ${firstName}! Tudo bem? Vi que você${company} tem atuado no mercado e gostaria de entender melhor como posso agregar valor ao seu negócio. Posso te chamar em 5 minutos?`,
-    2: `Oi ${firstName}, tudo certo? Passando para retomar nosso contato. Tenho algumas ideias que podem fazer sentido para o seu negócio${company}. Tem um momento para conversar?`,
-    3: `${firstName}, última tentativa de contato! Caso tenha interesse em conversar sobre como posso ajudar${company}, é só me responder. Abraço!`,
-  };
+  // Usa template customizado se existir, senão usa o padrão
+  const templates = customTemplates ?? DEFAULT_TEMPLATES;
+  const rawTemplate = templates[toque] ?? DEFAULT_TEMPLATES[toque] ?? DEFAULT_TEMPLATES[1]!;
 
-  const msg = encodeURIComponent(messages[toque] ?? messages[1]!);
+  // Substitui as variáveis {firstName} e {company}
+  const message = rawTemplate
+    .replace(/\{firstName\}/g, firstName)
+    .replace(/\{company\}/g, companyStr);
+
+  const msg = encodeURIComponent(message);
   const phone = whatsapp.replace(/\D/g, "");
   return `https://wa.me/55${phone}?text=${msg}`;
 }
@@ -86,13 +97,20 @@ export const appRouter = router({
         const today = todayStr();
         const todaySends = await getDailySendCount(ctx.user.id, today);
 
+        // Carrega templates personalizados do usuário
+        const savedTemplates = await getMessageTemplates(ctx.user.id);
+        const customTemplates: Record<number, string> = { ...DEFAULT_TEMPLATES };
+        for (const t of savedTemplates) {
+          customTemplates[t.toque] = t.text;
+        }
+
         return rawLeads.map((lead) => {
           const { can, toque } = canSendToque(lead);
           return {
             ...lead,
             nextToque: toque,
             canSendNow: can,
-            waLink: can ? buildWaLink(lead.whatsapp, toque, lead) : null,
+            waLink: can ? buildWaLink(lead.whatsapp, toque, lead, customTemplates) : null,
           };
         });
       }),
@@ -486,6 +504,42 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
     metrics: protectedProcedure.query(async ({ ctx }) => {
       return getMetrics(ctx.user.id);
     }),
+  }),
+
+  // ─── Templates de mensagem ────────────────────────────────────────────────────
+  messageTemplates: router({
+    // Retorna os 3 templates do usuário (ou os defaults se não tiver customizado)
+    get: protectedProcedure.query(async ({ ctx }) => {
+      const saved = await getMessageTemplates(ctx.user.id);
+      const result: Record<number, string> = { ...DEFAULT_TEMPLATES };
+      for (const t of saved) {
+        result[t.toque] = t.text;
+      }
+      return {
+        toque1: result[1]!,
+        toque2: result[2]!,
+        toque3: result[3]!,
+      };
+    }),
+
+    // Salva um template específico (toque 1, 2 ou 3)
+    save: protectedProcedure
+      .input(z.object({
+        toque: z.number().int().min(1).max(3),
+        text: z.string().min(10).max(1000),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const saved = await upsertMessageTemplate(ctx.user.id, input.toque, input.text);
+        return { success: true, id: saved.id };
+      }),
+
+    // Reseta um template para o texto padrão
+    reset: protectedProcedure
+      .input(z.object({ toque: z.number().int().min(1).max(3) }))
+      .mutation(async ({ ctx, input }) => {
+        await upsertMessageTemplate(ctx.user.id, input.toque, DEFAULT_TEMPLATES[input.toque]!);
+        return { success: true, text: DEFAULT_TEMPLATES[input.toque]! };
+      }),
   }),
 });
 

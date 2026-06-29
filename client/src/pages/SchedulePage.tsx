@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Sun,
@@ -22,6 +23,9 @@ import {
   Building2,
   Star,
   Info,
+  MessageSquare,
+  RotateCcw,
+  Save,
 } from "lucide-react";
 
 type Lead = {
@@ -138,6 +142,35 @@ export default function SchedulePage() {
 
   const { data: schedule, isLoading: loadingSchedule } = trpc.schedule.get.useQuery();
   const { data: queueData, isLoading: loadingQueue } = trpc.schedule.getQueue.useQuery();
+  const { data: templates, isLoading: loadingTemplates } = trpc.messageTemplates.get.useQuery();
+
+  // Estado local para edição dos templates
+  const [editingTemplate, setEditingTemplate] = useState<number | null>(null);
+  const [templateDrafts, setTemplateDrafts] = useState<Record<number, string>>({});
+
+  const saveTemplateMutation = trpc.messageTemplates.save.useMutation({
+    onSuccess: () => {
+      toast.success("Mensagem salva!");
+      utils.messageTemplates.get.invalidate();
+      setEditingTemplate(null);
+    },
+    onError: () => toast.error("Erro ao salvar mensagem."),
+  });
+
+  const resetTemplateMutation = trpc.messageTemplates.reset.useMutation({
+    onSuccess: (data) => {
+      toast.success("Mensagem redefinida para o padrão!");
+      utils.messageTemplates.get.invalidate();
+      setEditingTemplate(null);
+    },
+    onError: () => toast.error("Erro ao redefinir mensagem."),
+  });
+
+  const getTemplateDraft = (toque: number) => {
+    if (templateDrafts[toque] !== undefined) return templateDrafts[toque]!;
+    if (templates) return templates[`toque${toque}` as keyof typeof templates] as string;
+    return "";
+  };
 
   const [form, setForm] = useState<{
     morningEnabled: boolean;
@@ -467,6 +500,109 @@ export default function SchedulePage() {
               <span>A fila é <strong className="text-foreground">recalculada em tempo real</strong> — sempre reflete o estado atual dos seus leads</span>
             </div>
           </div>
+        </section>
+
+        {/* Templates de Mensagem */}
+        <section className="rounded-xl border border-border/40 bg-card/30 p-5">
+          <h3 className="text-sm font-semibold mb-1 flex items-center gap-2">
+            <MessageSquare className="h-4 w-4 text-primary" />
+            Mensagens dos Toques
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Personalize o texto enviado em cada toque. Use <code className="bg-muted px-1 rounded text-[11px]">{'{firstName}'}</code> para o primeiro nome e <code className="bg-muted px-1 rounded text-[11px]">{'{company}'}</code> para a empresa (ex: <em>" da Acme"</em>).
+          </p>
+
+          {loadingTemplates ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {[1, 2, 3].map((toque) => {
+                const isEditing = editingTemplate === toque;
+                const currentText = getTemplateDraft(toque);
+                const toqueColors: Record<number, string> = {
+                  1: "text-emerald-400 border-emerald-400/30 bg-emerald-400/5",
+                  2: "text-blue-400 border-blue-400/30 bg-blue-400/5",
+                  3: "text-amber-400 border-amber-400/30 bg-amber-400/5",
+                };
+                return (
+                  <div key={toque} className={`rounded-lg border p-4 transition-colors ${toqueColors[toque]}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide">Toque {toque}</span>
+                      <div className="flex items-center gap-2">
+                        {!isEditing && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                setEditingTemplate(toque);
+                                setTemplateDrafts(d => ({ ...d, [toque]: currentText }));
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground"
+                              onClick={() => resetTemplateMutation.mutate({ toque })}
+                              disabled={resetTemplateMutation.isPending}
+                            >
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                              Padrão
+                            </Button>
+                          </>
+                        )}
+                        {isEditing && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => {
+                                setEditingTemplate(null);
+                                setTemplateDrafts(d => { const n = { ...d }; delete n[toque]; return n; });
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-7 px-3 text-xs"
+                              onClick={() => saveTemplateMutation.mutate({ toque, text: templateDrafts[toque] ?? currentText })}
+                              disabled={saveTemplateMutation.isPending}
+                            >
+                              <Save className="h-3 w-3 mr-1" />
+                              Salvar
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {isEditing ? (
+                      <Textarea
+                        value={templateDrafts[toque] ?? currentText}
+                        onChange={e => setTemplateDrafts(d => ({ ...d, [toque]: e.target.value }))}
+                        className="text-sm bg-background/60 min-h-[80px] resize-none"
+                        maxLength={1000}
+                        placeholder="Digite a mensagem do toque..."
+                      />
+                    ) : (
+                      <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">{currentText}</p>
+                    )}
+                    {isEditing && (
+                      <p className="text-[11px] text-muted-foreground mt-1 text-right">
+                        {(templateDrafts[toque] ?? currentText).length}/1000 caracteres
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       </div>
     </div>

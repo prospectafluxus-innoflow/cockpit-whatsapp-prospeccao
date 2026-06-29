@@ -153,13 +153,13 @@
 
 ## Fix Importação de Planilha (lotes menores)
 
-- [ ] Fix: reduzir lote de 150 para 50 leads por requisição
-- [ ] Fix: remover .returning() do insertLeads para máxima velocidade no servidor
+- [x] Fix: reduzir lote de 150 para 50 leads por requisição
+- [x] Fix: remover .returning() do insertLeads para máxima velocidade no servidor
 
 ## Templates de Mensagem Personalizáveis
 
-- [ ] Schema: tabela `message_templates` com userId, toque (1/2/3), texto com variáveis {firstName}, {company}
-- [ ] Migration SQL aplicada no Supabase
-- [ ] Backend: procedures messageTemplates.get e messageTemplates.save
-- [ ] UI: seção "Mensagens dos Toques" na página de Agendamento
-- [ ] Integrar templates no buildWaLink (substituir mensagens hardcoded)
+- [x] Schema: tabela `message_templates` com userId, toque (1/2/3), texto com variáveis {firstName}, {company}
+- [x] Migration SQL aplicada no Supabase
+- [x] Backend: procedures messageTemplates.get e messageTemplates.save
+- [x] UI: seção "Mensagens dos Toques" na página de Agendamento
+- [x] Integrar templates no buildWaLink (substituir mensagens hardcoded)

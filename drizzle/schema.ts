@@ -144,3 +144,16 @@ export const sendSchedules = pgTable("send_schedules", {
 
 export type SendSchedule = typeof sendSchedules.$inferSelect;
 export type InsertSendSchedule = typeof sendSchedules.$inferInsert;
+
+// ─── Templates de mensagem ────────────────────────────────────────────────────
+export const messageTemplates = pgTable("message_templates", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  toque: integer("toque").notNull(), // 1, 2 ou 3
+  text: text("text").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type MessageTemplate = typeof messageTemplates.$inferSelect;
+export type InsertMessageTemplate = typeof messageTemplates.$inferInsert;

@@ -6,6 +6,7 @@ import {
   leads,
   dailySends,
   sendSchedules,
+  messageTemplates,
   type User,
   type InsertUser,
   type Lead,
@@ -13,6 +14,7 @@ import {
   type InsertDailySend,
   type SendSchedule,
   type InsertSendSchedule,
+  type MessageTemplate,
 } from "../drizzle/schema";
 
 // ─── Conexão com o banco ──────────────────────────────────────────────────────
@@ -405,4 +407,47 @@ export async function getMetrics(userId: number) {
 }
 
 // ─── Alias para compatibilidade ───────────────────────────────────────────────
+
+// ─── Helpers de templates de mensagem ────────────────────────────────────────
+export const DEFAULT_TEMPLATES: Record<number, string> = {
+  1: "Olá {firstName}! Tudo bem? Vi que você{company} tem atuado no mercado e gostaria de entender melhor como posso agregar valor ao seu negócio. Posso te chamar em 5 minutos?",
+  2: "Oi {firstName}, tudo certo? Passando para retomar nosso contato. Tenho algumas ideias que podem fazer sentido para o seu negócio{company}. Tem um momento para conversar?",
+  3: "{firstName}, última tentativa de contato! Caso tenha interesse em conversar sobre como posso ajudar{company}, é só me responder. Abraço!",
+};
+
+export async function getMessageTemplates(userId: number): Promise<MessageTemplate[]> {
+  return db
+    .select()
+    .from(messageTemplates)
+    .where(eq(messageTemplates.userId, userId))
+    .orderBy(asc(messageTemplates.toque));
+}
+
+export async function upsertMessageTemplate(
+  userId: number,
+  toque: number,
+  text: string
+): Promise<MessageTemplate> {
+  const existing = await db
+    .select()
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .limit(1);
+
+  if (existing[0]) {
+    const updated = await db
+      .update(messageTemplates)
+      .set({ text, updatedAt: new Date() })
+      .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+      .returning();
+    return updated[0]!;
+  }
+
+  const inserted = await db
+    .insert(messageTemplates)
+    .values({ userId, toque, text })
+    .returning();
+  return inserted[0]!;
+}
+
 export { getLeadsByUser as getQueueForWindow };

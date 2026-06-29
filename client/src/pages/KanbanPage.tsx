@@ -129,10 +129,15 @@ export default function KanbanPage() {
                             </div>
                             <GripVertical className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-0.5" />
                           </div>
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
                             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${layerColors[lead.layer]}`}>
                               {lead.layer}
                             </span>
+                            {col === "Respondeu" && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border bg-blue-400/10 text-blue-400 border-blue-400/30">
+                                {lead.toque3SentAt ? "Via T3" : lead.toque2SentAt ? "Via T2" : "Via T1"}
+                              </span>
+                            )}
                             <div className="flex items-center gap-1 ml-auto">
                               <Star className="h-3 w-3 text-amber-400" />
                               <span className="font-mono text-xs text-muted-foreground">{lead.score ?? 0}</span>

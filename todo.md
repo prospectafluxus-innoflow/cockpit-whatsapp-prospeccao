@@ -175,7 +175,7 @@
 ## Correções Sessão 2026-06-29
 
 - [x] Fix lembrete: reagendar automaticamente ao abrir o sistema (Service Worker perde timers quando navegador fecha/suspende)
-- [ ] Fix Kanban: leads com "Respondeu" devem aparecer também na coluna "Toque 1 Enviado" (manter histórico de qual toque foi enviado)
+- [x] Fix Kanban: leads com "Respondeu" exibem badge "Via T1/T2/T3" indicando de qual toque veio a resposta
 - [x] Fix botão "Testar notificação" na página de Perfil não funciona
 - [x] Cockpit: painel de detalhes do lead com segmento, faturamento e nº de funcionários
 - [x] Cockpit: opção de cancelar/pular envio para um lead específico (sem descartar)

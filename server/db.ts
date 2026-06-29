@@ -410,9 +410,9 @@ export async function getMetrics(userId: number) {
 
 // ─── Helpers de templates de mensagem ────────────────────────────────────────
 export const DEFAULT_TEMPLATES: Record<number, string> = {
-  1: "Olá {firstName}! Tudo bem? Vi que você{company} tem atuado no mercado e gostaria de entender melhor como posso agregar valor ao seu negócio. Posso te chamar em 5 minutos?",
-  2: "Oi {firstName}, tudo certo? Passando para retomar nosso contato. Tenho algumas ideias que podem fazer sentido para o seu negócio{company}. Tem um momento para conversar?",
-  3: "{firstName}, última tentativa de contato! Caso tenha interesse em conversar sobre como posso ajudar{company}, é só me responder. Abraço!",
+  1: "Oi, {firstName}! Aqui é a Michelle Bis, da InnoFlow e sou uma das embaixadoras do Clube dos Decisores (a antiga Cobertura Business, da qual você já participou). Estou falando com empresários selecionados da nossa rede, e a {company} me chamou atenção pela sua história. Trabalho com estruturação empresarial e ajudo empresas como a sua a descobrir onde estão perdendo dinheiro, eficiência e onde elas podem ganhar mais dinheiro. Seleciono 2 empresas por mês para uma mentoria gratuita de 60 minutos. Topa? É o nosso Pit Stop: você sai com uma visão clara dos gargalos do negócio, sem compromisso.",
+  2: "{firstName}, duas perguntas que costumo fazer na mentoria e que fazem todo dono parar: você sabe quanto sua empresa vale hoje se aparecer um investidor? E se você precisasse se ausentar uma semana, ela andaria sozinha? Se alguma travou, é exatamente o que a gente destrava em 60 minutos. Quer um dos 2 horários que tenho essa semana?",
+  3: "{firstName}, vou parar de te perturbar por aqui \uD83D\uDE04 Mas fica o convite: quando bater aquela dúvida de quanto sua empresa vale \u2014 ou se ela andaria sem você por uma semana \u2014 é só preencher o formulário no innoflow.com.br e você entra na fila da mentoria do próximo mês. Sucesso aí, e até os encontros do Clube dos Decisores! \uD83C\uDFF0",
 };
 
 export async function getMessageTemplates(userId: number): Promise<MessageTemplate[]> {

@@ -123,5 +123,17 @@
 - [x] scheduleHandler.ts: adicionar "afternoon" como janela válida
 - [x] SchedulePage.tsx: adicionar janela "Meio da tarde" com ícone Cloud (sky-400)
 - [x] CockpitPage.tsx: adicionar janela "Meio da tarde" na Fila do Dia (grid 2x2 → 4 colunas)
-- [ ] SQL migration: executar no Supabase SQL Editor (ver scripts/migrate-afternoon.mjs)
-- [ ] Deploy: push para GitHub → Railway auto-deploy
+- [x] SQL migration: script criado em scripts/migrate-afternoon.mjs (executar no Supabase SQL Editor)
+- [x] Deploy: checkpoint salvo → push automático para GitHub → Railway auto-deploy via git push
+
+## Sistema de Aprovação de Cadastro
+
+- [x] Schema: enum `approval_status` (pending/approved/rejected) + coluna `approvalStatus` na tabela users
+- [x] authOwn.ts: registro cria usuário com `pending`, sem cookie de sessão
+- [x] authOwn.ts: login bloqueia usuários `pending` e `rejected` com mensagem específica
+- [x] authOwn.ts: procedures `approveUser` e `rejectUser` para admin
+- [x] authOwn.ts: `listUsers` retorna campo `approvalStatus`
+- [x] RegisterPage: tela de "Aguardando aprovação" após cadastro bem-sucedido
+- [x] LoginPage: alertas visuais amber (pending) e vermelho (rejected)
+- [x] AdminPage: contador de pendentes, botões Aprovar/Rejeitar/Revogar por usuário
+- [ ] SQL migration: executar no Supabase (ver SQL abaixo)

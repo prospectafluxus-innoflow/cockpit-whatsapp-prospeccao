@@ -1,6 +1,7 @@
 /**
  * authOwn.ts — Autenticação própria com email + senha
  * Substitui o fluxo Manus OAuth para clientes externos.
+ * Inclui sistema de aprovação: novos cadastros ficam "pending" até o admin aprovar.
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
@@ -42,7 +43,7 @@ export const authOwnRouter = router({
         password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
       })
     )
-    .mutation(async ({ input, ctx }) => {
+    .mutation(async ({ input }) => {
       const existing = await getUserByEmail(input.email);
       if (existing) {
         throw new TRPCError({
@@ -53,23 +54,18 @@ export const authOwnRouter = router({
 
       const passwordHash = await bcrypt.hash(input.password, 12);
 
-      const newUser = await createUser({
+      await createUser({
         name: input.name,
         email: input.email,
         passwordHash,
         loginMethod: "email",
         role: "user",
+        approvalStatus: "pending",
         lastSignedIn: new Date(),
       });
 
-      const token = await signToken(newUser.id, "user");
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, token, {
-        ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60 * 1000,
-      });
-
-      return { success: true, name: input.name };
+      // Não cria sessão — usuário aguarda aprovação do admin
+      return { success: true, pending: true, name: input.name };
     }),
 
   // ─── Login ─────────────────────────────────────────────────────────────────
@@ -95,6 +91,20 @@ export const authOwnRouter = router({
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Email ou senha incorretos.",
+        });
+      }
+
+      // Bloquear usuários não aprovados
+      if ((user as any).approvalStatus === "pending") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "PENDING: Seu cadastro está aguardando aprovação. Você será notificado assim que liberado.",
+        });
+      }
+      if ((user as any).approvalStatus === "rejected") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "REJECTED: Seu acesso foi negado. Entre em contato com o suporte.",
         });
       }
 
@@ -191,6 +201,7 @@ export const authOwnRouter = router({
         name: users.name,
         email: users.email,
         role: users.role,
+        approvalStatus: users.approvalStatus,
         loginMethod: users.loginMethod,
         createdAt: users.createdAt,
         lastSignedIn: users.lastSignedIn,
@@ -200,6 +211,30 @@ export const authOwnRouter = router({
 
     return rows;
   }),
+
+  // ─── Aprovar usuário ───────────────────────────────────────────────────────
+  approveUser: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      await db
+        .update(users)
+        .set({ approvalStatus: "approved", updatedAt: new Date() })
+        .where(eq(users.id, input.userId));
+      return { success: true };
+    }),
+
+  // ─── Rejeitar usuário ──────────────────────────────────────────────────────
+  rejectUser: protectedProcedure
+    .input(z.object({ userId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+      await db
+        .update(users)
+        .set({ approvalStatus: "rejected", updatedAt: new Date() })
+        .where(eq(users.id, input.userId));
+      return { success: true };
+    }),
 
   // ─── Promover usuário a admin ──────────────────────────────────────────────
   promoteUser: protectedProcedure

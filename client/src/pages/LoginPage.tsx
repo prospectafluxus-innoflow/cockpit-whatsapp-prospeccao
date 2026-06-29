@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
-import { MessageSquare, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Clock, XCircle } from "lucide-react";
 import { Link } from "wouter";
 
 export default function LoginPage() {
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [blockStatus, setBlockStatus] = useState<"pending" | "rejected" | null>(null);
 
   const loginMutation = trpc.authOwn.login.useMutation({
     onSuccess: () => {
@@ -20,7 +21,15 @@ export default function LoginPage() {
       window.location.href = "/";
     },
     onError: (err) => {
-      toast.error(err.message || "Email ou senha incorretos.");
+      const msg = err.message || "";
+      if (msg.startsWith("PENDING:")) {
+        setBlockStatus("pending");
+      } else if (msg.startsWith("REJECTED:")) {
+        setBlockStatus("rejected");
+      } else {
+        setBlockStatus(null);
+        toast.error(msg || "Email ou senha incorretos.");
+      }
     },
   });
 
@@ -50,6 +59,26 @@ export default function LoginPage() {
           />
           <p className="text-sm text-zinc-500 mt-1">Acesse sua conta para continuar</p>
         </div>
+
+        {/* Alerta de status bloqueado */}
+        {blockStatus === "pending" && (
+          <div className="mb-4 flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+            <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-300">Cadastro aguardando aprovação</p>
+              <p className="text-xs text-amber-400/80 mt-0.5">Seu acesso ainda não foi liberado. Aguarde o contato do administrador.</p>
+            </div>
+          </div>
+        )}
+        {blockStatus === "rejected" && (
+          <div className="mb-4 flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+            <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-300">Acesso negado</p>
+              <p className="text-xs text-red-400/80 mt-0.5">Seu cadastro foi recusado. Entre em contato com o suporte.</p>
+            </div>
+          </div>
+        )}
 
         {/* Card */}
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8 backdrop-blur-sm shadow-2xl">

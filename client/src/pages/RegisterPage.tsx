@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { MessageSquare, Eye, EyeOff, Loader2 } from "lucide-react";
+import { MessageSquare, Eye, EyeOff, Loader2, Clock, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 
 export default function RegisterPage() {
@@ -13,11 +13,11 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [registered, setRegistered] = useState<string | null>(null);
 
   const registerMutation = trpc.authOwn.register.useMutation({
     onSuccess: (data) => {
-      toast.success(`Bem-vindo(a), ${data.name}! Conta criada com sucesso.`);
-      window.location.href = "/";
+      setRegistered(data.name ?? "usuário");
     },
     onError: (err) => {
       toast.error(err.message || "Erro ao criar conta. Tente novamente.");
@@ -40,6 +40,41 @@ export default function RegisterPage() {
     }
     registerMutation.mutate({ name, email, password });
   };
+
+  if (registered) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-amber-500/5 rounded-full blur-3xl" />
+        </div>
+        <div className="relative w-full max-w-md text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 mb-6">
+            <Clock className="w-8 h-8 text-amber-400" />
+          </div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight mb-2">Cadastro recebido!</h1>
+          <p className="text-zinc-400 text-sm leading-relaxed mb-6">
+            Olá, <strong className="text-white">{registered}</strong>! Seu cadastro foi registrado com sucesso.
+            <br /><br />
+            Seu acesso está <strong className="text-amber-400">aguardando aprovação</strong>. O administrador será notificado e liberará seu acesso em breve.
+          </p>
+          <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 text-left space-y-3 mb-6">
+            <div className="flex items-center gap-3 text-sm">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="text-zinc-300">Conta criada com sucesso</span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-zinc-300">Aguardando aprovação do administrador</span>
+            </div>
+          </div>
+          <Link href="/login" className="text-emerald-400 hover:text-emerald-300 text-sm font-medium transition-colors">
+            Voltar para o login
+          </Link>
+          <p className="text-center text-xs text-zinc-600 mt-6">ProspectaFluxus © 2026</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">

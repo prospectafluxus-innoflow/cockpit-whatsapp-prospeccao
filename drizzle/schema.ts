@@ -12,6 +12,7 @@ import {
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected"]);
 export const layerEnum = pgEnum("layer", ["A", "B", "C"]);
 export const statusEnum = pgEnum("status", [
   "novo",
@@ -39,6 +40,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }).unique(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
+  approvalStatus: approvalStatusEnum("approvalStatus").default("pending").notNull(),
   // Autenticação própria
   passwordHash: varchar("passwordHash", { length: 255 }),
   resetToken: varchar("resetToken", { length: 128 }),

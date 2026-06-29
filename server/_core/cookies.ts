@@ -9,8 +9,11 @@ function isIpAddress(host: string) {
 }
 
 function isSecureRequest(req: Request) {
+  // With trust proxy=1, req.protocol already reflects x-forwarded-proto.
+  // Railway always serves over HTTPS, so this will be true in production.
   if (req.protocol === "https") return true;
 
+  // Fallback: check x-forwarded-proto directly (belt-and-suspenders)
   const forwardedProto = req.headers["x-forwarded-proto"];
   if (!forwardedProto) return false;
 

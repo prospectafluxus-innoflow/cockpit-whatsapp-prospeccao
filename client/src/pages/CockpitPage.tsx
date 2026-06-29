@@ -285,9 +285,9 @@ export default function CockpitPage() {
           return;
         }
 
-        // Importar em lotes de 150 leads por requisição separada
+        // Importar em lotes de 50 leads por requisição separada
         // para evitar timeout no Railway (180s limit)
-        const BATCH_SIZE = 150;
+        const BATCH_SIZE = 50;
         const batches: any[][] = [];
         for (let i = 0; i < allLeads.length; i += BATCH_SIZE) {
           batches.push(allLeads.slice(i, i + BATCH_SIZE));
@@ -405,7 +405,7 @@ export default function CockpitPage() {
                 {importProgress.current === 0
                   ? "Preparando importação..."
                   : importProgress.current < importProgress.total
-                  ? `Lote ${Math.ceil(importProgress.current / 150)} de ${Math.ceil(importProgress.total / 150)} enviado com sucesso`
+                  ? `Lote ${Math.ceil(importProgress.current / 50)} de ${Math.ceil(importProgress.total / 50)} enviado com sucesso`
                   : "Finalizando..."}
               </p>
             </div>

@@ -150,3 +150,16 @@
 - [x] Link "Meu Perfil" no dropdown do footer do sidebar
 - [x] Banner de primeiro acesso no Cockpit ("Nunca esqueça de prospectar!") com link para /profile
 - [x] Link "Ativar lembretes" na seção Fila do Dia do Cockpit
+
+## Fix Importação de Planilha (lotes menores)
+
+- [ ] Fix: reduzir lote de 150 para 50 leads por requisição
+- [ ] Fix: remover .returning() do insertLeads para máxima velocidade no servidor
+
+## Templates de Mensagem Personalizáveis
+
+- [ ] Schema: tabela `message_templates` com userId, toque (1/2/3), texto com variáveis {firstName}, {company}
+- [ ] Migration SQL aplicada no Supabase
+- [ ] Backend: procedures messageTemplates.get e messageTemplates.save
+- [ ] UI: seção "Mensagens dos Toques" na página de Agendamento
+- [ ] Integrar templates no buildWaLink (substituir mensagens hardcoded)

@@ -179,7 +179,7 @@ export const appRouter = router({
         });
 
         await insertLeads(toInsert);
-        return { inserted: toInsert.length };
+        return { inserted: toInsert.length } as { inserted: number };
       }),
 
     registerSend: protectedProcedure

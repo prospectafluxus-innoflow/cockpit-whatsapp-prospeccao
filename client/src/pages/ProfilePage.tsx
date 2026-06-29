@@ -238,9 +238,24 @@ export default function ProfilePage() {
                   onClick={async () => {
                     const ok = await testNotification();
                     if (ok) {
-                      toast.success("Notificação enviada! Verifique se apareceu no seu dispositivo.");
+                      toast.success("Notificação enviada! Se não apareceu, verifique as configurações do Chrome.", {
+                        action: {
+                          label: "Abrir configurações",
+                          onClick: () => window.open(`chrome://settings/content/notifications`, "_blank") || window.open(`${window.location.origin}`, "_blank"),
+                        },
+                        duration: 8000,
+                      });
                     } else {
-                      toast.error("Não foi possível enviar a notificação. Verifique se as notificações estão permitidas no navegador.");
+                      toast.error("Notificação bloqueada. Clique para liberar no Chrome.", {
+                        action: {
+                          label: "Configurar Chrome",
+                          onClick: () => {
+                            // chrome:// URLs não abrem via JS — mostra instrução
+                            toast.info("No Chrome: clique no 🔒 cadeado na barra de endereço → Notificações → Permitir", { duration: 10000 });
+                          },
+                        },
+                        duration: 8000,
+                      });
                     }
                   }}
                   className="gap-2 text-xs"

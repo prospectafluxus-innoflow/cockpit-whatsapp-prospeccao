@@ -140,7 +140,7 @@ function DashboardLayoutContent({
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50">
-          <SidebarHeader className="h-16 justify-center border-b border-border/50">
+          <SidebarHeader className="h-16 justify-center border-b border-border/50 py-2">
             <div className="flex items-center gap-3 px-2 w-full">
               <button
                 onClick={toggleSidebar}
@@ -153,7 +153,7 @@ function DashboardLayoutContent({
                   <img
                     src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663667466619/jOvLxAxfEehmlwIV.png"
                     alt="ProspectaFluxus"
-                    className="h-7 w-auto object-contain shrink-0"
+                    className="h-10 w-auto object-contain shrink-0"
                   />
                 </div>
               )}

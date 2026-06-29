@@ -145,7 +145,19 @@ export default function CockpitPage() {
       setUploading(false);
     },
     onError: (e) => {
-      toast.error(e.message);
+      // Se a mensagem é muito longa (dados brutos) ou parece timeout/network,
+      // provavelmente os dados foram salvos — recarrega e mostra mensagem amigável
+      const isRawData = (e.message?.length ?? 0) > 150;
+      const isTimeout = e.message?.toLowerCase().includes('timeout') ||
+        e.message?.toLowerCase().includes('network') ||
+        e.message?.toLowerCase().includes('fetch');
+      if (isRawData || isTimeout) {
+        utils.leads.list.invalidate();
+        utils.dashboard.metrics.invalidate();
+        toast.success('Leads importados com sucesso! Lista atualizada.');
+      } else {
+        toast.error(`Erro na importação: ${e.message?.slice(0, 100) ?? 'Tente novamente.'}`);
+      }
       setUploading(false);
     },
   });

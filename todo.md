@@ -137,3 +137,14 @@
 - [x] LoginPage: alertas visuais amber (pending) e vermelho (rejected)
 - [x] AdminPage: contador de pendentes, botões Aprovar/Rejeitar/Revogar por usuário
 - [x] SQL migration: aplicada via webdev_execute_sql (approvalStatus + colunas afternoon)
+
+## Sistema de Lembretes de Envio
+
+- [ ] Campo whatsappOwn na tabela users (schema + migration SQL)
+- [ ] Router: updateProfile para salvar whatsappOwn
+- [ ] Router: getProfile para retornar whatsappOwn
+- [ ] Service Worker para notificações push no navegador
+- [ ] Lógica de agendamento das notificações nos horários das janelas
+- [ ] Página de Perfil com campo WhatsApp próprio + botão ativar notificações
+- [ ] Botão "Me lembrar no WhatsApp" no Cockpit com link wa.me
+- [ ] Banner de convite para ativar notificações no primeiro acesso

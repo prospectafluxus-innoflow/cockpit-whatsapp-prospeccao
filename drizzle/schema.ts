@@ -41,6 +41,8 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
   approvalStatus: approvalStatusEnum("approvalStatus").default("pending").notNull(),
+  // WhatsApp do próprio usuário (para lembretes)
+  whatsappOwn: varchar("whatsappOwn", { length: 30 }),
   // Autenticação própria
   passwordHash: varchar("passwordHash", { length: 255 }),
   resetToken: varchar("resetToken", { length: 128 }),

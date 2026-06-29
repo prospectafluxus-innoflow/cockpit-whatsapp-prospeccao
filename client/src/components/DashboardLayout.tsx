@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useIsMobile } from "@/hooks/useMobile";
-import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield } from "lucide-react";
+import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield, UserCircle } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -224,6 +224,10 @@ function DashboardLayoutContent({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer">
+                  <UserCircle className="mr-2 h-4 w-4" />
+                  Meu Perfil
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   Sair

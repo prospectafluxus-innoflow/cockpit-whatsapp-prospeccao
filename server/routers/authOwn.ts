@@ -236,6 +236,36 @@ export const authOwnRouter = router({
       return { success: true };
     }),
 
+  // ─── Obter perfil do usuário logado
+  getProfile: protectedProcedure.query(async ({ ctx }) => {
+    const row = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        whatsappOwn: users.whatsappOwn,
+      })
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
+    return row[0] ?? null;
+  }),
+
+  // ─── Atualizar perfil do usuário logado
+  updateProfile: protectedProcedure
+    .input(z.object({
+      name: z.string().min(2).optional(),
+      whatsappOwn: z.string().regex(/^\d{10,15}$/, "Número inválido (somente dígitos, 10-15)").optional().or(z.literal("")),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const updates: Record<string, any> = { updatedAt: new Date() };
+      if (input.name !== undefined) updates.name = input.name;
+      if (input.whatsappOwn !== undefined) updates.whatsappOwn = input.whatsappOwn || null;
+      await db.update(users).set(updates).where(eq(users.id, ctx.user.id));
+      return { success: true };
+    }),
+
   // ─── Promover usuário a admin ──────────────────────────────────────────────
   promoteUser: protectedProcedure
     .input(z.object({ userId: z.number() }))

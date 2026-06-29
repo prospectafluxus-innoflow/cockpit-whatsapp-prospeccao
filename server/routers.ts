@@ -98,10 +98,15 @@ export const appRouter = router({
         const todaySends = await getDailySendCount(ctx.user.id, today);
 
         // Carrega templates personalizados do usuário
-        const savedTemplates = await getMessageTemplates(ctx.user.id);
+        // try/catch garante que a query funciona mesmo se a tabela ainda não existir no banco
         const customTemplates: Record<number, string> = { ...DEFAULT_TEMPLATES };
-        for (const t of savedTemplates) {
-          customTemplates[t.toque] = t.text;
+        try {
+          const savedTemplates = await getMessageTemplates(ctx.user.id);
+          for (const t of savedTemplates) {
+            customTemplates[t.toque] = t.text;
+          }
+        } catch {
+          // tabela message_templates ainda não existe — usa defaults
         }
 
         return rawLeads.map((lead) => {
@@ -510,10 +515,14 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
   messageTemplates: router({
     // Retorna os 3 templates do usuário (ou os defaults se não tiver customizado)
     get: protectedProcedure.query(async ({ ctx }) => {
-      const saved = await getMessageTemplates(ctx.user.id);
       const result: Record<number, string> = { ...DEFAULT_TEMPLATES };
-      for (const t of saved) {
-        result[t.toque] = t.text;
+      try {
+        const saved = await getMessageTemplates(ctx.user.id);
+        for (const t of saved) {
+          result[t.toque] = t.text;
+        }
+      } catch {
+        // tabela message_templates ainda não existe — usa defaults
       }
       return {
         toque1: result[1]!,

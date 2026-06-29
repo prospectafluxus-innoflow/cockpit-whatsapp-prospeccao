@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +97,9 @@ export default function CockpitPage() {
   });
   const [discardConfirm, setDiscardConfirm] = useState<Lead | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showReminderBanner, setShowReminderBanner] = useState(() => {
+    return localStorage.getItem("prospectafluxus_reminder_banner_dismissed") !== "1";
+  });
   const fileRef = useRef<HTMLInputElement>(null);
   const utils = trpc.useUtils();
 
@@ -362,12 +365,46 @@ export default function CockpitPage() {
 
       {/* Conteúdo */}
       <div className="px-6 py-6 space-y-8">
+        {/* Banner de lembretes — aparece uma única vez */}
+        {showReminderBanner && (
+          <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-400/30 bg-emerald-400/5 text-sm">
+            <Bell className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="flex-1 text-foreground/80">
+              <span className="font-semibold text-emerald-400">Nunca esqueça de prospectar!</span>{" "}
+              Ative lembretes nos horários das janelas para receber alertas no celular ou via WhatsApp.
+            </span>
+            <a
+              href="/profile"
+              className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors"
+            >
+              Configurar →
+            </a>
+            <button
+              onClick={() => {
+                setShowReminderBanner(false);
+                localStorage.setItem("prospectafluxus_reminder_banner_dismissed", "1");
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors ml-1"
+              title="Fechar"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {/* Fila do Dia */}
         {queueData && (
           <section>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-sm font-semibold text-foreground">Fila do Dia</h2>
               <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+              <a
+                href="/profile"
+                className="ml-auto text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors"
+                title="Configure lembretes no seu perfil"
+              >
+                <Bell className="h-3 w-3" />
+                Ativar lembretes
+              </a>
             </div>
             <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
               {([

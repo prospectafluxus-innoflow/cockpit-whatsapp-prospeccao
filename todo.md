@@ -140,11 +140,13 @@
 
 ## Sistema de Lembretes de Envio
 
-- [ ] Campo whatsappOwn na tabela users (schema + migration SQL)
-- [ ] Router: updateProfile para salvar whatsappOwn
-- [ ] Router: getProfile para retornar whatsappOwn
-- [ ] Service Worker para notificações push no navegador
-- [ ] Lógica de agendamento das notificações nos horários das janelas
-- [ ] Página de Perfil com campo WhatsApp próprio + botão ativar notificações
-- [ ] Botão "Me lembrar no WhatsApp" no Cockpit com link wa.me
-- [ ] Banner de convite para ativar notificações no primeiro acesso
+- [x] Campo whatsappOwn na tabela users (schema + migration SQL no Supabase)
+- [x] Router: updateProfile para salvar whatsappOwn
+- [x] Router: getProfile para retornar whatsappOwn
+- [x] Service Worker (sw.js) para notificações push no navegador
+- [x] Lógica de agendamento das notificações nos horários das janelas (hook useNotifications)
+- [x] Página de Perfil (/profile) com campo WhatsApp próprio + botão ativar notificações
+- [x] Botões de lembrete wa.me por janela na página de Perfil
+- [x] Link "Meu Perfil" no dropdown do footer do sidebar
+- [x] Banner de primeiro acesso no Cockpit ("Nunca esqueça de prospectar!") com link para /profile
+- [x] Link "Ativar lembretes" na seção Fila do Dia do Cockpit

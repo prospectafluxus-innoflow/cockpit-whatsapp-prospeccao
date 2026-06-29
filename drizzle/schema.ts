@@ -125,8 +125,13 @@ export const sendSchedules = pgTable("send_schedules", {
   eveningHour: integer("eveningHour").default(17).notNull(),
   eveningCount: integer("eveningCount").default(2).notNull(),
 
+  afternoonEnabled: integer("afternoonEnabled").default(1).notNull(),
+  afternoonHour: integer("afternoonHour").default(15).notNull(),
+  afternoonCount: integer("afternoonCount").default(2).notNull(),
+
   morningTaskUid: varchar("morningTaskUid", { length: 65 }),
   lunchTaskUid: varchar("lunchTaskUid", { length: 65 }),
+  afternoonTaskUid: varchar("afternoonTaskUid", { length: 65 }),
   eveningTaskUid: varchar("eveningTaskUid", { length: 65 }),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),

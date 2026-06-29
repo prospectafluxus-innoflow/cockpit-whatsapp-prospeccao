@@ -324,8 +324,9 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
       return s ?? {
         morningEnabled: 1, morningHour: 8, morningCount: 2,
         lunchEnabled: 1, lunchHour: 12, lunchCount: 2,
+        afternoonEnabled: 1, afternoonHour: 15, afternoonCount: 2,
         eveningEnabled: 1, eveningHour: 17, eveningCount: 2,
-        morningTaskUid: null, lunchTaskUid: null, eveningTaskUid: null,
+        morningTaskUid: null, lunchTaskUid: null, afternoonTaskUid: null, eveningTaskUid: null,
       };
     }),
 
@@ -335,15 +336,18 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
       const hourBRT = (now.getUTCHours() - 3 + 24) % 24;
       const morningH = schedule?.morningHour ?? 8;
       const lunchH = schedule?.lunchHour ?? 12;
+      const afternoonH = (schedule as any)?.afternoonHour ?? 15;
       const eveningH = schedule?.eveningHour ?? 17;
 
-      let activeWindow: "morning" | "lunch" | "evening" | null = null;
+      let activeWindow: "morning" | "lunch" | "afternoon" | "evening" | null = null;
       if (hourBRT >= morningH && hourBRT < morningH + 2) activeWindow = "morning";
       else if (hourBRT >= lunchH && hourBRT < lunchH + 2) activeWindow = "lunch";
+      else if (hourBRT >= afternoonH && hourBRT < afternoonH + 2) activeWindow = "afternoon";
       else if (hourBRT >= eveningH && hourBRT < eveningH + 2) activeWindow = "evening";
 
       const morningCount = schedule?.morningCount ?? 2;
       const lunchCount = schedule?.lunchCount ?? 2;
+      const afternoonCount = (schedule as any)?.afternoonCount ?? 2;
       const eveningCount = schedule?.eveningCount ?? 2;
 
       // Distribui leads sem duplicidade entre as janelas
@@ -351,6 +355,7 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
         ctx.user.id,
         (schedule?.morningEnabled ?? 1) ? morningCount : 0,
         (schedule?.lunchEnabled ?? 1) ? lunchCount : 0,
+        ((schedule as any)?.afternoonEnabled ?? 1) ? afternoonCount : 0,
         (schedule?.eveningEnabled ?? 1) ? eveningCount : 0
       );
 
@@ -360,6 +365,7 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
         windows: {
           morning: { hour: morningH, count: morningCount, enabled: !!(schedule?.morningEnabled ?? 1), leads: distributed.morning },
           lunch: { hour: lunchH, count: lunchCount, enabled: !!(schedule?.lunchEnabled ?? 1), leads: distributed.lunch },
+          afternoon: { hour: afternoonH, count: afternoonCount, enabled: !!((schedule as any)?.afternoonEnabled ?? 1), leads: distributed.afternoon },
           evening: { hour: eveningH, count: eveningCount, enabled: !!(schedule?.eveningEnabled ?? 1), leads: distributed.evening },
         },
       };
@@ -373,6 +379,9 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
         lunchEnabled: z.number().int().min(0).max(1),
         lunchHour: z.number().int().min(11).max(14),
         lunchCount: z.number().int().min(1).max(5),
+        afternoonEnabled: z.number().int().min(0).max(1),
+        afternoonHour: z.number().int().min(13).max(17),
+        afternoonCount: z.number().int().min(1).max(5),
         eveningEnabled: z.number().int().min(0).max(1),
         eveningHour: z.number().int().min(15).max(20),
         eveningCount: z.number().int().min(1).max(5),
@@ -390,6 +399,7 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
       const jobs = [
         { key: "morning" as const, enabled: !!(schedule?.morningEnabled ?? 1), hour: schedule?.morningHour ?? 8, uid: schedule?.morningTaskUid },
         { key: "lunch" as const, enabled: !!(schedule?.lunchEnabled ?? 1), hour: schedule?.lunchHour ?? 12, uid: schedule?.lunchTaskUid },
+        { key: "afternoon" as const, enabled: !!((schedule as any)?.afternoonEnabled ?? 1), hour: (schedule as any)?.afternoonHour ?? 15, uid: (schedule as any)?.afternoonTaskUid },
         { key: "evening" as const, enabled: !!(schedule?.eveningEnabled ?? 1), hour: schedule?.eveningHour ?? 17, uid: schedule?.eveningTaskUid },
       ];
 
@@ -402,7 +412,7 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
           continue;
         }
         const cron = `0 0 ${toUtcH(job.hour)} * * *`;
-        const label = job.key === "morning" ? "Manhã" : job.key === "lunch" ? "Almoço" : "Fim do dia";
+        const label = job.key === "morning" ? "Manhã" : job.key === "lunch" ? "Almoço" : job.key === "afternoon" ? "Meio da tarde" : "Fim do dia";
         if (job.uid) {
           try { await updateHeartbeatJob(job.uid, { cron, enable: true }, sessionToken); } catch {}
           result[job.key] = job.uid;
@@ -421,8 +431,9 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
       await upsertSchedule(ctx.user.id, {
         morningTaskUid: result.morning ?? undefined,
         lunchTaskUid: result.lunch ?? undefined,
+        afternoonTaskUid: result.afternoon ?? undefined,
         eveningTaskUid: result.evening ?? undefined,
-      });
+      } as any);
 
       return { ok: true, taskUids: result };
     }),

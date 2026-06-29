@@ -10,6 +10,7 @@ import {
   Sun,
   Coffee,
   Sunset,
+  Cloud,
   Bell,
   BellOff,
   Clock,
@@ -67,6 +68,16 @@ const windowMeta = {
     description: "Contatos no horário de pausa do cliente",
     hourMin: 11,
     hourMax: 14,
+  },
+  afternoon: {
+    label: "Meio da tarde",
+    icon: Cloud,
+    color: "text-sky-400",
+    bg: "bg-sky-400/10 border-sky-400/20",
+    activeBg: "bg-sky-400/20 border-sky-400/40",
+    description: "Abordagem no meio da tarde, pós-almoço",
+    hourMin: 13,
+    hourMax: 17,
   },
   evening: {
     label: "Fim do dia",
@@ -135,6 +146,9 @@ export default function SchedulePage() {
     lunchEnabled: boolean;
     lunchHour: number;
     lunchCount: number;
+    afternoonEnabled: boolean;
+    afternoonHour: number;
+    afternoonCount: number;
     eveningEnabled: boolean;
     eveningHour: number;
     eveningCount: number;
@@ -148,12 +162,16 @@ export default function SchedulePage() {
     lunchEnabled: !!schedule.lunchEnabled,
     lunchHour: schedule.lunchHour,
     lunchCount: schedule.lunchCount,
+    afternoonEnabled: !!((schedule as any).afternoonEnabled ?? 1),
+    afternoonHour: (schedule as any).afternoonHour ?? 15,
+    afternoonCount: (schedule as any).afternoonCount ?? 2,
     eveningEnabled: !!schedule.eveningEnabled,
     eveningHour: schedule.eveningHour,
     eveningCount: schedule.eveningCount,
   } : {
     morningEnabled: true, morningHour: 8, morningCount: 2,
     lunchEnabled: true, lunchHour: 12, lunchCount: 2,
+    afternoonEnabled: true, afternoonHour: 15, afternoonCount: 2,
     eveningEnabled: true, eveningHour: 17, eveningCount: 2,
   });
 
@@ -182,6 +200,9 @@ export default function SchedulePage() {
       lunchEnabled: currentForm.lunchEnabled ? 1 : 0,
       lunchHour: currentForm.lunchHour,
       lunchCount: currentForm.lunchCount,
+      afternoonEnabled: currentForm.afternoonEnabled ? 1 : 0,
+      afternoonHour: currentForm.afternoonHour,
+      afternoonCount: currentForm.afternoonCount,
       eveningEnabled: currentForm.eveningEnabled ? 1 : 0,
       eveningHour: currentForm.eveningHour,
       eveningCount: currentForm.eveningCount,
@@ -194,9 +215,10 @@ export default function SchedulePage() {
 
   const totalDailyLeads = (currentForm.morningEnabled ? currentForm.morningCount : 0)
     + (currentForm.lunchEnabled ? currentForm.lunchCount : 0)
+    + (currentForm.afternoonEnabled ? currentForm.afternoonCount : 0)
     + (currentForm.eveningEnabled ? currentForm.eveningCount : 0);
 
-  const hasActiveCrons = !!(schedule?.morningTaskUid || schedule?.lunchTaskUid || schedule?.eveningTaskUid);
+  const hasActiveCrons = !!(schedule?.morningTaskUid || schedule?.lunchTaskUid || (schedule as any)?.afternoonTaskUid || schedule?.eveningTaskUid);
 
   return (
     <div className="min-h-screen bg-background">
@@ -244,7 +266,7 @@ export default function SchedulePage() {
           </div>
           <div className="rounded-xl border border-border/50 bg-card/50 p-4 text-center">
             <div className="text-2xl font-bold font-mono text-foreground">
-              {[currentForm.morningEnabled, currentForm.lunchEnabled, currentForm.eveningEnabled].filter(Boolean).length}
+              {[currentForm.morningEnabled, currentForm.lunchEnabled, currentForm.afternoonEnabled, currentForm.eveningEnabled].filter(Boolean).length}
             </div>
             <div className="text-xs text-muted-foreground mt-1">janelas ativas</div>
           </div>
@@ -260,7 +282,7 @@ export default function SchedulePage() {
         <section>
           <h2 className="text-sm font-semibold text-foreground mb-4">Configuração das Janelas</h2>
           <div className="grid gap-4">
-            {(["morning", "lunch", "evening"] as WindowKey[]).map((key) => {
+            {(["morning", "lunch", "afternoon", "evening"] as WindowKey[]).map((key) => {
               const meta = windowMeta[key];
               const Icon = meta.icon;
               const enabled = currentForm[`${key}Enabled` as keyof typeof currentForm] as boolean;
@@ -374,7 +396,7 @@ export default function SchedulePage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {(["morning", "lunch", "evening"] as WindowKey[]).map((key) => {
+              {(["morning", "lunch", "afternoon", "evening"] as WindowKey[]).map((key) => {
                 const meta = windowMeta[key];
                 const Icon = meta.icon;
                 const windowData = queueData.windows[key];

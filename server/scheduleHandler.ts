@@ -28,15 +28,17 @@ export async function sendReminderHandler(req: Request, res: Response) {
     }
 
     // Infere a janela pelo taskUid (nunca pelo req.body)
-    let windowKey: "morning" | "lunch" | "evening";
+    let windowKey: "morning" | "lunch" | "afternoon" | "evening";
     if (schedule.morningTaskUid === taskUid) windowKey = "morning";
     else if (schedule.lunchTaskUid === taskUid) windowKey = "lunch";
+    else if ((schedule as any).afternoonTaskUid === taskUid) windowKey = "afternoon";
     else windowKey = "evening";
 
     // Verifica se a janela está habilitada
-    const enabledMap = {
+    const enabledMap: Record<string, number | null | undefined> = {
       morning: schedule.morningEnabled,
       lunch: schedule.lunchEnabled,
+      afternoon: (schedule as any).afternoonEnabled,
       evening: schedule.eveningEnabled,
     };
     if (!enabledMap[windowKey]) {
@@ -54,6 +56,9 @@ export async function sendReminderHandler(req: Request, res: Response) {
     const lunchCount = schedule.lunchEnabled
       ? (schedule.lunchCount ?? 2)
       : 0;
+    const afternoonCount = (schedule as any).afternoonEnabled
+      ? ((schedule as any).afternoonCount ?? 2)
+      : 0;
     const eveningCount = schedule.eveningEnabled
       ? (schedule.eveningCount ?? 2)
       : 0;
@@ -62,10 +67,11 @@ export async function sendReminderHandler(req: Request, res: Response) {
       schedule.userId,
       morningCount,
       lunchCount,
+      afternoonCount,
       eveningCount
     );
 
-    const windowLeads = distributed[windowKey];
+    const windowLeads = distributed[windowKey as keyof typeof distributed];
 
     if (windowLeads.length === 0) {
       return res.json({
@@ -81,6 +87,8 @@ export async function sendReminderHandler(req: Request, res: Response) {
         ? "Manhã ☀️"
         : windowKey === "lunch"
         ? "Almoço 🍽️"
+        : windowKey === "afternoon"
+        ? "Meio da tarde 🌅"
         : "Fim do dia 🌆";
 
     const leadList = windowLeads

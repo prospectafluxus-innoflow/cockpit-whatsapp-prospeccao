@@ -41,6 +41,7 @@ import {
   Sun,
   Coffee,
   Sunset,
+  Cloud,
   Bell,
 } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -348,13 +349,14 @@ export default function CockpitPage() {
               <h2 className="text-sm font-semibold text-foreground">Fila do Dia</h2>
               <Bell className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
               {([
                 { key: "morning" as const, label: "Manhã", icon: Sun, color: "text-amber-400", bg: "bg-amber-400/10 border-amber-400/20" },
                 { key: "lunch" as const, label: "Almoço", icon: Coffee, color: "text-orange-400", bg: "bg-orange-400/10 border-orange-400/20" },
+                { key: "afternoon" as const, label: "Meio da tarde", icon: Cloud, color: "text-sky-400", bg: "bg-sky-400/10 border-sky-400/20" },
                 { key: "evening" as const, label: "Fim do dia", icon: Sunset, color: "text-purple-400", bg: "bg-purple-400/10 border-purple-400/20" },
               ]).map(({ key, label, icon: Icon, color, bg }) => {
-                const win = queueData.windows[key];
+                const win = queueData.windows[key as keyof typeof queueData.windows];
                 const isActive = queueData.activeWindow === key;
                 if (!win.enabled) return null;
                 return (

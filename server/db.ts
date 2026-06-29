@@ -248,6 +248,7 @@ export async function getScheduleByTaskUid(
       or(
         eq(sendSchedules.morningTaskUid, taskUid),
         eq(sendSchedules.lunchTaskUid, taskUid),
+        eq(sendSchedules.afternoonTaskUid, taskUid),
         eq(sendSchedules.eveningTaskUid, taskUid)
       )
     )
@@ -260,10 +261,11 @@ export async function getDistributedQueueForDay(
   userId: number,
   morningCount: number,
   lunchCount: number,
+  afternoonCount: number,
   eveningCount: number
-): Promise<{ morning: Lead[]; lunch: Lead[]; evening: Lead[] }> {
-  const total = morningCount + lunchCount + eveningCount;
-  if (total === 0) return { morning: [], lunch: [], evening: [] };
+): Promise<{ morning: Lead[]; lunch: Lead[]; afternoon: Lead[]; evening: Lead[] }> {
+  const total = morningCount + lunchCount + afternoonCount + eveningCount;
+  if (total === 0) return { morning: [], lunch: [], afternoon: [], evening: [] };
 
   const today = new Date().toISOString().split("T")[0]!;
 
@@ -302,12 +304,16 @@ export async function getDistributedQueueForDay(
   // Distribui sem sobreposição
   const morning = readyLeads.slice(0, morningCount);
   const lunch = readyLeads.slice(morningCount, morningCount + lunchCount);
-  const evening = readyLeads.slice(
+  const afternoon = readyLeads.slice(
     morningCount + lunchCount,
-    morningCount + lunchCount + eveningCount
+    morningCount + lunchCount + afternoonCount
+  );
+  const evening = readyLeads.slice(
+    morningCount + lunchCount + afternoonCount,
+    morningCount + lunchCount + afternoonCount + eveningCount
   );
 
-  return { morning, lunch, evening };
+  return { morning, lunch, afternoon, evening };
 }
 
 // ─── Métricas do dashboard ────────────────────────────────────────────────────

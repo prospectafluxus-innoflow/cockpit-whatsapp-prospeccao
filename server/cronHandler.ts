@@ -5,7 +5,7 @@
  * Protegido pelo header Authorization: Bearer $CRON_SECRET
  *
  * Endpoint: POST /api/cron/send-reminder
- * Body: { "window": "morning" | "lunch" | "evening" }
+ * Body: { "window": "morning" | "lunch" | "afternoon" | "evening" }
  */
 import type { Request, Response } from "express";
 import {
@@ -25,9 +25,9 @@ export async function cronSendReminderHandler(req: Request, res: Response) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const window = req.body?.window as "morning" | "lunch" | "evening" | undefined;
-    if (!window || !["morning", "lunch", "evening"].includes(window)) {
-      return res.status(400).json({ error: "window deve ser morning, lunch ou evening" });
+    const window = req.body?.window as "morning" | "lunch" | "afternoon" | "evening" | undefined;
+    if (!window || !["morning", "lunch", "afternoon", "evening"].includes(window)) {
+      return res.status(400).json({ error: "window deve ser morning, lunch, afternoon ou evening" });
     }
 
     // Busca todas as configurações de agendamento ativas
@@ -41,9 +41,10 @@ export async function cronSendReminderHandler(req: Request, res: Response) {
 
     for (const schedule of schedules) {
       // Verifica se a janela está habilitada para este usuário
-      const enabledMap = {
+      const enabledMap: Record<string, number | null | undefined> = {
         morning: schedule.morningEnabled,
         lunch: schedule.lunchEnabled,
+        afternoon: (schedule as any).afternoonEnabled,
         evening: schedule.eveningEnabled,
       };
 
@@ -54,16 +55,18 @@ export async function cronSendReminderHandler(req: Request, res: Response) {
 
       const morningCount = schedule.morningEnabled ? (schedule.morningCount ?? 2) : 0;
       const lunchCount = schedule.lunchEnabled ? (schedule.lunchCount ?? 2) : 0;
+      const afternoonCount = (schedule as any).afternoonEnabled ? ((schedule as any).afternoonCount ?? 2) : 0;
       const eveningCount = schedule.eveningEnabled ? (schedule.eveningCount ?? 2) : 0;
 
       const distributed = await getDistributedQueueForDay(
         schedule.userId,
         morningCount,
         lunchCount,
+        afternoonCount,
         eveningCount
       );
 
-      const windowLeads = distributed[window];
+      const windowLeads = distributed[window as keyof typeof distributed];
 
       if (windowLeads.length === 0) {
         results.push({ userId: schedule.userId, skipped: "no-leads-ready" });
@@ -76,6 +79,8 @@ export async function cronSendReminderHandler(req: Request, res: Response) {
           ? "Manhã ☀️"
           : window === "lunch"
           ? "Almoço 🍽️"
+          : window === "afternoon"
+          ? "Meio da tarde 🌅"
           : "Fim do dia 🌆";
 
       const leadList = windowLeads

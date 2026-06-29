@@ -112,3 +112,16 @@
 - [x] Configurar GEMINI_API_KEY no projeto (via webdev_request_secrets)
 - [x] Configurar CRON_SECRET no projeto (definido via Cloud Run no deploy)
 - [x] Salvar checkpoint final e preparar guia de deploy
+
+## 4ª Janela de Envio: Meio da tarde (afternoon)
+
+- [x] Schema: adicionar colunas `afternoonEnabled`, `afternoonHour`, `afternoonCount`, `afternoonTaskUid` na tabela send_schedules
+- [x] db.ts: atualizar getScheduleByTaskUid para incluir afternoonTaskUid
+- [x] db.ts: atualizar getDistributedQueueForDay para aceitar 5 parâmetros e retornar afternoon
+- [x] routers.ts: adicionar afternoon a schedule.get, schedule.getQueue, schedule.save e schedule.activate
+- [x] cronHandler.ts: adicionar "afternoon" como janela válida
+- [x] scheduleHandler.ts: adicionar "afternoon" como janela válida
+- [x] SchedulePage.tsx: adicionar janela "Meio da tarde" com ícone Cloud (sky-400)
+- [x] CockpitPage.tsx: adicionar janela "Meio da tarde" na Fila do Dia (grid 2x2 → 4 colunas)
+- [ ] SQL migration: executar no Supabase SQL Editor (ver scripts/migrate-afternoon.mjs)
+- [ ] Deploy: push para GitHub → Railway auto-deploy

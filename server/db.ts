@@ -159,7 +159,15 @@ export async function getLeadById(
 
 export async function insertLeads(data: InsertLead[]): Promise<Lead[]> {
   if (data.length === 0) return [];
-  return db.insert(leads).values(data).returning();
+  // Insert in chunks of 200 to avoid query size/timeout limits with large spreadsheets
+  const CHUNK_SIZE = 200;
+  const results: Lead[] = [];
+  for (let i = 0; i < data.length; i += CHUNK_SIZE) {
+    const chunk = data.slice(i, i + CHUNK_SIZE);
+    const inserted = await db.insert(leads).values(chunk).returning();
+    results.push(...inserted);
+  }
+  return results;
 }
 
 export async function updateLead(

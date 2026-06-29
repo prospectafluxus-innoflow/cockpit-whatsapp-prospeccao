@@ -18,7 +18,7 @@ import {
 // ─── Conexão com o banco ──────────────────────────────────────────────────────
 const connectionString =
   process.env.DATABASE_URL ||
-  "postgresql://postgres:postgres@localhost:5432/postgres";
+  "postgresql://postgres.blqtjvftkamzofpltlrj:AAvanTI%231213@aws-1-us-west-2.pooler.supabase.com:6543/postgres";
 
 console.log("[DB] Connecting to database...");
 console.log("[DB] Host:", connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80));

@@ -107,7 +107,20 @@ export function useNotifications() {
     if (!("Notification" in window)) return false;
     if (Notification.permission !== "granted") return false;
 
-    // Tenta via Service Worker primeiro
+    // Usa new Notification() diretamente — mais confiável para testes imediatos
+    // O Service Worker é necessário apenas para notificações em background
+    try {
+      new Notification("ProspectaFluxus — Teste de lembrete! 🔔", {
+        body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
+        icon: "/favicon.ico",
+        tag: "prospectafluxus-test",
+      });
+      return true;
+    } catch (err) {
+      console.warn("[Notification] new Notification() falhou:", err);
+    }
+
+    // Fallback: tenta via Service Worker
     const reg = swRegRef.current ?? await ensureSW();
     if (reg) {
       try {
@@ -124,17 +137,7 @@ export function useNotifications() {
       }
     }
 
-    // Fallback: Notification direta (sem SW)
-    try {
-      new Notification("ProspectaFluxus — Teste de lembrete! 🔔", {
-        body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
-        icon: "/favicon.ico",
-      });
-      return true;
-    } catch (err) {
-      console.warn("[Notification] Fallback falhou:", err);
-      return false;
-    }
+    return false;
   }, [ensureSW]);
 
   return {

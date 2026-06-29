@@ -20,12 +20,25 @@ const connectionString =
   process.env.DATABASE_URL ||
   "postgresql://postgres:postgres@localhost:5432/postgres";
 
+console.log("[DB] Connecting to database...");
+console.log("[DB] Host:", connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80));
+
 const client = postgres(connectionString, {
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  ssl: { rejectUnauthorized: false },
   max: 5,
+  onnotice: (notice) => console.log("[DB] Notice:", notice.message),
+  debug: (connection, query, params) => {
+    // only log errors
+  },
+  onclose: (connId) => console.log("[DB] Connection closed:", connId),
+  connect_timeout: 10,
+});
+
+client`SELECT 1`.then(() => {
+  console.log("[DB] ✅ Database connection successful!");
+}).catch((err) => {
+  console.error("[DB] ❌ Database connection FAILED:", err.message);
+  console.error("[DB] Error details:", JSON.stringify(err, null, 2));
 });
 
 export const db = drizzle(client);

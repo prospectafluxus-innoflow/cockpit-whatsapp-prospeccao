@@ -1,33 +1,12 @@
 {
   "version": "7",
-  "dialect": "mysql",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "5",
-      "when": 1782148644821,
-      "tag": "0000_wet_loa",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "5",
-      "when": 1782148793402,
-      "tag": "0001_magenta_human_cannonball",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1782149891330,
-      "tag": "0002_charming_ultragirl",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1782153203296,
-      "tag": "0003_lonely_sasquatch",
+      "version": "7",
+      "when": 1782690650075,
+      "tag": "0000_spicy_imperial_guard",
       "breakpoints": true
     }
   ]

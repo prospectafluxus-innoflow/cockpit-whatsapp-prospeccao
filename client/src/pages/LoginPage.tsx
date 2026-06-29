@@ -55,7 +55,7 @@ export default function LoginPage() {
           <img
             src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663667466619/jOvLxAxfEehmlwIV.png"
             alt="ProspectaFluxus"
-            className="h-20 w-auto object-contain mx-auto mb-4"
+            className="h-36 w-auto object-contain mx-auto mb-4"
           />
           <p className="text-sm text-zinc-500 mt-1">Acesse sua conta para continuar</p>
         </div>

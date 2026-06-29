@@ -238,12 +238,8 @@ export default function ProfilePage() {
                   onClick={async () => {
                     const ok = await testNotification();
                     if (ok) {
-                      toast.success("Notificação enviada! Se não apareceu, verifique as configurações do Chrome.", {
-                        action: {
-                          label: "Abrir configurações",
-                          onClick: () => window.open(`chrome://settings/content/notifications`, "_blank") || window.open(`${window.location.origin}`, "_blank"),
-                        },
-                        duration: 8000,
+                      toast.success("Notificação enviada! Se não apareceu no canto da tela, verifique: Chrome → 🔒 cadeado na barra de endereço → Notificações → Permitir", {
+                        duration: 10000,
                       });
                     } else {
                       toast.error("Notificação bloqueada. Clique para liberar no Chrome.", {

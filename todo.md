@@ -163,3 +163,11 @@
 - [x] Backend: procedures messageTemplates.get e messageTemplates.save
 - [x] UI: seção "Mensagens dos Toques" na página de Agendamento
 - [x] Integrar templates no buildWaLink (substituir mensagens hardcoded)
+
+## Autenticação Autônoma (sem Manus OAuth)
+
+- [x] Instalar bcryptjs + @types/bcryptjs
+- [x] Backend: sdk.ts corrigido para não tentar OAuth quando OAUTH_SERVER_URL está vazio
+- [x] Backend: authenticateRequest usa token próprio (sub numérico) sem dependência do Manus
+- [x] Frontend: LoginPage já usa trpc.authOwn.login (email+senha, sem redirect OAuth)
+- [x] Sistema funciona 100% autônomo: Railway + Supabase, sem Manus OAuth

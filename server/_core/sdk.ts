@@ -279,10 +279,14 @@ class SDKServer {
     } catch (ownErr: any) {
       // Se falhou por razão diferente de "payload não numérico", propaga
       if (ownErr?.code === "FORBIDDEN") throw ownErr;
-      // Caso contrário, tenta o fluxo Manus OAuth abaixo
+      // Caso contrário, tenta o fluxo Manus OAuth abaixo (se configurado)
     }
 
-    // ── Fluxo Manus OAuth (openId string) ──────────────────────────────────
+    // ── Fluxo Manus OAuth (openId string) — só tenta se OAUTH_SERVER_URL configurado ──
+    // Se não há OAuth configurado, o token próprio já deveria ter funcionado acima.
+    if (!ENV.oAuthServerUrl) {
+      throw ForbiddenError("Invalid session: token is not a valid own-auth token");
+    }
     const session = await this.verifySession(sessionCookie);
     if (!session) {
       throw ForbiddenError("Invalid session cookie");

@@ -239,6 +239,26 @@ export default function CockpitPage() {
               taxRegime: String(row["Regime"] || row["Regime Tributário"] || row["regime"] || "").trim() || undefined,
               participations: Number(row["Part."] || row["Participações"] || row["participacoes"] || 0) || undefined,
               lastEvent: String(row["Último evento"] || row["Ultimo Evento"] || row["ultimo_evento"] || "").trim() || undefined,
+              // Colunas opcionais para leads já trabalhados
+              toque: (() => {
+                const t = Number(row["Toque"] || row["toque"] || row["Toques"] || 0);
+                return (t >= 1 && t <= 3) ? t : undefined;
+              })(),
+              statusImport: (() => {
+                const s = String(row["Status"] || row["status"] || "").trim().toLowerCase()
+                  .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const map: Record<string, string> = {
+                  "novo": "novo",
+                  "respondeu": "respondeu",
+                  "nao respondeu": "nao_respondeu",
+                  "nao_respondeu": "nao_respondeu",
+                  "nao respondido": "nao_respondeu",
+                  "descartado": "descartado",
+                  "fechado": "fechado",
+                  "ganho": "fechado",
+                };
+                return (map[s] as any) || undefined;
+              })(),
             });
           }
         }

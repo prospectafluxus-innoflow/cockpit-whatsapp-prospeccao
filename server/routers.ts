@@ -112,6 +112,9 @@ export const appRouter = router({
           taxRegime: z.string().optional(),
           participations: z.number().optional(),
           lastEvent: z.string().optional(),
+          // Colunas opcionais para leads já trabalhados
+          toque: z.number().min(0).max(3).optional(),
+          statusImport: z.enum(["novo", "respondeu", "nao_respondeu", "descartado", "fechado"]).optional(),
         })),
         replaceAll: z.boolean().optional(),
       }))
@@ -120,21 +123,60 @@ export const appRouter = router({
           await deleteLeadsByUser(ctx.user.id);
         }
 
-        const toInsert = input.leads.map((l) => ({
-          userId: ctx.user.id,
-          name: l.name,
-          firstName: l.firstName ?? l.name.split(" ")[0] ?? l.name,
-          company: l.company ?? null,
-          whatsapp: l.whatsapp,
-          score: l.score ?? 0,
-          layer: (l.layer ?? "B") as "A" | "B" | "C",
-          size: l.size ?? null,
-          employees: l.employees ?? null,
-          investment: l.investment ?? null,
-          taxRegime: l.taxRegime ?? null,
-          participations: l.participations ?? null,
-          lastEvent: l.lastEvent ?? null,
-        }));
+        const toqueStatusMap: Record<number, "novo" | "toque1_enviado" | "toque2_enviado" | "toque3_enviado"> = {
+          0: "novo", 1: "toque1_enviado", 2: "toque2_enviado", 3: "toque3_enviado",
+        };
+        const toqueKanbanMap: Record<number, "Novo" | "Toque 1 Enviado" | "Toque 2 Enviado" | "Toque 3 Enviado"> = {
+          0: "Novo", 1: "Toque 1 Enviado", 2: "Toque 2 Enviado", 3: "Toque 3 Enviado",
+        };
+        const statusImportMap: Record<string, { status: string; kanbanColumn: string }> = {
+          novo:          { status: "novo",            kanbanColumn: "Novo" },
+          respondeu:     { status: "respondeu",       kanbanColumn: "Respondeu" },
+          nao_respondeu: { status: "toque3_enviado",  kanbanColumn: "Toque 3 Enviado" },
+          descartado:    { status: "descartado",      kanbanColumn: "Toque 3 Enviado" },
+          fechado:       { status: "fechado",         kanbanColumn: "Fechado" },
+        };
+
+        const now = new Date();
+        const toInsert = input.leads.map((l) => {
+          const toque = l.toque ?? 0;
+          const statusImport = l.statusImport;
+
+          let status: string = toqueStatusMap[toque] ?? "novo";
+          let kanbanColumn: string = toqueKanbanMap[toque] ?? "Novo";
+          if (statusImport && statusImportMap[statusImport]) {
+            status = statusImportMap[statusImport]!.status;
+            kanbanColumn = statusImportMap[statusImport]!.kanbanColumn;
+          }
+
+          // Datas retroativas para os toques já realizados
+          const toque1SentAt = toque >= 1 ? new Date(now.getTime() - 7 * 86_400_000) : null;
+          const toque2SentAt = toque >= 2 ? new Date(now.getTime() - 4 * 86_400_000) : null;
+          const toque3SentAt = toque >= 3 ? new Date(now.getTime() - 1 * 86_400_000) : null;
+          const respondedAt  = status === "respondeu" ? now : null;
+
+          return {
+            userId: ctx.user.id,
+            name: l.name,
+            firstName: l.firstName ?? l.name.split(" ")[0] ?? l.name,
+            company: l.company ?? null,
+            whatsapp: l.whatsapp,
+            score: l.score ?? 0,
+            layer: (l.layer ?? "B") as "A" | "B" | "C",
+            size: l.size ?? null,
+            employees: l.employees ?? null,
+            investment: l.investment ?? null,
+            taxRegime: l.taxRegime ?? null,
+            participations: l.participations ?? null,
+            lastEvent: l.lastEvent ?? null,
+            status: status as any,
+            kanbanColumn: kanbanColumn as any,
+            toque1SentAt,
+            toque2SentAt,
+            toque3SentAt,
+            respondedAt,
+          };
+        });
 
         await insertLeads(toInsert);
         return { inserted: toInsert.length };

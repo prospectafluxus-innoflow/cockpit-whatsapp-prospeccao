@@ -97,6 +97,7 @@ export default function CockpitPage() {
   });
   const [discardConfirm, setDiscardConfirm] = useState<Lead | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [showReminderBanner, setShowReminderBanner] = useState(() => {
     return localStorage.getItem("prospectafluxus_reminder_banner_dismissed") !== "1";
   });
@@ -284,7 +285,45 @@ export default function CockpitPage() {
           return;
         }
 
-        uploadLeads.mutate({ leads: allLeads, replaceAll: true });
+        // Importar em lotes de 150 leads por requisição separada
+        // para evitar timeout no Railway (180s limit)
+        const BATCH_SIZE = 150;
+        const batches: any[][] = [];
+        for (let i = 0; i < allLeads.length; i += BATCH_SIZE) {
+          batches.push(allLeads.slice(i, i + BATCH_SIZE));
+        }
+
+        setImportProgress({ current: 0, total: allLeads.length });
+
+        (async () => {
+          let totalInserted = 0;
+          try {
+            for (let b = 0; b < batches.length; b++) {
+              const batch = batches[b]!;
+              await utils.client.leads.upload.mutate({
+                leads: batch,
+                replaceAll: b === 0, // só limpa na primeira requisição
+              });
+              totalInserted += batch.length;
+              setImportProgress({ current: totalInserted, total: allLeads.length });
+            }
+            toast.success(`${totalInserted} leads importados com sucesso!`);
+            utils.leads.list.invalidate();
+            utils.dashboard.metrics.invalidate();
+          } catch (err: any) {
+            // Se deu erro mas já importou alguns, recarrega e avisa
+            if (totalInserted > 0) {
+              utils.leads.list.invalidate();
+              utils.dashboard.metrics.invalidate();
+              toast.warning(`${totalInserted} de ${allLeads.length} leads importados. Reimporte a planilha para completar.`);
+            } else {
+              toast.error(`Erro na importação: ${err?.message?.slice(0, 100) ?? 'Tente novamente.'}`);
+            }
+          } finally {
+            setUploading(false);
+            setImportProgress(null);
+          }
+        })();
       } catch (err) {
         toast.error("Erro ao ler a planilha. Verifique o formato.");
         setUploading(false);
@@ -344,6 +383,34 @@ export default function CockpitPage() {
             <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} />
           </div>
         </div>
+
+        {/* Barra de progresso da importação */}
+        {importProgress && (
+          <div className="px-6 pb-2">
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                  <Upload className="h-3.5 w-3.5 animate-pulse" />
+                  Importando leads...
+                </span>
+                <span className="text-muted-foreground font-mono">
+                  {importProgress.current} / {importProgress.total}
+                </span>
+              </div>
+              <Progress
+                value={Math.round((importProgress.current / importProgress.total) * 100)}
+                className="h-2"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {importProgress.current === 0
+                  ? "Preparando importação..."
+                  : importProgress.current < importProgress.total
+                  ? `Lote ${Math.ceil(importProgress.current / 150)} de ${Math.ceil(importProgress.total / 150)} enviado com sucesso`
+                  : "Finalizando..."}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="px-6 pb-4 flex items-center gap-3 flex-wrap">

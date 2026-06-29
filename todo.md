@@ -136,4 +136,4 @@
 - [x] RegisterPage: tela de "Aguardando aprovação" após cadastro bem-sucedido
 - [x] LoginPage: alertas visuais amber (pending) e vermelho (rejected)
 - [x] AdminPage: contador de pendentes, botões Aprovar/Rejeitar/Revogar por usuário
-- [ ] SQL migration: executar no Supabase (ver SQL abaixo)
+- [x] SQL migration: aplicada via webdev_execute_sql (approvalStatus + colunas afternoon)

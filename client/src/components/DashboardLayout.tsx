@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/sidebar";
 
 import { useIsMobile } from "@/hooks/useMobile";
+import { useNotifications } from "@/hooks/useNotifications";
+import { trpc } from "@/lib/trpc";
 import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield, UserCircle } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -42,6 +44,34 @@ const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 240;
 const MIN_WIDTH = 180;
 const MAX_WIDTH = 400;
+
+// Componente interno para reagendar notificações ao abrir o sistema
+function NotificationReScheduler() {
+  const { data: schedule } = trpc.schedule.get.useQuery();
+  const { isGranted, scheduleNotifications } = useNotifications();
+
+  useEffect(() => {
+    if (isGranted && schedule) {
+      // Reagenda os lembretes toda vez que o usuário abre o sistema
+      scheduleNotifications({
+        morningEnabled: !!schedule.morningEnabled,
+        morningHour: schedule.morningHour,
+        morningCount: schedule.morningCount,
+        lunchEnabled: !!schedule.lunchEnabled,
+        lunchHour: schedule.lunchHour,
+        lunchCount: schedule.lunchCount,
+        afternoonEnabled: !!(schedule as any).afternoonEnabled,
+        afternoonHour: (schedule as any).afternoonHour ?? 15,
+        afternoonCount: (schedule as any).afternoonCount ?? 2,
+        eveningEnabled: !!schedule.eveningEnabled,
+        eveningHour: schedule.eveningHour,
+        eveningCount: schedule.eveningCount,
+      });
+    }
+  }, [isGranted, schedule, scheduleNotifications]);
+
+  return null;
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -87,6 +117,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+      <NotificationReScheduler />
       <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
         {children}
       </DashboardLayoutContent>

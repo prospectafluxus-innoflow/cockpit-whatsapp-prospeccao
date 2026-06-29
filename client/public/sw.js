@@ -1,7 +1,7 @@
 // ProspectaFluxus — Service Worker para lembretes de envio
-// Versão: 1.0.0
+// Versão: 2.0.0
 
-const CACHE_NAME = "prospectafluxus-v1";
+const CACHE_NAME = "prospectafluxus-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -11,19 +11,21 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(clients.claim());
 });
 
+// Armazena os timeouts ativos e a última configuração de janelas
+const scheduledTimers = [];
+let lastWindows = null;
+
 // Recebe mensagem do frontend para agendar notificações
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SCHEDULE_NOTIFICATIONS") {
-    const { windows } = event.data;
-    scheduleNotifications(windows);
+    lastWindows = event.data.windows;
+    scheduleNotifications(event.data.windows);
   }
   if (event.data?.type === "CANCEL_NOTIFICATIONS") {
+    lastWindows = null;
     cancelAllNotifications();
   }
 });
-
-// Armazena os timeouts ativos
-const scheduledTimers = [];
 
 function cancelAllNotifications() {
   scheduledTimers.forEach((id) => clearTimeout(id));
@@ -55,7 +57,7 @@ function scheduleNotifications(windows) {
     const delay = target.getTime() - now.getTime();
 
     const timerId = setTimeout(() => {
-      self.registration.showNotification("ProspectaFluxus — Hora de prospectar!", {
+      self.registration.showNotification("ProspectaFluxus — Hora de prospectar! 🔔", {
         body: `${win.emoji} ${win.label}: ${win.count} lead${win.count > 1 ? "s" : ""} aguardando na sua fila. Clique para abrir o cockpit.`,
         icon: "/favicon.ico",
         badge: "/favicon.ico",
@@ -64,6 +66,13 @@ function scheduleNotifications(windows) {
         requireInteraction: true,
         data: { url: "/cockpit" },
       });
+
+      // Reagenda automaticamente para o próximo dia
+      const nextTimerId = setTimeout(() => {
+        if (lastWindows) scheduleNotifications(lastWindows);
+      }, 60_000); // 1 minuto após disparar, reagenda tudo para o dia seguinte
+      scheduledTimers.push(nextTimerId);
+
     }, delay);
 
     scheduledTimers.push(timerId);
@@ -73,7 +82,7 @@ function scheduleNotifications(windows) {
 // Ao clicar na notificação, abre o cockpit
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data?.url ?? "/";
+  const url = event.notification.data?.url ?? "/cockpit";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

@@ -295,6 +295,12 @@ export async function getDistributedQueueForDay(
   const readyLeads = allLeads.filter((l) => {
     if (sentTodayIds.has(l.id)) return false;
     if (l.status === "respondeu" || l.status === "fechado" || l.status === "descartado") return false;
+    // Verifica se o lead foi pulado hoje
+    if ((l as any).skippedUntil) {
+      const skippedDate = new Date((l as any).skippedUntil + "T00:00:00");
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      if (skippedDate > todayStart) return false;
+    }
     if (l.status === "novo") return true;
     if (l.status === "toque1_enviado" && l.toque1SentAt) {
       return now - new Date(l.toque1SentAt).getTime() >= 3 * DAY;

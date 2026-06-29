@@ -235,7 +235,14 @@ export default function ProfilePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => testNotification()}
+                  onClick={async () => {
+                    const ok = await testNotification();
+                    if (ok) {
+                      toast.success("Notificação enviada! Verifique se apareceu no seu dispositivo.");
+                    } else {
+                      toast.error("Não foi possível enviar a notificação. Verifique se as notificações estão permitidas no navegador.");
+                    }
+                  }}
                   className="gap-2 text-xs"
                 >
                   <Bell className="h-3 w-3" />

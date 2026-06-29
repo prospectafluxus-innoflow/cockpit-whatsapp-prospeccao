@@ -32,9 +32,16 @@ function todayStr() {
   return new Date().toISOString().split("T")[0]!;
 }
 
-function canSendToque(lead: { status: string; toque1SentAt: Date | null; toque2SentAt: Date | null; toque3SentAt: Date | null }) {
+function canSendToque(lead: { status: string; toque1SentAt: Date | null; toque2SentAt: Date | null; toque3SentAt: Date | null; skippedUntil?: string | null }) {
   const now = Date.now();
   const DAY = 86_400_000;
+
+  // Verifica se o lead foi pulado hoje
+  if (lead.skippedUntil) {
+    const skippedDate = new Date(lead.skippedUntil + "T00:00:00");
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    if (skippedDate > todayStart) return { can: false, toque: 0, skipped: true };
+  }
 
   if (lead.status === "novo") return { can: true, toque: 1 };
   if (lead.status === "toque1_enviado" && lead.toque1SentAt) {
@@ -129,6 +136,7 @@ export const appRouter = router({
           whatsapp: z.string(),
           score: z.number().optional(),
           layer: z.enum(["A", "B", "C"]).optional(),
+          segment: z.string().optional(),
           size: z.string().optional(),
           employees: z.number().optional(),
           investment: z.string().optional(),
@@ -186,6 +194,7 @@ export const appRouter = router({
             whatsapp: l.whatsapp,
             score: l.score ?? 0,
             layer: (l.layer ?? "B") as "A" | "B" | "C",
+            segment: l.segment ?? null,
             size: l.size ?? null,
             employees: l.employees ?? null,
             investment: l.investment ?? null,
@@ -355,6 +364,19 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
         await updateLead(input.leadId, ctx.user.id, { lastAiSuggestion: suggestion });
 
         return { suggestion };
+      }),
+
+    skipLead: protectedProcedure
+      .input(z.object({ leadId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const lead = await getLeadById(input.leadId, ctx.user.id);
+        if (!lead) throw new Error("Lead não encontrado.");
+        // Pula o lead até amanhã (não aparece na fila do dia)
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split("T")[0]!;
+        await updateLead(input.leadId, ctx.user.id, { skippedUntil: tomorrowStr } as any);
+        return { success: true };
       }),
 
     exportCSV: protectedProcedure.query(async ({ ctx }) => {

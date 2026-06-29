@@ -26,11 +26,11 @@ export function useNotifications() {
   const [swReady, setSwReady] = useState(false);
   const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
-  // Garante que o SW está registrado e ativo, reutilizando se já existir
+  // Garante que o SW está registrado e ativo
   const ensureSW = useCallback(async (): Promise<ServiceWorkerRegistration | null> => {
     if (!("serviceWorker" in navigator)) return null;
     try {
-      // Reutiliza registro existente se já estiver ativo
+      // Tenta reutilizar registro existente
       const existing = await navigator.serviceWorker.getRegistration("/");
       if (existing?.active) {
         swRegRef.current = existing;
@@ -39,13 +39,15 @@ export function useNotifications() {
       }
       // Registra novo SW
       const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      // Aguarda o SW ficar ativo
+      // Aguarda o SW ficar ativo (com timeout de 5s)
       await new Promise<void>((resolve) => {
         if (reg.active) { resolve(); return; }
         const sw = reg.installing ?? reg.waiting;
         if (!sw) { resolve(); return; }
+        const timeout = setTimeout(resolve, 5000);
         sw.addEventListener("statechange", function handler() {
           if (sw.state === "activated") {
+            clearTimeout(timeout);
             sw.removeEventListener("statechange", handler);
             resolve();
           }
@@ -67,7 +69,6 @@ export function useNotifications() {
       return;
     }
     setPermission(Notification.permission as NotificationPermission);
-    // Registra o SW se já tiver permissão ou se já existir
     ensureSW();
   }, [ensureSW]);
 
@@ -85,48 +86,53 @@ export function useNotifications() {
   // Agenda notificações nos horários das janelas via Service Worker
   const scheduleNotifications = useCallback(
     async (windows: ScheduleWindows): Promise<boolean> => {
-      if (permission !== "granted") return false;
+      if (Notification.permission !== "granted") return false;
       const reg = swRegRef.current ?? await ensureSW();
-      if (!reg) return false;
-      reg.active?.postMessage({ type: "SCHEDULE_NOTIFICATIONS", windows });
+      if (!reg?.active) return false;
+      reg.active.postMessage({ type: "SCHEDULE_NOTIFICATIONS", windows });
       return true;
     },
-    [ensureSW, permission]
+    [ensureSW]
   );
 
   // Cancela todas as notificações agendadas
   const cancelNotifications = useCallback(async () => {
     const reg = swRegRef.current ?? await ensureSW();
-    if (!reg) return;
-    reg.active?.postMessage({ type: "CANCEL_NOTIFICATIONS" });
+    if (!reg?.active) return;
+    reg.active.postMessage({ type: "CANCEL_NOTIFICATIONS" });
   }, [ensureSW]);
 
-  // Envia uma notificação de teste imediata — robusto após desativar/reativar
+  // Envia uma notificação de teste imediata
   const testNotification = useCallback(async (): Promise<boolean> => {
     if (!("Notification" in window)) return false;
     if (Notification.permission !== "granted") return false;
-    // Garante SW ativo (re-registra se necessário)
+
+    // Tenta via Service Worker primeiro
     const reg = swRegRef.current ?? await ensureSW();
     if (reg) {
       try {
-        await reg.showNotification("ProspectaFluxus — Teste de lembrete!", {
-          body: "🎉 Notificações ativadas! Você receberá lembretes nos horários configurados.",
+        await reg.showNotification("ProspectaFluxus — Teste de lembrete! 🔔", {
+          body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
           icon: "/favicon.ico",
+          badge: "/favicon.ico",
           tag: "prospectafluxus-test",
+          requireInteraction: false,
         });
         return true;
       } catch (err) {
-        console.warn("[SW] showNotification falhou, tentando fallback:", err);
+        console.warn("[SW] showNotification falhou:", err);
       }
     }
-    // Fallback: Notification direta sem SW
+
+    // Fallback: Notification direta (sem SW)
     try {
-      new Notification("ProspectaFluxus — Teste de lembrete!", {
-        body: "🎉 Notificações ativadas! Você receberá lembretes nos horários configurados.",
+      new Notification("ProspectaFluxus — Teste de lembrete! 🔔", {
+        body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
         icon: "/favicon.ico",
       });
       return true;
-    } catch {
+    } catch (err) {
+      console.warn("[Notification] Fallback falhou:", err);
       return false;
     }
   }, [ensureSW]);

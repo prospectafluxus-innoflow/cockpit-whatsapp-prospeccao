@@ -43,6 +43,13 @@ import {
   Sunset,
   Cloud,
   Bell,
+  Users,
+  Tag,
+  Layers,
+  TrendingUp,
+  SkipForward,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -64,6 +71,13 @@ type Lead = {
   toque1SentAt: Date | null;
   toque2SentAt: Date | null;
   toque3SentAt: Date | null;
+  // Dados extras
+  segment: string | null;
+  size: string | null;
+  employees: number | null;
+  investment: string | null;
+  taxRegime: string | null;
+  skippedUntil: string | null;
 };
 
 const layerColors: Record<string, string> = {
@@ -163,6 +177,15 @@ export default function CockpitPage() {
     },
   });
 
+  const skipLead = trpc.leads.skipLead.useMutation({
+    onSuccess: () => {
+      toast.info("Lead pulado para amanhã.");
+      utils.leads.list.invalidate();
+      utils.schedule.getQueue.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   const exportCSV = trpc.leads.exportCSV.useQuery(undefined, { enabled: false });
 
   const handleExport = async () => {
@@ -249,6 +272,7 @@ export default function CockpitPage() {
               whatsapp,
               score: Number(row["Score"] || row["score"] || row["Pontuação"] || 0) || 0,
               layer,
+              segment: String(row["Segmento"] || row["segmento"] || row["Segment"] || row["Setor"] || row["setor"] || "").trim() || undefined,
               size: String(row["Porte"] || row["porte"] || "").trim() || undefined,
               employees: Number(row["Func."] || row["Funcionários"] || row["funcionarios"] || row["Colaboradores"] || 0) || undefined,
               investment: String(row["Investe Mkt"] || row["Investimento Mkt"] || row["investment"] || "").trim() || undefined,
@@ -343,6 +367,10 @@ export default function CockpitPage() {
     updateStatus.mutate({ leadId: lead.id, status: "respondeu" });
     aiSuggestion.mutate({ leadId: lead.id });
     toast.info("Gerando sugestão de resposta com IA...");
+  };
+
+  const handleSkip = (lead: Lead) => {
+    skipLead.mutate({ leadId: lead.id });
   };
 
   const todaySends = metrics?.todaySends ?? 0;
@@ -550,6 +578,7 @@ export default function CockpitPage() {
                   onResponded={handleResponded}
                   onNotResponded={() => updateStatus.mutate({ leadId: lead.id, status: "nao_respondeu" })}
                   onDiscard={() => setDiscardConfirm(lead)}
+                  onSkip={handleSkip}
                 />
               ))}
             </div>
@@ -574,6 +603,7 @@ export default function CockpitPage() {
                   onResponded={handleResponded}
                   onNotResponded={() => {}}
                   onDiscard={() => setDiscardConfirm(lead)}
+                  onSkip={handleSkip}
                   readonly
                 />
               ))}
@@ -673,6 +703,7 @@ function LeadCard({
   onResponded,
   onNotResponded,
   onDiscard,
+  onSkip,
   readonly = false,
 }: {
   lead: Lead;
@@ -682,15 +713,17 @@ function LeadCard({
   onResponded: (l: Lead) => void;
   onNotResponded: (l: Lead) => void;
   onDiscard: (l: Lead) => void;
+  onSkip: (l: Lead) => void;
   readonly?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const layerBorder = lead.layer === "A" ? "border-l-emerald-400" : lead.layer === "B" ? "border-l-blue-400" : "border-l-amber-400";
-  const toqueDays = lead.status === "toque1_enviado" ? daysAgo(lead.toque1SentAt) : lead.status === "toque2_enviado" ? daysAgo(lead.toque2SentAt) : null;
   const limitReached = todaySends >= DAILY_LIMIT;
+  const isSkipped = !!lead.skippedUntil;
 
   return (
     <div
-      className={`rounded-xl border border-border/60 border-l-4 ${layerBorder} bg-card p-5 animate-in-up`}
+      className={`rounded-xl border border-border/60 border-l-4 ${layerBorder} bg-card p-5 animate-in-up ${isSkipped ? "opacity-60" : ""}`}
       style={{ animationDelay: `${index * 30}ms` }}
     >
       <div className="flex items-start justify-between gap-4">
@@ -703,6 +736,11 @@ function LeadCard({
             <span className="text-xs text-muted-foreground px-2 py-0.5 rounded-full bg-muted/40 border border-border/40">
               {statusLabels[lead.status] ?? lead.status}
             </span>
+            {isSkipped && (
+              <span className="text-xs text-amber-400 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30">
+                Pulado hoje
+              </span>
+            )}
           </div>
           {lead.company && (
             <div className="flex items-center gap-1.5 mt-1.5">
@@ -710,10 +748,42 @@ function LeadCard({
               <span className="text-sm text-muted-foreground">{lead.company}</span>
             </div>
           )}
+          {/* Dados rápidos: segmento e porte */}
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            {lead.segment && (
+              <div className="flex items-center gap-1">
+                <Tag className="h-3 w-3 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/80">{lead.segment}</span>
+              </div>
+            )}
+            {lead.size && (
+              <div className="flex items-center gap-1">
+                <Layers className="h-3 w-3 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/80">{lead.size}</span>
+              </div>
+            )}
+            {lead.employees && (
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/80">{lead.employees} func.</span>
+              </div>
+            )}
+            {lead.investment && (
+              <div className="flex items-center gap-1">
+                <TrendingUp className="h-3 w-3 text-muted-foreground/60" />
+                <span className="text-xs text-muted-foreground/80">{lead.investment}</span>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Star className="h-3.5 w-3.5 text-amber-400" />
-          <span className="font-mono text-sm font-semibold">{lead.score ?? 0}</span>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-1">
+            <Star className="h-3.5 w-3.5 text-amber-400" />
+            <span className="font-mono text-sm font-semibold">{lead.score ?? 0}</span>
+          </div>
+          {lead.taxRegime && (
+            <span className="text-[10px] text-muted-foreground/60 bg-muted/30 px-1.5 py-0.5 rounded">{lead.taxRegime}</span>
+          )}
         </div>
       </div>
 
@@ -809,6 +879,18 @@ function LeadCard({
             <XCircle className="h-3.5 w-3.5" />
             Não respondeu
           </Button>
+          {!isSkipped && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2 text-amber-400 border-amber-400/30 hover:bg-amber-400/10"
+              onClick={() => onSkip(lead)}
+              title="Pular este lead hoje — ele volta amanhã"
+            >
+              <SkipForward className="h-3.5 w-3.5" />
+              Pular hoje
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"

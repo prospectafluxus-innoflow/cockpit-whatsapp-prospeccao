@@ -171,3 +171,12 @@
 - [x] Backend: authenticateRequest usa token próprio (sub numérico) sem dependência do Manus
 - [x] Frontend: LoginPage já usa trpc.authOwn.login (email+senha, sem redirect OAuth)
 - [x] Sistema funciona 100% autônomo: Railway + Supabase, sem Manus OAuth
+
+## Correções Sessão 2026-06-29
+
+- [x] Fix lembrete: reagendar automaticamente ao abrir o sistema (Service Worker perde timers quando navegador fecha/suspende)
+- [ ] Fix Kanban: leads com "Respondeu" devem aparecer também na coluna "Toque 1 Enviado" (manter histórico de qual toque foi enviado)
+- [x] Fix botão "Testar notificação" na página de Perfil não funciona
+- [x] Cockpit: painel de detalhes do lead com segmento, faturamento e nº de funcionários
+- [x] Cockpit: opção de cancelar/pular envio para um lead específico (sem descartar)
+- [x] Cockpit: indicador visual de segmento/porte no card do lead

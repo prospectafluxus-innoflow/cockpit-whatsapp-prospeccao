@@ -69,12 +69,14 @@ export const leads = pgTable("leads", {
   layer: layerEnum("layer").notNull().default("B"),
 
   // Dados extras da planilha
+  segment: varchar("segment", { length: 150 }),
   size: varchar("size", { length: 100 }),
   employees: integer("employees"),
   investment: varchar("investment", { length: 100 }),
   taxRegime: varchar("taxRegime", { length: 100 }),
   participations: integer("participations"),
   lastEvent: varchar("lastEvent", { length: 100 }),
+  skippedUntil: date("skippedUntil"),
 
   // Status e ciclo de abordagem
   status: statusEnum("status").notNull().default("novo"),

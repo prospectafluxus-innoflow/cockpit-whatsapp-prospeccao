@@ -254,13 +254,22 @@ export default function CockpitPage() {
           const dataRows = rows.slice(headerRowIndex + 1);
 
           for (const rawRow of dataRows) {
-            const row: Record<string, string> = {};
-            headers.forEach((h, i) => { row[h] = String((rawRow as any[])[i] ?? ""); });
+            // Monta row com lookup case-insensitive
+            const rowRaw: Record<string, string> = {};
+            headers.forEach((h, i) => { rowRaw[h] = String((rawRow as any[])[i] ?? ""); });
+            // Cria proxy case-insensitive
+            const row = new Proxy(rowRaw, {
+              get(target, prop: string) {
+                if (prop in target) return target[prop];
+                const lower = prop.toLowerCase();
+                const found = Object.keys(target).find(k => k.toLowerCase() === lower);
+                return found ? target[found] : undefined;
+              }
+            }) as Record<string, string>;
 
-            const name = row["Nome"] || row["NOME"] || row["name"] || "";
+            const name = row["Nome"] || row["name"] || "";
             const whatsapp = String(
-              row["WhatsApp"] || row["Whatsapp"] || row["whatsapp"] ||
-              row["Telefone"] || row["telefone"] || row["Celular"] || ""
+              row["WhatsApp"] || row["Telefone"] || row["Celular"] || row["Phone"] || ""
             ).replace(/\D/g, "");
 
             if (!name || !whatsapp || whatsapp.length < 10) continue;

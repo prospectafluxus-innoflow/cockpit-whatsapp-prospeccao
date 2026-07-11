@@ -71,14 +71,14 @@ gcloud run deploy prospectafluxus ^
   --set-env-vars "NODE_ENV=production" ^
   --set-env-vars "DATABASE_URL=COLE_SUA_CONNECTION_STRING_AQUI" ^
   --set-env-vars "JWT_SECRET=COLE_UMA_STRING_ALEATORIA_AQUI" ^
-  --set-env-vars "GEMINI_API_KEY=AQ.Ab8RN6KBe0B3flZqZApWdEST5pGFq9o7inSzq9wavzUxOhdC2w" ^
+  --set-env-vars "GEMINI_API_KEY=CRIE_UMA_NOVA_CHAVE_NO_GOOGLE_AI_STUDIO" ^
   --set-env-vars "CRON_SECRET=COLE_OUTRA_STRING_ALEATORIA_AQUI"
 ```
 
 > **Substitua:**
 > - `COLE_SUA_CONNECTION_STRING_AQUI` → a URL do Supabase (formato: `postgresql://postgres:SENHA@db.xxx.supabase.co:5432/postgres`)
-> - `COLE_UMA_STRING_ALEATORIA_AQUI` → qualquer texto longo (ex: `ProspectaFluxus2026@InnoFlow!`)
-> - `COLE_OUTRA_STRING_ALEATORIA_AQUI` → outro texto longo diferente
+> - `COLE_UMA_STRING_ALEATORIA_AQUI` → gere um valor novo com `openssl rand -base64 48`
+> - `COLE_OUTRA_STRING_ALEATORIA_AQUI` → gere outro valor novo e diferente com o mesmo comando
 
 O deploy demora cerca de **3 a 5 minutos** na primeira vez (compila o Docker). Ao final, você receberá uma URL como:
 ```

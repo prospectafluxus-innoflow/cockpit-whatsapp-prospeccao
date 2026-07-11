@@ -1,173 +1,137 @@
-# Guia de Deploy — ProspectaFluxus no Railway
+# ProspectaFluxus no Railway — atualização segura
 
-**Custo:** $0 (plano gratuito com $5 de crédito/mês — mais do que suficiente)  
-**Tempo estimado:** 15–20 minutos  
-**Não precisa de cartão de crédito para começar**
+Este documento descreve a atualização de uma instalação existente do ProspectaFluxus no Railway. O deploy de produção só deve ocorrer depois de a branch ter sido revista, os testes estarem aprovados e existir um backup recente do PostgreSQL.
 
----
+> **Aviso de segurança:** o repositório esteve público e continha valores sensíveis em documentação antiga. Antes do próximo deploy, revogue e recrie a palavra-passe do PostgreSQL, a chave Gemini, `JWT_SECRET` e `CRON_SECRET`. Tornar o repositório privado novamente não invalida credenciais que já tenham sido expostas.
 
-## Passo 1 — Criar conta no Railway
+## 1. Preparação
 
-1. Acesse **[railway.app](https://railway.app)**
-2. Clique em **"Login"** → **"Login with Google"**
-3. Selecione sua conta Google
-4. Pronto — conta criada!
+Trabalhe sempre numa branch separada. Confirme que o Railway acompanha apenas a branch de produção e que um push na branch de revisão não inicia um deploy automático.
 
----
-
-## Passo 2 — Exportar o código para o GitHub
-
-O Railway faz o deploy direto do GitHub. Vamos exportar o código do Manus para lá.
-
-1. No Manus, clique no menu **⋯ (três pontos)** no canto superior direito do painel
-2. Clique em **"GitHub"** (ou "Export to GitHub")
-3. Autorize o Manus a acessar sua conta GitHub
-4. Escolha um nome para o repositório, ex: `prospectafluxus`
-5. Clique em **"Export"**
-
-> Se não tiver conta no GitHub, crie em [github.com](https://github.com) — é gratuito e leva 2 minutos.
-
----
-
-## Passo 3 — Criar o projeto no Railway
-
-1. No Railway, clique em **"New Project"**
-2. Clique em **"Deploy from GitHub repo"**
-3. Autorize o Railway a acessar seu GitHub (se pedido)
-4. Selecione o repositório `prospectafluxus`
-5. Clique em **"Deploy Now"**
-
-O Railway vai detectar automaticamente o `railway.json` e iniciar o build.
-
----
-
-## Passo 4 — Configurar as variáveis de ambiente
-
-Após o deploy inicial (vai falhar na primeira vez por falta das variáveis — isso é normal), configure as variáveis:
-
-1. No Railway, clique no serviço **prospectafluxus**
-2. Vá na aba **"Variables"**
-3. Clique em **"New Variable"** e adicione **uma por uma**:
-
-| Variável | Valor |
+| Verificação | Critério de aprovação |
 |---|---|
-| `NODE_ENV` | `production` |
-| `DATABASE_URL` | `postgresql://postgres:[SENHA]@db.[PROJETO].supabase.co:5432/postgres` |
-| `JWT_SECRET` | `ProspectaFluxus@InnoFlow2026#JWT!` |
-| `GEMINI_API_KEY` | `AQ.Ab8RN6KBe0B3flZqZApWdEST5pGFq9o7inSzq9wavzUxOhdC2w` |
-| `CRON_SECRET` | `ProspectaFluxus@InnoFlow2026#Cron!` |
-| `PORT` | `3000` |
+| Backup | Snapshot ou backup exportável do PostgreSQL concluído |
+| Instalação | `pnpm install --frozen-lockfile` concluído |
+| Tipos | `pnpm check` sem erros |
+| Testes | `pnpm test` sem falhas |
+| Build | `pnpm build:prod` concluído |
+| Segurança | Auditoria de dependências sem avisos críticos ou altos |
 
-### Onde encontrar o DATABASE_URL do Supabase:
-1. Acesse **[supabase.com](https://supabase.com)** → seu projeto
-2. Vá em **Settings → Database → Connection string**
-3. Selecione **URI** e copie o valor
-4. Substitua `[YOUR-PASSWORD]` pela senha que você definiu ao criar o banco
+## 2. Variáveis obrigatórias no Railway
 
----
+Configure os valores em **Service → Variables**. Nunca coloque valores reais em ficheiros versionados.
 
-## Passo 5 — Fazer o redeploy
+| Variável | Finalidade | Como gerar ou obter |
+|---|---|---|
+| `NODE_ENV` | Execução de produção | `production` |
+| `PORT` | Porta da aplicação | `3000` ou a porta fornecida pelo Railway |
+| `DATABASE_URL` | PostgreSQL | Nova connection string do Supabase/PostgreSQL |
+| `JWT_SECRET` | Sessões | `openssl rand -base64 48` |
+| `CRON_SECRET` | Proteção do endpoint de lembretes | Gere outro valor com `openssl rand -base64 48` |
+| `VAPID_PUBLIC_KEY` | Web Push no navegador | Par gerado por `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | Assinatura Web Push no servidor | Chave privada do mesmo par VAPID |
+| `VAPID_SUBJECT` | Contacto do emissor Web Push | `mailto:SEU_EMAIL_DE_SUPORTE` |
+| `INTEGRATION_ENCRYPTION_KEY` | Cifragem das credenciais Trello | `openssl rand -hex 32` |
 
-Após adicionar todas as variáveis:
+`INTEGRATION_ENCRYPTION_KEY` deve permanecer estável. Se for alterada depois de o Trello ser configurado, cada utilizador terá de ligar novamente a integração.
 
-1. Vá na aba **"Deployments"**
-2. Clique nos três pontos **⋯** do último deploy
-3. Clique em **"Redeploy"**
+## 3. Armazenamento privado dos áudios
 
-Aguarde 2–3 minutos. O status ficará verde ✅ quando estiver pronto.
+No Railway, configure um bucket S3, Cloudflare R2 ou outro serviço compatível com S3. O bucket deve permanecer privado; a aplicação entrega URLs temporárias apenas a utilizadores autenticados.
 
----
+| Variável | Valor esperado |
+|---|---|
+| `S3_BUCKET` | Nome do bucket privado |
+| `S3_REGION` | Região do serviço; use `auto` quando o fornecedor indicar |
+| `S3_ENDPOINT` | Endpoint HTTPS do fornecedor, se não for AWS S3 |
+| `S3_ACCESS_KEY_ID` | Identificador de acesso com permissão restrita ao bucket |
+| `S3_SECRET_ACCESS_KEY` | Segredo correspondente |
+| `S3_FORCE_PATH_STYLE` | `true` apenas quando exigido pelo fornecedor |
 
-## Passo 6 — Executar a migração do banco
+A infraestrutura integrada legada também é suportada por `BUILT_IN_FORGE_API_URL` e `BUILT_IN_FORGE_API_KEY`. Não configure os dois modos ao mesmo tempo; quando as variáveis integradas existem, elas têm prioridade.
 
-Após o deploy funcionar, execute a migração para criar as tabelas no Supabase:
+## 4. Variáveis opcionais
 
-1. No Railway, vá na aba **"Settings"** do serviço
-2. Role até **"Deploy"** → encontre o campo **"Start Command"**
-3. Temporariamente substitua por: `node scripts/migrate.mjs`
-4. Clique em **"Save"** — isso vai rodar a migração
-5. Após o deploy concluir (tabelas criadas), volte e mude o comando de volta para: `node dist/index.js`
+| Variável | Finalidade |
+|---|---|
+| `GEMINI_API_KEY` | Sugestões de follow-up por IA |
+| `OPENROUTER_API_KEY` | Alternativa de IA, quando usada |
+| `RESEND_API_KEY` | Lembretes adicionais por email |
+| `NOTIFICATION_EMAIL` | Destinatário do email de lembrete |
 
-> **Alternativa mais fácil:** use o painel do Supabase para rodar o SQL diretamente. Veja o arquivo `drizzle/migrations/` no projeto para o SQL gerado.
+## 5. Migrações do banco
 
----
+As migrações são aditivas e foram validadas numa base PostgreSQL descartável. Aplique-as **uma única vez antes de iniciar a nova versão**:
 
-## Passo 7 — Obter a URL do sistema
-
-1. No Railway, vá na aba **"Settings"** do serviço
-2. Role até **"Networking"** → **"Public Networking"**
-3. Clique em **"Generate Domain"**
-4. Sua URL será algo como: `prospectafluxus-production.up.railway.app`
-
-**Guarde essa URL** — é ela que vai no botão "Área do Cliente" do site da InnoFlow.
-
----
-
-## Passo 8 — Atualizar o botão no site da InnoFlow
-
-Abra o arquivo `index_modified.html` que baixou e substitua:
-```
-https://app.innoflow.com.br
-```
-pela URL real do Railway:
-```
-https://prospectafluxus-production.up.railway.app
-```
-
-Depois faça o upload no Netlify.
-
----
-
-## Passo 9 — Configurar os agendamentos automáticos (Cron Jobs)
-
-O Railway tem suporte nativo a Cron Jobs:
-
-1. No Railway, clique em **"New"** → **"Cron Job"**
-2. Configure 3 jobs:
-
-| Nome | Schedule (UTC) | Horário BR | Comando |
-|---|---|---|---|
-| Lembrete Manhã | `0 11 * * *` | 8h | Ver abaixo |
-| Lembrete Almoço | `0 16 * * *` | 13h | Ver abaixo |
-| Lembrete Tarde | `0 21 * * *` | 18h | Ver abaixo |
-
-Para cada job, use este comando (substitua a URL e o secret):
 ```bash
-curl -X POST https://prospectafluxus-production.up.railway.app/api/cron/send-reminder \
+pnpm db:migrate
+```
+
+O comando utiliza `DATABASE_URL` e o histórico em `drizzle/`. Não use `scripts/migrate.mjs` para esta atualização: esse ficheiro é legado e não contém as tabelas e colunas dos novos módulos.
+
+Depois da execução, confirme a existência das seguintes alterações:
+
+| Objeto | Resultado esperado |
+|---|---|
+| `message_templates` | Metadados opcionais do áudio |
+| `push_subscriptions` | Dispositivos Web Push por utilizador |
+| `trello_integrations` | Configuração Trello cifrada por utilizador |
+| `leads` | Estado e identificador de sincronização Trello |
+
+## 6. Build e início
+
+O `railway.json` usa:
+
+```text
+Build: pnpm run build:prod
+Start: node dist/index.js
+```
+
+A aplicação deve responder normalmente antes de ativar integrações na interface. Se o deploy falhar, não repita migrações manualmente sem primeiro consultar os logs.
+
+## 7. Alertas Web Push
+
+Mantenha os três agendamentos do Railway apontados para:
+
+```text
+POST /api/cron/send-reminder
+```
+
+Envie o segredo no cabeçalho `x-cron-secret`. O corpo deve usar um dos períodos aceites pela aplicação: `morning`, `afternoon` ou `evening`.
+
+```bash
+curl -X POST "https://SEU_DOMINIO/api/cron/send-reminder" \
   -H "Content-Type: application/json" \
-  -H "x-cron-secret: ProspectaFluxus@InnoFlow2026#Cron!" \
+  -H "x-cron-secret: SUBSTITUA_PELO_CRON_SECRET" \
   -d '{"period":"morning"}'
 ```
-(Mude `morning` para `afternoon` e `evening` nos outros dois jobs)
 
----
+No iPhone, o utilizador deve instalar o ProspectaFluxus no ecrã principal pelo Safari e só então ativar os alertas no Perfil. No Android e no computador, a ativação pode ser feita diretamente num navegador compatível.
 
-## (Opcional) Passo 10 — Domínio personalizado
+## 8. Trello
 
-Para usar `app.innoflow.com.br`:
+A configuração é feita em **Perfil → Integração Trello**. A API key e o token são enviados somente ao backend e armazenados cifrados. O cartão é criado apenas quando o lead entra em **Respondeu**. A sincronização é idempotente e um botão de reintento aparece no Kanban quando o Trello estiver temporariamente indisponível.
 
-1. No Railway → **Settings → Networking → Custom Domain**
-2. Digite `app.innoflow.com.br`
-3. O Railway mostrará um registro CNAME para adicionar no DNS do seu domínio
-4. Adicione no painel do Registro.br (ou onde o domínio está)
-5. Aguarde até 24h para propagar
+## 9. Áudio por toque
 
----
+O áudio é configurado junto de cada template de toque. A aplicação aceita os formatos indicados na interface, valida o tamanho antes do upload e mantém o ficheiro num bucket privado. No telemóvel, usa a partilha nativa; no computador, oferece download e abre o contacto do WhatsApp como alternativa assistida.
 
-## Resumo dos limites gratuitos do Railway
+## 10. Verificação pós-deploy
 
-| Recurso | Limite gratuito | Uso estimado |
-|---|---|---|
-| Créditos/mês | $5,00 | ~$0,50/mês ✅ |
-| RAM | 512 MB | ~100 MB ✅ |
-| CPU | Compartilhada | Leve ✅ |
-| Banda | 100 GB | ~1 GB ✅ |
-| Cron Jobs | Incluído | 3 jobs ✅ |
+Execute a verificação com uma conta de teste e dados não sensíveis.
 
----
+| Teste | Resultado esperado |
+|---|---|
+| Login e cockpit | Acesso normal e filas preservadas |
+| Importação Excel | Ficheiro válido importado sem regressão |
+| Áudio | Upload, reprodução, substituição, remoção e partilha funcionam |
+| Web Push | Ativação e notificação de teste chegam ao dispositivo |
+| Agendamento | Um período de teste dispara apenas para a conta correta |
+| Trello | Teste da lista aprovado e um lead respondido cria somente um cartão |
+| Reintento Trello | Falha temporária não reverte o estado local do lead |
 
-## Suporte
+## 11. Rollback
 
-Em caso de dúvidas:
-- [Documentação do Railway](https://docs.railway.app)
-- [Documentação do Supabase](https://supabase.com/docs)
+Se a nova versão apresentar erro funcional, faça rollback do serviço para o deploy anterior no Railway. As migrações são aditivas; as colunas e tabelas novas podem permanecer sem afetar a versão anterior. Não apague dados ou tabelas durante um incidente.
+
+Depois do rollback, registe o erro, preserve os logs e corrija-o numa nova branch. Altere ou elimine dados somente depois de um backup adicional e de uma análise específica.

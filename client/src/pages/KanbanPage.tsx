@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Building2, Star, GripVertical } from "lucide-react";
+import { Building2, Star, GripVertical, RefreshCw, ExternalLink, AlertTriangle } from "lucide-react";
 
 const COLUMNS = [
   "Novo",
@@ -49,6 +49,16 @@ export default function KanbanPage() {
   const moveKanban = trpc.leads.moveKanban.useMutation({
     onSuccess: () => utils.leads.kanban.invalidate(),
     onError: (e) => toast.error(e.message),
+  });
+
+  const retryTrello = trpc.trello.retryLead.useMutation({
+    onSuccess: async result => {
+      await utils.leads.kanban.invalidate();
+      if (result.status === "failed") toast.error(result.message);
+      else if (result.status === "disabled") toast.info("Ative a integração Trello no perfil primeiro.");
+      else toast.success("Lead sincronizado com o Trello.");
+    },
+    onError: error => toast.error(error.message),
   });
 
   const handleDragStart = (leadId: number, fromCol: string) => {
@@ -143,6 +153,44 @@ export default function KanbanPage() {
                               <span className="font-mono text-xs text-muted-foreground">{lead.score ?? 0}</span>
                             </div>
                           </div>
+
+                          {col === "Respondeu" && lead.trelloCardUrl && (
+                            <a
+                              href={lead.trelloCardUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              draggable={false}
+                              onClick={event => event.stopPropagation()}
+                              onMouseDown={event => event.stopPropagation()}
+                              className="mt-2 flex items-center gap-1 text-[11px] text-sky-400 hover:underline"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              Abrir cartão no Trello
+                            </a>
+                          )}
+
+                          {col === "Respondeu" && lead.trelloSyncError && !lead.trelloCardId && (
+                            <div className="mt-2 rounded-lg border border-red-400/20 bg-red-400/5 p-2">
+                              <p className="flex items-start gap-1 text-[10px] text-red-300 line-clamp-2" title={lead.trelloSyncError}>
+                                <AlertTriangle className="h-3 w-3 shrink-0 mt-0.5" />
+                                {lead.trelloSyncError}
+                              </p>
+                              <button
+                                type="button"
+                                draggable={false}
+                                onClick={event => {
+                                  event.stopPropagation();
+                                  retryTrello.mutate({ leadId: lead.id });
+                                }}
+                                onMouseDown={event => event.stopPropagation()}
+                                disabled={retryTrello.isPending && retryTrello.variables?.leadId === lead.id}
+                                className="mt-1.5 inline-flex items-center gap-1 text-[10px] font-medium text-sky-400 hover:underline disabled:opacity-50"
+                              >
+                                <RefreshCw className={`h-3 w-3 ${retryTrello.isPending && retryTrello.variables?.leadId === lead.id ? "animate-spin" : ""}`} />
+                                Tentar novamente
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
 

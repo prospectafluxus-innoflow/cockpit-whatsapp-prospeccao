@@ -1,5 +1,7 @@
 import {
   integer,
+  index,
+  uniqueIndex,
   pgEnum,
   pgTable,
   text,
@@ -94,6 +96,12 @@ export const leads = pgTable("leads", {
   notes: text("notes"),
   lastAiSuggestion: text("lastAiSuggestion"),
 
+  // Sincronização opcional com o Trello
+  trelloCardId: varchar("trelloCardId", { length: 64 }),
+  trelloCardUrl: text("trelloCardUrl"),
+  trelloSyncedAt: timestamp("trelloSyncedAt"),
+  trelloSyncError: text("trelloSyncError"),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -147,12 +155,63 @@ export const sendSchedules = pgTable("send_schedules", {
 export type SendSchedule = typeof sendSchedules.$inferSelect;
 export type InsertSendSchedule = typeof sendSchedules.$inferInsert;
 
+// ─── Dispositivos inscritos em Web Push ──────────────────────────────────────
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    endpointHash: varchar("endpointHash", { length: 64 }).notNull().unique(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("userAgent"),
+    expiresAt: timestamp("expiresAt"),
+    lastUsedAt: timestamp("lastUsedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [index("push_subscriptions_user_id_idx").on(table.userId)]
+);
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+// ─── Integrações externas do utilizador ──────────────────────────────────────
+export const userIntegrations = pgTable(
+  "user_integrations",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    provider: varchar("provider", { length: 32 }).notNull().default("trello"),
+    enabled: integer("enabled").notNull().default(0),
+    credentialsEncrypted: text("credentialsEncrypted").notNull(),
+    listId: varchar("listId", { length: 64 }).notNull(),
+    listName: varchar("listName", { length: 255 }),
+    lastError: text("lastError"),
+    lastTestedAt: timestamp("lastTestedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("user_integrations_user_provider_idx").on(table.userId, table.provider),
+  ]
+);
+
+export type UserIntegration = typeof userIntegrations.$inferSelect;
+export type InsertUserIntegration = typeof userIntegrations.$inferInsert;
+
 // ─── Templates de mensagem ────────────────────────────────────────────────────
 export const messageTemplates = pgTable("message_templates", {
   id: serial("id").primaryKey(),
   userId: integer("userId").notNull(),
   toque: integer("toque").notNull(), // 1, 2 ou 3
   text: text("text").notNull(),
+  audioKey: text("audioKey"),
+  audioUrl: text("audioUrl"),
+  audioFileName: varchar("audioFileName", { length: 255 }),
+  audioMimeType: varchar("audioMimeType", { length: 100 }),
+  audioSize: integer("audioSize"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

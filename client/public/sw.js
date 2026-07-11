@@ -1,100 +1,58 @@
-// ProspectaFluxus — Service Worker para lembretes de envio
-// Versão: 2.0.0
+// ProspectaFluxus — Service Worker de notificações Web Push
+// Versão: 3.0.0
 
-const CACHE_NAME = "prospectafluxus-v2";
-
-self.addEventListener("install", (event) => {
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+self.addEventListener("activate", event => {
+  event.waitUntil(self.clients.claim());
 });
 
-// Armazena os timeouts ativos e a última configuração de janelas
-const scheduledTimers = [];
-let lastWindows = null;
-
-// Recebe mensagem do frontend para agendar notificações
-self.addEventListener("message", (event) => {
-  if (event.data?.type === "SCHEDULE_NOTIFICATIONS") {
-    lastWindows = event.data.windows;
-    scheduleNotifications(event.data.windows);
-  }
-  if (event.data?.type === "CANCEL_NOTIFICATIONS") {
-    lastWindows = null;
-    cancelAllNotifications();
-  }
-});
-
-function cancelAllNotifications() {
-  scheduledTimers.forEach((id) => clearTimeout(id));
-  scheduledTimers.length = 0;
-}
-
-function scheduleNotifications(windows) {
-  cancelAllNotifications();
-
-  const now = new Date();
-  const windowConfigs = [
-    { key: "morning",   label: "Manhã",         emoji: "🌅", hour: windows.morningHour,   count: windows.morningCount,   enabled: windows.morningEnabled },
-    { key: "lunch",     label: "Almoço",         emoji: "☕", hour: windows.lunchHour,     count: windows.lunchCount,     enabled: windows.lunchEnabled },
-    { key: "afternoon", label: "Meio da tarde",  emoji: "⛅", hour: windows.afternoonHour, count: windows.afternoonCount, enabled: windows.afternoonEnabled },
-    { key: "evening",   label: "Fim do dia",     emoji: "🌇", hour: windows.eveningHour,   count: windows.eveningCount,   enabled: windows.eveningEnabled },
-  ];
-
-  for (const win of windowConfigs) {
-    if (!win.enabled || !win.count) continue;
-
-    const target = new Date(now);
-    target.setHours(win.hour, 0, 0, 0);
-
-    // Se já passou hoje, agenda para amanhã
-    if (target <= now) {
-      target.setDate(target.getDate() + 1);
-    }
-
-    const delay = target.getTime() - now.getTime();
-
-    const timerId = setTimeout(() => {
-      self.registration.showNotification("ProspectaFluxus — Hora de prospectar! 🔔", {
-        body: `${win.emoji} ${win.label}: ${win.count} lead${win.count > 1 ? "s" : ""} aguardando na sua fila. Clique para abrir o cockpit.`,
-        icon: "/favicon.ico",
-        badge: "/favicon.ico",
-        tag: `prospectafluxus-${win.key}`,
-        renotify: true,
-        requireInteraction: true,
-        data: { url: "/cockpit" },
-      });
-
-      // Reagenda automaticamente para o próximo dia
-      const nextTimerId = setTimeout(() => {
-        if (lastWindows) scheduleNotifications(lastWindows);
-      }, 60_000); // 1 minuto após disparar, reagenda tudo para o dia seguinte
-      scheduledTimers.push(nextTimerId);
-
-    }, delay);
-
-    scheduledTimers.push(timerId);
+function safeAppPath(value) {
+  try {
+    const target = new URL(value || "/cockpit", self.location.origin);
+    if (target.origin !== self.location.origin) return "/cockpit";
+    return `${target.pathname}${target.search}${target.hash}`;
+  } catch {
+    return "/cockpit";
   }
 }
 
-// Ao clicar na notificação, abre o cockpit
-self.addEventListener("notificationclick", (event) => {
+self.addEventListener("push", event => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "Há leads aguardando no cockpit." };
+  }
+
+  const title = payload.title || "ProspectaFluxus — Hora de prospectar";
+  const options = {
+    body: payload.body || "Há leads aguardando na sua fila. Abra o cockpit para continuar.",
+    icon: payload.icon || "/icons/icon-192.png",
+    badge: payload.badge || "/icons/badge-96.png",
+    tag: payload.tag || "prospectafluxus-reminder",
+    renotify: true,
+    requireInteraction: true,
+    data: { url: safeAppPath(payload.url) },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", event => {
   event.notification.close();
-  const url = event.notification.data?.url ?? "/cockpit";
+  const path = safeAppPath(event.notification.data?.url);
+  const targetUrl = new URL(path, self.location.origin).href;
+
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(self.location.origin) && "focus" in client) {
-          client.focus();
-          client.navigate(url);
-          return;
-        }
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
+      const existing = clientList.find(client => client.url.startsWith(self.location.origin));
+      if (existing) {
+        return existing.navigate(targetUrl).then(() => existing.focus());
       }
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })
+      return self.clients.openWindow ? self.clients.openWindow(targetUrl) : undefined;
+    }),
   );
 });

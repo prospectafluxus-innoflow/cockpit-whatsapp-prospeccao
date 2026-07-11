@@ -103,7 +103,7 @@ export async function sendReminderHandler(req: Request, res: Response) {
       windowLeads.length > 1 ? "s" : ""
     } na fila para esta janela:\n\n${leadList}\n\nAcesse o cockpit para enviar os toques agora!`;
 
-    await notifyOwner({ title, content });
+    await notifyOwner({ userId: schedule.userId, title, content });
 
     return res.json({
       ok: true,

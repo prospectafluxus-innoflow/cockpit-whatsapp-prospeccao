@@ -104,6 +104,17 @@ Cada lead passa por até **3 toques** de abordagem. O sistema controla automatic
 4. Revise a mensagem e clique em **Enviar** no WhatsApp.
 5. Volte ao sistema — o lead é automaticamente movido para o próximo estágio.
 
+### Áudio opcional no toque
+
+Quando houver um áudio configurado para aquele toque, o cartão do lead apresenta controlos para o ouvir e partilhar.
+
+| Dispositivo | Comportamento |
+|---|---|
+| **Celular** | O sistema abre a partilha nativa para enviar o ficheiro ao contacto no WhatsApp. |
+| **Computador** | O sistema descarrega o áudio e abre o contacto no WhatsApp Web; anexe o ficheiro descarregado antes de enviar. |
+
+O texto e o áudio são opcionais e independentes. Confirme sempre o destinatário antes de concluir o envio no WhatsApp.
+
 ### Variáveis nas mensagens
 
 As mensagens usam variáveis que são substituídas automaticamente:
@@ -130,6 +141,8 @@ O **Kanban CRM** exibe todos os leads organizados em colunas por estágio do pip
 
 Você pode arrastar os cards entre colunas para atualizar manualmente o estágio de um lead, ou usar os botões de toque no Cockpit para avançar automaticamente.
 
+Quando a integração Trello estiver ativa, um lead que entra em **Respondeu** é sincronizado automaticamente com a lista escolhida. O sistema não cria cartões duplicados. Se o Trello estiver temporariamente indisponível, o lead permanece atualizado no ProspectaFluxus e o cartão apresenta a opção **Tentar novamente**.
+
 ---
 
 ## 7. Dashboard
@@ -150,8 +163,10 @@ Use o Dashboard para identificar quais camadas estão performando melhor e ajust
 A página de **Agendamento** permite configurar:
 
 - **Janelas de horário:** defina os horários de cada janela (Manhã, Almoço, Meio da tarde, Fim do dia) para que o sistema distribua os leads ao longo do dia.
-- **Lembretes:** ative notificações para receber alertas nos horários das janelas via celular ou WhatsApp.
-- **Mensagens dos Toques:** personalize o texto de cada toque (veja seção 9).
+- **Alertas Web Push:** ative no **Perfil** para receber notificações nos horários das janelas, mesmo com a página fechada.
+- **Mensagens e áudios dos Toques:** personalize o texto e associe um áudio opcional a cada toque (veja seção 9).
+
+Cada dispositivo precisa de ser ativado separadamente. No iPhone, abra o sistema no Safari, escolha **Adicionar ao Ecrã Principal**, abra o ícone instalado e só então ative os alertas no Perfil.
 
 ---
 
@@ -167,6 +182,15 @@ Na página de **Agendamento**, role até a seção **"Mensagens dos Toques"** pa
 4. Use `{company}` onde quiser inserir o nome da empresa.
 5. Clique em **Salvar** para confirmar.
 6. Para voltar ao texto original, clique em **Padrão**.
+
+### Como adicionar um áudio
+
+1. No mesmo cartão do toque, escolha um ficheiro de áudio num formato aceite pela interface.
+2. Aguarde a confirmação do carregamento.
+3. Use o leitor para conferir o ficheiro guardado.
+4. Para trocar o áudio, envie outro ficheiro; para deixar o toque apenas com texto, use **Remover áudio**.
+
+O áudio é privado e só pode ser obtido por uma conta autenticada. Não envie gravações com dados sensíveis sem autorização.
 
 ### Textos padrão
 
@@ -200,11 +224,17 @@ O sistema importa em lotes de 50 leads. Se a barra de progresso parar, aguarde a
 Verifique se o WhatsApp Web está aberto no navegador ou se o aplicativo está instalado no celular. O sistema gera um link `wa.me` que requer o WhatsApp instalado.
 
 **Posso usar o sistema em mais de um dispositivo ao mesmo tempo?**
-Sim. O sistema é baseado em web e funciona em qualquer navegador. A sessão é mantida por cookie — cada dispositivo precisa fazer login separadamente.
+Sim. O sistema é baseado em web e funciona em qualquer navegador. A sessão é mantida por cookie — cada dispositivo precisa fazer login separadamente. Os alertas também precisam de ser ativados em cada dispositivo.
+
+**O alerta não chegou ao iPhone.**
+Confirme que o ProspectaFluxus foi adicionado ao Ecrã Principal pelo Safari, que os alertas foram ativados dentro do ícone instalado e que as notificações estão permitidas nos Ajustes do iPhone.
+
+**O cartão não apareceu no Trello.**
+Abra o Kanban e verifique se o lead está em **Respondeu**. Se aparecer uma falha de sincronização, clique em **Tentar novamente**. Caso contrário, confirme a configuração em **Perfil → Integração Trello**.
 
 **Como adicionar um novo usuário?**
 O novo usuário acessa o sistema e se cadastra com e-mail e senha. Após o cadastro, um administrador precisa aprovar o acesso na página de Administração.
 
 ---
 
-*Manual elaborado para uso interno da InnoFlow — ProspectaFluxus v2.0*
+*Manual do ProspectaFluxus v3.0 — áudio por toque, Web Push e integração Trello*

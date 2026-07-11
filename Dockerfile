@@ -7,7 +7,7 @@ RUN npm install -g pnpm@10.4.1
 WORKDIR /app
 
 # Copiar arquivos de dependências
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches/ ./patches/
 
 # Instalar dependências
@@ -28,7 +28,7 @@ WORKDIR /app
 RUN npm install -g pnpm@10.4.1
 
 # Copiar arquivos de dependências
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches/ ./patches/
 
 # Instalar apenas dependências de produção

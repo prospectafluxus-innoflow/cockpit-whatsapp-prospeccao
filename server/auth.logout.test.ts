@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { appRouter } from "./routers";
+import { beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import type { appRouter as AppRouter } from "./routers";
 
 type CookieCall = {
   name: string;
@@ -9,6 +9,13 @@ type CookieCall = {
 };
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
+
+let appRouter: typeof AppRouter;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL ??= "postgresql://test:test@127.0.0.1:5432/prospectafluxus_test";
+  ({ appRouter } = await import("./routers"));
+});
 
 function createAuthContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] } {
   const clearedCookies: CookieCall[] = [];

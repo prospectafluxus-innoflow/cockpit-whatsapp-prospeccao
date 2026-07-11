@@ -26,7 +26,48 @@ import {
   MessageSquare,
   RotateCcw,
   Save,
+  Upload,
+  Trash2,
+  Music2,
+  Loader2,
 } from "lucide-react";
+
+const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  return bytes < 1024 * 1024
+    ? `${Math.ceil(bytes / 1024)} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function inferAudioMimeType(file: File) {
+  if (file.type) return file.type;
+  const extension = file.name.split(".").pop()?.toLowerCase();
+  const mimeByExtension: Record<string, string> = {
+    mp3: "audio/mpeg",
+    m4a: "audio/mp4",
+    mp4: "audio/mp4",
+    aac: "audio/aac",
+    ogg: "audio/ogg",
+    webm: "audio/webm",
+    wav: "audio/wav",
+  };
+  return extension ? mimeByExtension[extension] ?? "" : "";
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const base64 = result.split(",")[1];
+      if (!base64) reject(new Error("Não foi possível ler o áudio."));
+      else resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Não foi possível ler o áudio."));
+    reader.readAsDataURL(file);
+  });
+}
 
 type Lead = {
   id: number;
@@ -158,13 +199,55 @@ export default function SchedulePage() {
   });
 
   const resetTemplateMutation = trpc.messageTemplates.reset.useMutation({
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success("Mensagem redefinida para o padrão!");
       utils.messageTemplates.get.invalidate();
       setEditingTemplate(null);
     },
     onError: () => toast.error("Erro ao redefinir mensagem."),
   });
+
+  const [uploadingAudioFor, setUploadingAudioFor] = useState<number | null>(null);
+
+  const uploadAudioMutation = trpc.messageTemplates.uploadAudio.useMutation({
+    onSuccess: () => {
+      toast.success("Áudio guardado para este toque.");
+      utils.messageTemplates.get.invalidate();
+    },
+    onError: (error) => toast.error(error.message || "Erro ao guardar o áudio."),
+    onSettled: () => setUploadingAudioFor(null),
+  });
+
+  const removeAudioMutation = trpc.messageTemplates.removeAudio.useMutation({
+    onSuccess: () => {
+      toast.success("Áudio removido deste toque.");
+      utils.messageTemplates.get.invalidate();
+    },
+    onError: (error) => toast.error(error.message || "Erro ao remover o áudio."),
+  });
+
+  const handleAudioFile = async (toque: number, file?: File) => {
+    if (!file) return;
+    if (file.size > MAX_AUDIO_BYTES) {
+      toast.error("O áudio deve ter no máximo 12 MB.");
+      return;
+    }
+
+    const mimeType = inferAudioMimeType(file);
+    if (!mimeType.startsWith("audio/")) {
+      toast.error("Escolha um ficheiro de áudio MP3, M4A, AAC, OGG, WEBM ou WAV.");
+      return;
+    }
+
+    try {
+      setUploadingAudioFor(toque);
+      const base64 = await fileToBase64(file);
+      uploadAudioMutation.mutate({ toque, fileName: file.name, mimeType, base64 });
+    } catch (error) {
+      setUploadingAudioFor(null);
+      toast.error(error instanceof Error ? error.message : "Não foi possível ler o áudio.");
+    }
+  };
 
   const getTemplateDraft = (toque: number) => {
     if (templateDrafts[toque] !== undefined) return templateDrafts[toque]!;
@@ -509,7 +592,7 @@ export default function SchedulePage() {
             Mensagens dos Toques
           </h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Personalize o texto enviado em cada toque. Use <code className="bg-muted px-1 rounded text-[11px]">{'{firstName}'}</code> para o primeiro nome e <code className="bg-muted px-1 rounded text-[11px]">{'{company}'}</code> para a empresa (ex: <em>" da Acme"</em>).
+            Personalize o texto e, se desejar, associe um áudio a cada toque. Use <code className="bg-muted px-1 rounded text-[11px]">{'{firstName}'}</code> para o primeiro nome e <code className="bg-muted px-1 rounded text-[11px]">{'{company}'}</code> para a empresa (ex: <em>" da Acme"</em>).
           </p>
 
           {loadingTemplates ? (
@@ -521,6 +604,8 @@ export default function SchedulePage() {
               {[1, 2, 3].map((toque) => {
                 const isEditing = editingTemplate === toque;
                 const currentText = getTemplateDraft(toque);
+                const audio = templates?.audio[`toque${toque}` as keyof typeof templates.audio];
+                const isUploadingAudio = uploadingAudioFor === toque;
                 const toqueColors: Record<number, string> = {
                   1: "text-emerald-400 border-emerald-400/30 bg-emerald-400/5",
                   2: "text-blue-400 border-blue-400/30 bg-blue-400/5",
@@ -598,6 +683,65 @@ export default function SchedulePage() {
                         {(templateDrafts[toque] ?? currentText).length}/1000 caracteres
                       </p>
                     )}
+
+                    <div className="mt-4 border-t border-current/15 pt-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Music2 className="h-4 w-4 shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium">Áudio opcional</p>
+                            <p className="max-w-[360px] truncate text-[11px] text-muted-foreground">
+                              {audio ? `${audio.fileName} · ${formatFileSize(audio.size)}` : "Nenhum áudio associado"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label
+                            className={`inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground ${isUploadingAudio ? "pointer-events-none opacity-50" : ""}`}
+                          >
+                            <input
+                              type="file"
+                              accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/webm,audio/wav,.mp3,.m4a,.aac,.ogg,.webm,.wav"
+                              className="sr-only"
+                              disabled={isUploadingAudio}
+                              onChange={(event) => {
+                                const file = event.currentTarget.files?.[0];
+                                void handleAudioFile(toque, file);
+                                event.currentTarget.value = "";
+                              }}
+                            />
+                            {isUploadingAudio ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Upload className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            {audio ? "Substituir" : "Adicionar"}
+                          </label>
+                          {audio && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-xs text-destructive hover:text-destructive"
+                              onClick={() => removeAudioMutation.mutate({ toque })}
+                              disabled={removeAudioMutation.isPending}
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5" />
+                              Remover
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {audio && (
+                        <audio
+                          controls
+                          preload="metadata"
+                          src={audio.url}
+                          className="mt-3 h-9 w-full max-w-xl"
+                        >
+                          O seu navegador não suporta reprodução de áudio.
+                        </audio>
+                      )}
+                    </div>
                   </div>
                 );
               })}

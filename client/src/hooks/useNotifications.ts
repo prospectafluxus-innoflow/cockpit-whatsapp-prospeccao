@@ -1,8 +1,5 @@
-/**
- * useNotifications — gerencia permissão e agendamento de notificações push
- * via Service Worker. Funciona em Android Chrome e desktop.
- */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trpc } from "@/lib/trpc";
 
 export type NotificationPermission = "default" | "granted" | "denied" | "unsupported";
 
@@ -21,130 +18,178 @@ export interface ScheduleWindows {
   eveningCount: number;
 }
 
+function supportsWebPush(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    "Notification" in window &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
+}
+
+function applicationServerKey(value: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const bytes = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+  return bytes;
+}
+
 export function useNotifications() {
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const [swReady, setSwReady] = useState(false);
+  const [isSubscribed, setIsSubscribed] = useState(false);
   const swRegRef = useRef<ServiceWorkerRegistration | null>(null);
 
-  // Garante que o SW está registrado e ativo
+  const statusQuery = trpc.notifications.status.useQuery(undefined, {
+    retry: false,
+    staleTime: 60_000,
+  });
+  const subscribeMutation = trpc.notifications.subscribe.useMutation();
+  const unsubscribeMutation = trpc.notifications.unsubscribe.useMutation();
+  const testMutation = trpc.notifications.test.useMutation();
+
   const ensureSW = useCallback(async (): Promise<ServiceWorkerRegistration | null> => {
-    if (!("serviceWorker" in navigator)) return null;
+    if (!supportsWebPush()) return null;
+
     try {
-      // Tenta reutilizar registro existente
-      const existing = await navigator.serviceWorker.getRegistration("/");
-      if (existing?.active) {
-        swRegRef.current = existing;
-        setSwReady(true);
-        return existing;
-      }
-      // Registra novo SW
-      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      // Aguarda o SW ficar ativo (com timeout de 5s)
-      await new Promise<void>((resolve) => {
-        if (reg.active) { resolve(); return; }
-        const sw = reg.installing ?? reg.waiting;
-        if (!sw) { resolve(); return; }
-        const timeout = setTimeout(resolve, 5000);
-        sw.addEventListener("statechange", function handler() {
-          if (sw.state === "activated") {
-            clearTimeout(timeout);
-            sw.removeEventListener("statechange", handler);
-            resolve();
-          }
-        });
-      });
-      swRegRef.current = reg;
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      const ready = await navigator.serviceWorker.ready;
+      swRegRef.current = ready ?? registration;
       setSwReady(true);
-      return reg;
-    } catch (err) {
-      console.warn("[SW] Falha ao registrar:", err);
+      return swRegRef.current;
+    } catch (error) {
+      console.warn("[WebPush] Falha ao registar o service worker:", error);
+      setSwReady(false);
       return null;
     }
   }, []);
 
-  // Detecta suporte e permissão atual na montagem
+  const syncSubscriptionState = useCallback(async () => {
+    const registration = swRegRef.current ?? await ensureSW();
+    if (!registration) {
+      setIsSubscribed(false);
+      return null;
+    }
+
+    const subscription = await registration.pushManager.getSubscription();
+    setIsSubscribed(Boolean(subscription));
+    return subscription;
+  }, [ensureSW]);
+
   useEffect(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    if (!supportsWebPush()) {
       setPermission("unsupported");
       return;
     }
-    setPermission(Notification.permission as NotificationPermission);
-    ensureSW();
-  }, [ensureSW]);
 
-  // Solicita permissão ao usuário
+    setPermission(Notification.permission as NotificationPermission);
+    void ensureSW().then(() => syncSubscriptionState());
+  }, [ensureSW, syncSubscriptionState]);
+
+  const subscribeCurrentDevice = useCallback(async (): Promise<boolean> => {
+    if (!supportsWebPush() || Notification.permission !== "granted") return false;
+
+    const registration = swRegRef.current ?? await ensureSW();
+    if (!registration) return false;
+
+    const status = statusQuery.data ?? (await statusQuery.refetch()).data;
+    if (!status?.configured || !status.publicKey) {
+      throw new Error("Os alertas ainda não estão configurados no servidor.");
+    }
+
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey(status.publicKey),
+      });
+    }
+
+    const serialized = subscription.toJSON();
+    if (!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth) {
+      throw new Error("O navegador devolveu uma subscrição Web Push incompleta.");
+    }
+
+    await subscribeMutation.mutateAsync({
+      endpoint: serialized.endpoint,
+      expirationTime: serialized.expirationTime ?? null,
+      keys: {
+        p256dh: serialized.keys.p256dh,
+        auth: serialized.keys.auth,
+      },
+    });
+
+    setIsSubscribed(true);
+    await statusQuery.refetch();
+    return true;
+  }, [ensureSW, statusQuery, subscribeMutation]);
+
   const requestPermission = useCallback(async (): Promise<boolean> => {
-    if (!("Notification" in window)) return false;
+    if (!supportsWebPush()) {
+      setPermission("unsupported");
+      return false;
+    }
+
     const result = await Notification.requestPermission();
     setPermission(result as NotificationPermission);
-    if (result === "granted") {
-      await ensureSW();
-    }
-    return result === "granted";
-  }, [ensureSW]);
+    if (result !== "granted") return false;
+    return subscribeCurrentDevice();
+  }, [subscribeCurrentDevice]);
 
-  // Agenda notificações nos horários das janelas via Service Worker
   const scheduleNotifications = useCallback(
-    async (windows: ScheduleWindows): Promise<boolean> => {
+    async (_windows: ScheduleWindows): Promise<boolean> => {
       if (Notification.permission !== "granted") return false;
-      const reg = swRegRef.current ?? await ensureSW();
-      if (!reg?.active) return false;
-      reg.active.postMessage({ type: "SCHEDULE_NOTIFICATIONS", windows });
-      return true;
+      try {
+        return await subscribeCurrentDevice();
+      } catch (error) {
+        console.warn(
+          "[WebPush] Não foi possível renovar automaticamente a subscrição:",
+          error instanceof Error ? error.message : "erro desconhecido",
+        );
+        return false;
+      }
     },
-    [ensureSW]
+    [subscribeCurrentDevice],
   );
 
-  // Cancela todas as notificações agendadas
-  const cancelNotifications = useCallback(async () => {
-    const reg = swRegRef.current ?? await ensureSW();
-    if (!reg?.active) return;
-    reg.active.postMessage({ type: "CANCEL_NOTIFICATIONS" });
-  }, [ensureSW]);
+  const cancelNotifications = useCallback(async (): Promise<void> => {
+    const registration = swRegRef.current ?? await ensureSW();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) {
+      setIsSubscribed(false);
+      return;
+    }
 
-  // Envia uma notificação de teste imediata
+    await unsubscribeMutation.mutateAsync({ endpoint: subscription.endpoint });
+    await subscription.unsubscribe();
+    setIsSubscribed(false);
+    await statusQuery.refetch();
+  }, [ensureSW, statusQuery, unsubscribeMutation]);
+
   const testNotification = useCallback(async (): Promise<boolean> => {
-    if (!("Notification" in window)) return false;
     if (Notification.permission !== "granted") return false;
-
-    // Usa new Notification() diretamente — mais confiável para testes imediatos
-    // O Service Worker é necessário apenas para notificações em background
-    try {
-      new Notification("ProspectaFluxus — Teste de lembrete! 🔔", {
-        body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
-        icon: "/favicon.ico",
-        tag: "prospectafluxus-test",
-      });
-      return true;
-    } catch (err) {
-      console.warn("[Notification] new Notification() falhou:", err);
-    }
-
-    // Fallback: tenta via Service Worker
-    const reg = swRegRef.current ?? await ensureSW();
-    if (reg) {
-      try {
-        await reg.showNotification("ProspectaFluxus — Teste de lembrete! 🔔", {
-          body: "✅ Notificações funcionando! Você receberá lembretes nos horários configurados.",
-          icon: "/favicon.ico",
-          badge: "/favicon.ico",
-          tag: "prospectafluxus-test",
-          requireInteraction: false,
-        });
-        return true;
-      } catch (err) {
-        console.warn("[SW] showNotification falhou:", err);
-      }
-    }
-
-    return false;
-  }, [ensureSW]);
+    if (!isSubscribed && !(await subscribeCurrentDevice())) return false;
+    const result = await testMutation.mutateAsync();
+    return result.delivered > 0;
+  }, [isSubscribed, subscribeCurrentDevice, testMutation]);
 
   return {
     permission,
     swReady,
     isSupported: permission !== "unsupported",
     isGranted: permission === "granted",
+    isSubscribed,
+    isConfigured: statusQuery.data?.configured ?? false,
+    deviceCount: statusQuery.data?.devices ?? 0,
+    isWorking:
+      subscribeMutation.isPending ||
+      unsubscribeMutation.isPending ||
+      testMutation.isPending,
     requestPermission,
     scheduleNotifications,
     cancelNotifications,

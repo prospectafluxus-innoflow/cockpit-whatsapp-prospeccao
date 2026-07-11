@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js";
+import { createHash } from "node:crypto";
 import postgres from "postgres";
 import { eq, and, sql, count, or, desc, asc } from "drizzle-orm";
 import {
@@ -6,6 +7,8 @@ import {
   leads,
   dailySends,
   sendSchedules,
+  pushSubscriptions,
+  userIntegrations,
   messageTemplates,
   type User,
   type InsertUser,
@@ -14,16 +17,24 @@ import {
   type InsertDailySend,
   type SendSchedule,
   type InsertSendSchedule,
+  type PushSubscription,
+  type UserIntegration,
   type MessageTemplate,
 } from "../drizzle/schema";
 
 // ─── Conexão com o banco ──────────────────────────────────────────────────────
-const connectionString =
-  process.env.DATABASE_URL ||
-  "postgresql://postgres.blqtjvftkamzofpltlrj:AAvanTI%231213@aws-1-us-west-2.pooler.supabase.com:6543/postgres";
+const connectionString = process.env.DATABASE_URL;
 
-console.log("[DB] Connecting to database...");
-console.log("[DB] Host:", connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80));
+if (!connectionString) {
+  throw new Error("DATABASE_URL não configurada. Defina a ligação ao PostgreSQL nas variáveis de ambiente.");
+}
+
+const isTestEnvironment = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+
+if (!isTestEnvironment) {
+  console.log("[DB] Connecting to database...");
+  console.log("[DB] Host:", connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80));
+}
 
 const client = postgres(connectionString, {
   ssl: { rejectUnauthorized: false },
@@ -36,12 +47,13 @@ const client = postgres(connectionString, {
   connect_timeout: 10,
 });
 
-client`SELECT 1`.then(() => {
-  console.log("[DB] ✅ Database connection successful!");
-}).catch((err) => {
-  console.error("[DB] ❌ Database connection FAILED:", err.message);
-  console.error("[DB] Error details:", JSON.stringify(err, null, 2));
-});
+if (!isTestEnvironment) {
+  client`SELECT 1`.then(() => {
+    console.log("[DB] Database connection successful.");
+  }).catch((err) => {
+    console.error("[DB] Database connection failed:", err.message);
+  });
+}
 
 export const db = drizzle(client);
 
@@ -414,6 +426,161 @@ export async function getMetrics(userId: number) {
 
 // ─── Alias para compatibilidade ───────────────────────────────────────────────
 
+// ─── Subscrições Web Push ───────────────────────────────────────────────────
+type PushSubscriptionInput = {
+  endpoint: string;
+  expirationTime?: number | null;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
+function hashPushEndpoint(endpoint: string): string {
+  return createHash("sha256").update(endpoint).digest("hex");
+}
+
+export async function upsertPushSubscription(
+  userId: number,
+  subscription: PushSubscriptionInput,
+  userAgent?: string,
+): Promise<PushSubscription> {
+  const endpointHash = hashPushEndpoint(subscription.endpoint);
+  const now = new Date();
+  const rows = await db
+    .insert(pushSubscriptions)
+    .values({
+      userId,
+      endpointHash,
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+      userAgent: userAgent?.slice(0, 1000) ?? null,
+      expiresAt: subscription.expirationTime ? new Date(subscription.expirationTime) : null,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: pushSubscriptions.endpointHash,
+      set: {
+        userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.keys.p256dh,
+        auth: subscription.keys.auth,
+        userAgent: userAgent?.slice(0, 1000) ?? null,
+        expiresAt: subscription.expirationTime ? new Date(subscription.expirationTime) : null,
+        updatedAt: now,
+      },
+    })
+    .returning();
+  return rows[0]!;
+}
+
+export async function getPushSubscriptionsByUser(userId: number): Promise<PushSubscription[]> {
+  return db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+}
+
+export async function removePushSubscription(userId: number, endpoint: string): Promise<void> {
+  await db
+    .delete(pushSubscriptions)
+    .where(
+      and(
+        eq(pushSubscriptions.userId, userId),
+        eq(pushSubscriptions.endpointHash, hashPushEndpoint(endpoint)),
+      ),
+    );
+}
+
+export async function removePushSubscriptionById(userId: number, id: number): Promise<void> {
+  await db
+    .delete(pushSubscriptions)
+    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id)));
+}
+
+export async function markPushSubscriptionUsed(userId: number, id: number): Promise<void> {
+  await db
+    .update(pushSubscriptions)
+    .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id)));
+}
+
+export async function countPushSubscriptions(userId: number): Promise<number> {
+  const rows = await db
+    .select({ total: count() })
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+  return Number(rows[0]?.total ?? 0);
+}
+
+// ─── Integrações externas ────────────────────────────────────────────────────
+export async function getUserIntegration(
+  userId: number,
+  provider = "trello"
+): Promise<UserIntegration | null> {
+  const rows = await db
+    .select()
+    .from(userIntegrations)
+    .where(and(eq(userIntegrations.userId, userId), eq(userIntegrations.provider, provider)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertUserIntegration(input: {
+  userId: number;
+  provider?: string;
+  enabled: number;
+  credentialsEncrypted: string;
+  listId: string;
+  listName?: string | null;
+  lastError?: string | null;
+  lastTestedAt?: Date | null;
+}): Promise<UserIntegration> {
+  const provider = input.provider ?? "trello";
+  const now = new Date();
+  const rows = await db
+    .insert(userIntegrations)
+    .values({
+      userId: input.userId,
+      provider,
+      enabled: input.enabled,
+      credentialsEncrypted: input.credentialsEncrypted,
+      listId: input.listId,
+      listName: input.listName ?? null,
+      lastError: input.lastError ?? null,
+      lastTestedAt: input.lastTestedAt ?? null,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [userIntegrations.userId, userIntegrations.provider],
+      set: {
+        enabled: input.enabled,
+        credentialsEncrypted: input.credentialsEncrypted,
+        listId: input.listId,
+        listName: input.listName ?? null,
+        lastError: input.lastError ?? null,
+        lastTestedAt: input.lastTestedAt ?? null,
+        updatedAt: now,
+      },
+    })
+    .returning();
+  return rows[0]!;
+}
+
+export async function updateUserIntegrationState(
+  userId: number,
+  provider: string,
+  data: Partial<Pick<UserIntegration, "enabled" | "lastError" | "lastTestedAt" | "listName">>
+): Promise<UserIntegration | null> {
+  const rows = await db
+    .update(userIntegrations)
+    .set({ ...data, updatedAt: new Date() })
+    .where(and(eq(userIntegrations.userId, userId), eq(userIntegrations.provider, provider)))
+    .returning();
+  return rows[0] ?? null;
+}
+
 // ─── Helpers de templates de mensagem ────────────────────────────────────────
 export const DEFAULT_TEMPLATES: Record<number, string> = {
   1: "Oi, {firstName}! Aqui é a Michelle Bis, da InnoFlow e sou uma das embaixadoras do Clube dos Decisores (a antiga Cobertura Business, da qual você já participou). Estou falando com empresários selecionados da nossa rede, e a {company} me chamou atenção pela sua história. Trabalho com estruturação empresarial e ajudo empresas como a sua a descobrir onde estão perdendo dinheiro, eficiência e onde elas podem ganhar mais dinheiro. Seleciono 2 empresas por mês para uma mentoria gratuita de 60 minutos. Topa? É o nosso Pit Stop: você sai com uma visão clara dos gargalos do negócio, sem compromisso.",
@@ -454,6 +621,78 @@ export async function upsertMessageTemplate(
     .values({ userId, toque, text })
     .returning();
   return inserted[0]!;
+}
+
+export type MessageTemplateAudio = {
+  audioKey: string;
+  audioUrl: string;
+  audioFileName: string;
+  audioMimeType: string;
+  audioSize: number;
+};
+
+export async function upsertMessageTemplateAudio(
+  userId: number,
+  toque: number,
+  audio: MessageTemplateAudio,
+): Promise<MessageTemplate> {
+  const existing = await db
+    .select()
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .limit(1);
+
+  if (existing[0]) {
+    const updated = await db
+      .update(messageTemplates)
+      .set({ ...audio, updatedAt: new Date() })
+      .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+      .returning();
+    return updated[0]!;
+  }
+
+  const inserted = await db
+    .insert(messageTemplates)
+    .values({
+      userId,
+      toque,
+      text: DEFAULT_TEMPLATES[toque]!,
+      ...audio,
+    })
+    .returning();
+  return inserted[0]!;
+}
+
+export async function userOwnsMessageTemplateAudio(
+  userId: number,
+  audioKey: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: messageTemplates.id })
+    .from(messageTemplates)
+    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.audioKey, audioKey)))
+    .limit(1);
+  return rows.length > 0;
+}
+
+export async function removeMessageTemplateAudio(
+  userId: number,
+  toque: number,
+): Promise<MessageTemplate | null> {
+  const updated = await db
+    .update(messageTemplates)
+    .set({
+      audioKey: null,
+      audioUrl: null,
+      audioFileName: null,
+      audioMimeType: null,
+      audioSize: null,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .returning();
+
+  return updated[0] ?? null;
 }
 
 export { getLeadsByUser as getQueueForWindow };

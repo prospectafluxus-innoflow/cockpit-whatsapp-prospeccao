@@ -98,7 +98,7 @@ gcloud run services update prospectafluxus \
   --set-env-vars \
 "DATABASE_URL=postgresql://postgres:[SUA_SENHA]@db.[SEU_PROJETO].supabase.co:5432/postgres,\
 JWT_SECRET=[UMA_STRING_LONGA_ALEATORIA],\
-GEMINI_API_KEY=AQ.Ab8RN6KBe0B3flZqZApWdEST5pGFq9o7inSzq9wavzUxOhdC2w,\
+GEMINI_API_KEY=[CRIE_UMA_NOVA_CHAVE_NO_GOOGLE_AI_STUDIO],\
 CRON_SECRET=[OUTRA_STRING_LONGA_ALEATORIA],\
 NODE_ENV=production"
 ```
@@ -109,9 +109,7 @@ NODE_ENV=production"
 3. Selecione **URI** e copie
 
 ### Como gerar JWT_SECRET e CRON_SECRET:
-Use qualquer string longa e aleatória, por exemplo:
-- `ProspectaFluxus@InnoFlow2026#JWT!`
-- `ProspectaFluxus@InnoFlow2026#Cron!`
+Gere dois valores diferentes e imprevisíveis com `openssl rand -base64 48`. Nunca reutilize exemplos de documentação nem grave os valores no repositório.
 
 ---
 

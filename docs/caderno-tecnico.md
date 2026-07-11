@@ -1,484 +1,288 @@
-# Caderno Técnico — ProspectaFluxus
+# ProspectaFluxus — Caderno Técnico
 
-**Cockpit de Prospecção WhatsApp — Documentação Técnica**
-Versão 2.0 — Junho de 2026
+**Cockpit de Prospecção WhatsApp**
 
----
+**Versão 3.0 — 11 de julho de 2026**
 
 ## Sumário
 
-1. [Arquitetura Geral](#1-arquitetura-geral)
-2. [Stack Tecnológica](#2-stack-tecnológica)
-3. [Infraestrutura e Hospedagem](#3-infraestrutura-e-hospedagem)
-4. [Banco de Dados](#4-banco-de-dados)
-5. [Autenticação](#5-autenticação)
-6. [Módulos do Backend](#6-módulos-do-backend)
-7. [Módulos do Frontend](#7-módulos-do-frontend)
-8. [Importação de Planilha](#8-importação-de-planilha)
-9. [Sistema de Toques e Mensagens](#9-sistema-de-toques-e-mensagens)
-10. [Templates de Mensagem Personalizáveis](#10-templates-de-mensagem-personalizáveis)
-11. [Variáveis de Ambiente](#11-variáveis-de-ambiente)
-12. [Scripts de Migração](#12-scripts-de-migração)
-13. [Histórico de Mudanças](#13-histórico-de-mudanças)
+1. [Arquitetura](#1-arquitetura)
+2. [Stack tecnológica](#2-stack-tecnológica)
+3. [Infraestrutura](#3-infraestrutura)
+4. [Modelo de dados](#4-modelo-de-dados)
+5. [Autenticação e segurança](#5-autenticação-e-segurança)
+6. [Backend](#6-backend)
+7. [Frontend](#7-frontend)
+8. [Importação de planilhas](#8-importação-de-planilhas)
+9. [Áudio por toque](#9-áudio-por-toque)
+10. [Alertas Web Push](#10-alertas-web-push)
+11. [Integração Trello](#11-integração-trello)
+12. [Variáveis de ambiente](#12-variáveis-de-ambiente)
+13. [Migrações e publicação](#13-migrações-e-publicação)
+14. [Testes e manutenção](#14-testes-e-manutenção)
+15. [Histórico v3](#15-histórico-v3)
 
----
+## 1. Arquitetura
 
-## 1. Arquitetura Geral
+O ProspectaFluxus é uma aplicação web full-stack monolítica. O processo Node.js serve a API Express/tRPC e os recursos estáticos produzidos pelo Vite. O PostgreSQL é o sistema de registo de utilizadores, leads, cadências, dispositivos e integrações.
 
-O ProspectaFluxus é uma aplicação web **full-stack monolítica** composta por um servidor Node.js (Express + tRPC) que serve tanto a API quanto os arquivos estáticos do frontend React. O banco de dados é PostgreSQL hospedado no Supabase. O sistema é **100% autônomo** — não depende de nenhum serviço externo além do Railway (hospedagem) e Supabase (banco de dados).
-
-```
-┌─────────────────────────────────────────────────┐
-│                  Railway (Cloud Run)             │
-│                                                  │
-│  ┌──────────────┐    ┌──────────────────────┐   │
-│  │  React 19    │    │  Express 4 + tRPC 11 │   │
-│  │  (Vite build)│◄──►│  server/_core/       │   │
-│  └──────────────┘    └──────────┬───────────┘   │
-│                                 │               │
-└─────────────────────────────────┼───────────────┘
-                                  │
-                    ┌─────────────▼──────────────┐
-                    │  Supabase (PostgreSQL)      │
-                    │  aws-1-us-west-2.pooler     │
-                    └────────────────────────────┘
+```text
+Navegador / PWA
+      |
+      | HTTPS + sessão protegida
+      v
+Railway: Express + tRPC + React estático
+      |             |              |
+      |             |              +-- Trello REST API (opcional)
+      |             +-- Web Push para dispositivos inscritos
+      +-- PostgreSQL
+      +-- S3/R2 privado para áudios
 ```
 
----
+O sistema continua funcional sem Trello, email ou IA. Web Push depende de chaves VAPID e o áudio no Railway depende de armazenamento S3 compatível. As integrações opcionais devem falhar sem reverter o estado local do lead.
 
-## 2. Stack Tecnológica
+## 2. Stack tecnológica
 
-| Camada | Tecnologia | Versão |
+| Camada | Tecnologia principal | Linha de versão |
 |---|---|---|
 | Runtime | Node.js | 22.x |
-| Framework backend | Express | 4.x |
-| API layer | tRPC | 11.x |
-| ORM | Drizzle ORM | latest |
-| Banco de dados | PostgreSQL (Supabase) | 15.x |
-| Framework frontend | React | 19.x |
-| Build tool | Vite | 6.x |
-| Estilização | Tailwind CSS | 4.x |
-| Componentes UI | shadcn/ui | latest |
-| Gerenciador de pacotes | pnpm | 9.x |
-| Linguagem | TypeScript | 5.x |
-| Hash de senha | bcryptjs | 2.x |
-| JWT | jsonwebtoken | 9.x |
+| Backend HTTP | Express | 4.x |
+| API tipada | tRPC | 11.18.x |
+| ORM e migrações | Drizzle ORM / Drizzle Kit | 0.45.x / 0.31.x |
+| Banco | PostgreSQL | 15+ |
+| Frontend | React | 19.x |
+| Build | Vite / esbuild | 7.x / 0.25.x |
+| Estilos | Tailwind CSS | 4.x |
+| Pacotes | pnpm | 10.34.x fixado com integridade |
+| Linguagem | TypeScript | 5.9.x |
+| Sessão | JWT com `jose` | 6.x |
+| Password hashing | `bcryptjs` | 3.x |
+| Web Push | `web-push` | 3.6.x |
+| Excel no navegador | `read-excel-file` | 9.x |
 
----
+As resoluções transitivas de segurança e os patches do projeto ficam em `pnpm-workspace.yaml`. A instalação de publicação deve usar o lockfile congelado.
 
-## 3. Infraestrutura e Hospedagem
+## 3. Infraestrutura
 
 ### Railway
 
-O projeto é hospedado no Railway em modo **Autoscale** (serverless). O deploy é feito automaticamente via GitHub — qualquer push na branch `main` aciona um novo deploy.
+O Railway compila e inicia a aplicação conforme `railway.json`.
 
-- **URL de produção:** `prospectafluxus-production.up.railway.app`
-- **Porta:** definida pela variável `PORT` do Railway (não hardcoded)
-- **Comando de start:** `node dist/index.js`
-- **Comando de build:** `pnpm build`
+| Etapa | Comando |
+|---|---|
+| Build | `pnpm run build:prod` |
+| Start | `node dist/index.js` |
+| Reinício | Em falha, no máximo três tentativas |
 
-### Supabase
+O deploy da branch de produção pode ser automático. Por isso, alterações devem ser publicadas primeiro numa branch de revisão e só depois integradas com autorização.
 
-O banco de dados PostgreSQL está hospedado no Supabase com connection pooler ativado (modo `pooler` para compatibilidade com serverless).
+### PostgreSQL
 
-- **Connection string:** variável `DATABASE_URL` no Railway
-- **Host:** `aws-1-us-west-2.pooler.supabase.com`
+A aplicação usa a connection string em `DATABASE_URL`. A verificação de saúde ocorre em execução normal, mas é desativada no ambiente de testes unitários para evitar ligações laterais durante mocks.
 
-### Configuração do `railway.json`
+### Armazenamento de áudio
 
-```json
-{
-  "$schema": "https://railway.app/railway.schema.json",
-  "build": { "builder": "NIXPACKS" },
-  "deploy": {
-    "startCommand": "node dist/index.js",
-    "healthcheckPath": "/",
-    "healthcheckTimeout": 100,
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
-  }
-}
+No Railway, os áudios são guardados num bucket privado S3/R2 ou compatível. A infraestrutura integrada legada permanece suportada. O backend emite URLs assinados temporários somente depois de autenticar o pedido e verificar que o template pertence ao utilizador.
+
+### Agendamentos
+
+O endpoint de cron é `POST /api/cron/send-reminder`, protegido por `x-cron-secret`. Os períodos operacionais são `morning`, `afternoon` e `evening`. O agendador identifica o utilizador antes de enviar qualquer alerta.
+
+## 4. Modelo de dados
+
+As migrações ficam em `drizzle/` e são versionadas. As alterações v3 são aditivas.
+
+| Tabela | Responsabilidade |
+|---|---|
+| `users` | Conta, autenticação, aprovação e perfil |
+| `leads` | Dados do lead, estado da cadência, Kanban e sincronização Trello |
+| `daily_sends` | Registo diário dos toques enviados |
+| `send_schedules` | Horários, quantidades e identificadores das tarefas |
+| `message_templates` | Texto e metadados do áudio opcional por toque |
+| `push_subscriptions` | Subscrições Web Push por dispositivo e utilizador |
+| `trello_integrations` | Lista Trello e credenciais cifradas por utilizador |
+
+### Metadados de áudio
+
+`message_templates` associa o objeto privado ao toque sem guardar o binário no PostgreSQL. O modelo mantém chave de armazenamento, nome, MIME type, tamanho e data de atualização.
+
+### Web Push
+
+`push_subscriptions` tem endpoint único, hash para deduplicação e índice por utilizador. Chaves de subscrição pertencem ao dispositivo; endpoints expirados são removidos quando o fornecedor responde com estado de expiração.
+
+### Trello
+
+`trello_integrations` guarda o identificador da lista, o nome exibido, o estado ativo e o conteúdo cifrado. `leads` mantém o identificador do cartão, estado de sincronização, última falha e instante da tentativa. Estes campos permitem reintento e idempotência sem alterar o estado local do lead.
+
+## 5. Autenticação e segurança
+
+A API de negócio usa procedures protegidas. Toda consulta ou alteração sensível inclui `userId` derivado da sessão, nunca recebido como autoridade do navegador.
+
+| Controlo | Implementação |
+|---|---|
+| Sessão | JWT em cookie seguro, com `JWT_SECRET` fornecido por ambiente |
+| Password | Hash com `bcryptjs`; nunca registada em logs |
+| Áudio | Bucket privado, URL temporário e verificação de propriedade |
+| Trello | AES-256-GCM com AAD vinculada ao `userId` |
+| Web Push | Chave privada VAPID apenas no servidor |
+| Cron | Segredo independente no cabeçalho do pedido |
+| Upload | MIME type, extensão e tamanho validados no cliente e no servidor |
+| Segredos | Sem fallbacks literais; configuração somente por ambiente |
+
+As credenciais Trello são cifradas por `server/integrationCrypto.ts`. `INTEGRATION_ENCRYPTION_KEY` deve ter 32 bytes em hexadecimal ou Base64 e permanecer estável. A adulteração do conteúdo ou o uso numa conta diferente invalida a decifragem.
+
+O repositório esteve temporariamente público e versões antigas continham valores sensíveis. Esses valores devem ser revogados no fornecedor; a remoção no Git não substitui a rotação.
+
+## 6. Backend
+
+| Ficheiro | Responsabilidade relevante |
+|---|---|
+| `server/routers.ts` | Contratos tRPC, leads, templates, notificações e Trello |
+| `server/db.ts` | Consultas parametrizadas e isoladas por utilizador |
+| `server/storage.ts` | Upload e URLs assinados para armazenamento integrado ou S3 |
+| `server/_core/storageProxy.ts` | Autenticação e autorização no acesso ao áudio |
+| `server/_core/notification.ts` | Envio Web Push multi-dispositivo e limpeza de endpoints |
+| `server/scheduleHandler.ts` | Lembretes vinculados ao dono do agendamento |
+| `server/cronHandler.ts` | Execução global protegida por segredo |
+| `server/trello.ts` | Cliente Trello, timeout, deduplicação e sincronização |
+| `server/integrationCrypto.ts` | Cifragem autenticada das credenciais Trello |
+
+As falhas externas de Trello ou Web Push são tratadas por dispositivo/lead. Uma falha do Trello não reverte a transição local para **Respondeu**. Uma falha transitória de uma subscrição Web Push não bloqueia as demais.
+
+## 7. Frontend
+
+| Página ou recurso | Responsabilidade v3 |
+|---|---|
+| `CockpitPage.tsx` | Envio assistido, importação Excel e partilha de áudio |
+| `SchedulePage.tsx` | Horários, templates e gestão do áudio por toque |
+| `KanbanPage.tsx` | Estado Trello e reintento de sincronização |
+| `ProfilePage.tsx` | Ativação Web Push, teste e configuração Trello |
+| `useNotifications.ts` | Subscrição Web Push e estado do dispositivo |
+| `public/sw.js` | Receção e clique de notificações em segundo plano |
+| `public/manifest.webmanifest` | Instalação PWA e suporte móvel |
+
+O service worker não mantém temporizadores locais. A fonte de verdade para o momento dos alertas é o backend persistente, e o service worker apenas recebe e apresenta a mensagem.[1]
+
+## 8. Importação de planilhas
+
+O ficheiro `.xlsx` é processado localmente com `read-excel-file`; o conteúdo bruto não é enviado como ficheiro ao servidor.[2]
+
+1. O navegador lê os nomes das folhas e cada conjunto de linhas.
+2. Os cabeçalhos são normalizados de forma tolerante a variações.
+3. Linhas sem WhatsApp válido são descartadas.
+4. Leads válidos são enviados em lotes de 50.
+5. Somente o primeiro lote usa `replaceAll`.
+6. O progresso é apresentado ao utilizador.
+
+O antigo pacote `xlsx` foi removido porque a versão utilizada tinha vulnerabilidades sem correção disponível. A substituição preserva folhas múltiplas, camadas, cabeçalhos flexíveis e envio em lotes.
+
+## 9. Áudio por toque
+
+Cada um dos três templates pode ter um áudio opcional. O upload faz validação dupla, cria uma chave não previsível e guarda somente metadados no PostgreSQL.
+
+| Operação | Comportamento |
+|---|---|
+| Adicionar | Envia o binário ao storage privado e associa-o ao toque |
+| Reproduzir | Obtém URL temporário após autenticação |
+| Substituir | Associa o novo objeto ao template |
+| Remover | Elimina a associação; o texto permanece inalterado |
+| Partilhar no móvel | Usa a API nativa de partilha quando suportada |
+| Usar no computador | Faz download e abre o contacto no WhatsApp Web |
+
+A aplicação não tenta anexar automaticamente um ficheiro num site de terceiros. O utilizador mantém o controlo da partilha e do envio final.
+
+## 10. Alertas Web Push
+
+O servidor usa o protocolo Web Push com VAPID. Cada navegador cria uma subscrição e envia endpoint e chaves ao backend. A notificação pode chegar com a página fechada, desde que o sistema operativo permita atividade do serviço de push.[1]
+
+No iPhone, Web Push para aplicações web exige a instalação no Ecrã Principal e autorização solicitada por interação direta do utilizador.[3] No Android e em navegadores desktop compatíveis, a ativação pode ocorrer diretamente na aplicação.
+
+O fluxo inclui:
+
+1. Verificação de configuração VAPID pública no backend.
+2. Registo ou atualização idempotente da subscrição do dispositivo.
+3. Envio por utilizador em cada janela do cron.
+4. Abertura segura do cockpit ao clicar na notificação.
+5. Remoção automática de endpoints expirados.
+
+## 11. Integração Trello
+
+A API key e o token são introduzidos no Perfil e enviados apenas ao backend. O teste valida acesso à lista escolhida. O Trello aceita autenticação REST por key e token; a aplicação nunca devolve esses valores ao frontend depois de guardados.[4]
+
+A sincronização ocorre somente quando o lead entra em **Respondeu**. A idempotência usa três camadas:
+
+| Camada | Verificação |
+|---|---|
+| Local | Se `trelloCardId` já existe, não cria outro cartão |
+| Concorrência | Estado transitório impede duas criações simultâneas |
+| Remota | Marcador estável na descrição permite encontrar um cartão já criado |
+
+O cliente consulta os cartões da lista para reconciliar o marcador antes da criação.[5] Em falha, regista uma mensagem segura e disponibiliza reintento no Kanban.
+
+## 12. Variáveis de ambiente
+
+O ficheiro `env.example.txt` é a referência sem segredos. As variáveis principais são:
+
+| Grupo | Variáveis |
+|---|---|
+| Núcleo | `NODE_ENV`, `PORT`, `DATABASE_URL`, `JWT_SECRET`, `CRON_SECRET` |
+| Web Push | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| Trello | `INTEGRATION_ENCRYPTION_KEY` |
+| Áudio S3 | `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_FORCE_PATH_STYLE` |
+| IA opcional | `GEMINI_API_KEY`, `OPENROUTER_API_KEY` |
+| Email opcional | `RESEND_API_KEY`, `NOTIFICATION_EMAIL` |
+| Infraestrutura integrada | `BUILT_IN_FORGE_API_URL`, `BUILT_IN_FORGE_API_KEY` e variáveis legadas associadas |
+
+Nenhuma chave privada ou token deve usar prefixo `VITE_`, porque variáveis deste grupo podem ser incorporadas no bundle do navegador.
+
+## 13. Migrações e publicação
+
+O histórico versionado de migrações é a fonte de verdade. Para atualizar uma base existente:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm build:prod
+pnpm db:migrate
 ```
 
-> **Atenção:** o comando de migração (`node scripts/migrate.mjs`) **não deve** ser incluído no `startCommand` do Railway, pois o healthcheck tem timeout de ~5 minutos e a migração pode exceder esse tempo em conexões lentas. Execute as migrações manualmente via Supabase SQL Editor.
+`pnpm db:migrate` usa `DATABASE_URL` e aplica apenas migrações ainda não registadas pelo Drizzle. `scripts/migrate.mjs` é legado e não deve ser usado para a atualização v3.
 
----
+Antes da migração de produção, crie um backup verificável. As migrações v3 são aditivas, portanto um rollback da aplicação para a versão anterior não exige remover imediatamente tabelas ou colunas.
 
-## 4. Banco de Dados
+Consulte `DEPLOY_RAILWAY.md` para a sequência operacional, variáveis, verificação pós-deploy e rollback.
 
-### Tabelas
+## 14. Testes e manutenção
 
-#### `users`
-
-Armazena os usuários do sistema.
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | serial PK | ID numérico único |
-| `openId` | varchar(64) | ID OAuth externo (legado, não usado) |
-| `name` | text | Nome completo |
-| `email` | varchar(320) | E-mail único |
-| `loginMethod` | varchar(64) | Método de login (`own` para email+senha) |
-| `role` | enum | `user` ou `admin` |
-| `approvalStatus` | enum | `pending`, `approved`, `rejected` |
-| `whatsappOwn` | varchar(30) | WhatsApp do próprio usuário (lembretes) |
-| `passwordHash` | varchar(255) | Hash bcrypt da senha |
-| `resetToken` | varchar(128) | Token para redefinição de senha |
-| `resetTokenExpiresAt` | timestamp | Expiração do token de reset |
-| `createdAt` | timestamp | Data de criação |
-| `updatedAt` | timestamp | Última atualização |
-| `lastSignedIn` | timestamp | Último login |
-
-#### `leads`
-
-Armazena os leads importados da planilha.
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | serial PK | ID único |
-| `userId` | integer | FK para `users.id` |
-| `name` | varchar(255) | Nome completo do lead |
-| `firstName` | varchar(100) | Primeiro nome (extraído automaticamente) |
-| `company` | varchar(255) | Nome da empresa |
-| `whatsapp` | varchar(30) | Número WhatsApp (obrigatório) |
-| `score` | integer | Score de prioridade |
-| `layer` | enum | `A`, `B` ou `C` |
-| `size` | varchar(100) | Porte da empresa |
-| `employees` | integer | Número de funcionários |
-| `investment` | varchar(100) | Faixa de investimento |
-| `taxRegime` | varchar(100) | Regime tributário |
-| `participations` | integer | Número de participações em eventos |
-| `lastEvent` | varchar(100) | Último evento participado |
-| `status` | enum | `novo`, `toque1_enviado`, `toque2_enviado`, `toque3_enviado`, `respondeu`, `fechado`, `descartado` |
-| `kanbanColumn` | enum | Coluna atual no Kanban CRM |
-| `toque1SentAt` | timestamp | Data/hora do Toque 1 |
-| `toque2SentAt` | timestamp | Data/hora do Toque 2 |
-| `toque3SentAt` | timestamp | Data/hora do Toque 3 |
-| `respondedAt` | timestamp | Data/hora da resposta |
-| `notes` | text | Notas manuais |
-| `lastAiSuggestion` | text | Última sugestão gerada por IA |
-| `createdAt` | timestamp | Data de criação |
-| `updatedAt` | timestamp | Última atualização |
-
-#### `daily_sends`
-
-Registra cada toque enviado por dia, para controle do limite diário.
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | serial PK | ID único |
-| `userId` | integer | FK para `users.id` |
-| `leadId` | integer | FK para `leads.id` |
-| `touchNumber` | integer | Número do toque (1, 2 ou 3) |
-| `sentDate` | date | Data do envio |
-| `createdAt` | timestamp | Data de criação |
-
-#### `send_schedules`
-
-Configuração das janelas de horário por usuário.
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | serial PK | ID único |
-| `userId` | integer | FK para `users.id` (único por usuário) |
-| `morningEnabled` | integer | Janela Manhã ativa (0/1) |
-| `morningHour` | integer | Hora da janela Manhã (padrão: 8) |
-| `morningCount` | integer | Leads na janela Manhã (padrão: 2) |
-| `lunchEnabled` | integer | Janela Almoço ativa (0/1) |
-| `lunchHour` | integer | Hora da janela Almoço (padrão: 12) |
-| `lunchCount` | integer | Leads na janela Almoço (padrão: 2) |
-| `afternoonEnabled` | integer | Janela Meio da tarde ativa (0/1) |
-| `afternoonHour` | integer | Hora da janela Meio da tarde (padrão: 15) |
-| `afternoonCount` | integer | Leads na janela Meio da tarde (padrão: 2) |
-| `eveningEnabled` | integer | Janela Fim do dia ativa (0/1) |
-| `eveningHour` | integer | Hora da janela Fim do dia (padrão: 17) |
-| `eveningCount` | integer | Leads na janela Fim do dia (padrão: 2) |
-| `morningTaskUid` | varchar(65) | UID da tarefa agendada (Manhã) |
-| `lunchTaskUid` | varchar(65) | UID da tarefa agendada (Almoço) |
-| `afternoonTaskUid` | varchar(65) | UID da tarefa agendada (Tarde) |
-| `eveningTaskUid` | varchar(65) | UID da tarefa agendada (Noite) |
-
-#### `message_templates`
-
-Templates de mensagem personalizáveis por usuário.
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | serial PK | ID único |
-| `userId` | integer | FK para `users.id` |
-| `toque` | integer | Número do toque (1, 2 ou 3) |
-| `text` | text | Texto da mensagem com variáveis |
-| `createdAt` | timestamp | Data de criação |
-| `updatedAt` | timestamp | Última atualização |
-
-> **SQL de criação manual** (caso a tabela não exista no banco):
-> ```sql
-> CREATE TABLE IF NOT EXISTS "message_templates" (
->   "id" serial PRIMARY KEY NOT NULL,
->   "userId" integer NOT NULL,
->   "toque" integer NOT NULL,
->   "text" text NOT NULL,
->   "createdAt" timestamp DEFAULT now() NOT NULL,
->   "updatedAt" timestamp DEFAULT now() NOT NULL
-> );
-> ```
-
----
-
-## 5. Autenticação
-
-### Fluxo de autenticação própria (email + senha)
-
-O sistema usa autenticação **100% própria**, sem dependência de OAuth externo. O fluxo é:
-
-1. O usuário envia `email` + `password` para `trpc.authOwn.login`.
-2. O servidor busca o usuário pelo e-mail no banco.
-3. Verifica o status de aprovação (`approvalStatus === 'approved'`).
-4. Compara a senha com o hash bcrypt armazenado (`bcrypt.compare`).
-5. Gera um JWT assinado com `JWT_SECRET` contendo `{ sub: userId, role }`.
-6. Define o cookie `session` com `httpOnly: true`, `secure: true` (em produção), `sameSite: 'lax'`.
-
-### Verificação de sessão
-
-A cada requisição, o `server/_core/sdk.ts` (`authenticateRequest`) verifica:
-
-1. Extrai o cookie `session` da requisição.
-2. Verifica o JWT com `JWT_SECRET`.
-3. Se o `sub` for numérico, busca o usuário no banco pelo ID.
-4. Se `OAUTH_SERVER_URL` estiver vazio ou ausente, **não tenta fallback OAuth** — retorna `null` diretamente.
-
-### Configuração do Express para proxy
-
-O servidor usa `app.set('trust proxy', 1)` para que `req.protocol` reflita corretamente o HTTPS do Railway (que usa proxy reverso). Sem isso, o cookie seria criado sem a flag `Secure` e o navegador o rejeitaria.
-
-### Roles e aprovação
-
-- Novos usuários são criados com `role: 'user'` e `approvalStatus: 'pending'`.
-- Um admin precisa aprovar o acesso na página de Administração.
-- Procedures protegidas usam `protectedProcedure` (requer sessão válida).
-- Procedures de admin usam verificação manual de `ctx.user.role === 'admin'`.
-
----
-
-## 6. Módulos do Backend
-
-### `server/routers.ts`
-
-Arquivo principal de procedures tRPC. Organizado nos seguintes routers:
-
-| Router | Procedures | Descrição |
-|---|---|---|
-| `authOwn` | `login`, `logout`, `me`, `register`, `approve`, `reject`, `listUsers` | Autenticação e gestão de usuários |
-| `leads` | `list`, `upload`, `updateStatus`, `updateKanban`, `discard`, `addNote` | Gestão de leads |
-| `schedule` | `get`, `save`, `activate`, `deactivate` | Configuração de agendamento |
-| `dashboard` | `stats` | Métricas e estatísticas |
-| `messageTemplates` | `get`, `save` | Templates de mensagem |
-| `system` | `notifyOwner` | Notificações para o dono |
-
-### `server/db.ts`
-
-Helpers de banco de dados. Funções principais:
-
-- `getUserById(id)` — busca usuário por ID
-- `getUserByEmail(email)` — busca usuário por e-mail
-- `getLeadsByUser(userId)` — retorna todos os leads de um usuário
-- `insertLeads(userId, leads[])` — insere leads em lote (sem `.returning()` para performance)
-- `deleteLeadsByUser(userId)` — remove todos os leads de um usuário
-- `getMessageTemplates(userId)` — retorna templates ou padrões se não existirem
-- `saveMessageTemplate(userId, toque, text)` — cria ou atualiza um template (upsert)
-
-### `server/_core/sdk.ts`
-
-Módulo de autenticação. Função `authenticateRequest(req)`:
-
-- Lê o cookie `session`
-- Verifica o JWT com `getSessionSecret()` (usa `JWT_SECRET`)
-- Se `sub` for numérico, busca o usuário no banco
-- Se `OAUTH_SERVER_URL` estiver vazio, **não tenta OAuth** (autonomia total)
-
-### `server/_core/cookies.ts`
-
-Gerencia a criação e leitura de cookies de sessão. Em produção (`NODE_ENV === 'production'`), sempre define `secure: true` independente do `req.protocol`, garantindo compatibilidade com o proxy do Railway.
-
----
-
-## 7. Módulos do Frontend
-
-### Páginas principais
-
-| Arquivo | Rota | Descrição |
-|---|---|---|
-| `pages/LoginPage.tsx` | `/login` | Tela de login com email+senha |
-| `pages/CockpitPage.tsx` | `/` | Cockpit principal de prospecção |
-| `pages/KanbanPage.tsx` | `/kanban` | Kanban CRM |
-| `pages/DashboardPage.tsx` | `/dashboard` | Métricas e estatísticas |
-| `pages/SchedulePage.tsx` | `/agendamento` | Configuração de agendamento e templates |
-| `pages/AdminPage.tsx` | `/admin` | Administração de usuários |
-
-### Componentes relevantes
-
-- `DashboardLayout.tsx` — layout com sidebar, autenticação e perfil do usuário
-- `AIChatBox.tsx` — chat com IA integrado (disponível mas não ativado por padrão)
-
----
-
-## 8. Importação de Planilha
-
-### Fluxo técnico
-
-1. O usuário seleciona o arquivo `.xlsx` no frontend.
-2. O frontend usa `xlsx` (SheetJS) para parsear o arquivo localmente.
-3. Os leads são filtrados: apenas linhas com `whatsapp` válido são mantidas.
-4. Os leads são divididos em **lotes de 50** (`CHUNK_SIZE = 50`).
-5. Para cada lote, o frontend chama `trpc.leads.upload` via `utils.client.leads.upload.mutate()`.
-6. A barra de progresso é atualizada a cada lote concluído.
-7. No servidor, `deleteLeadsByUser(userId)` é chamado apenas no **primeiro lote** (`replaceAll: true`).
-8. Os lotes subsequentes fazem apenas `insertLeads` sem deletar.
-
-### Por que lotes de 50?
-
-Lotes maiores (150+) causavam timeout no Railway (180s por requisição). Com 50 leads por lote, cada requisição leva ~1-3 segundos, bem dentro do limite.
-
-### Mapeamento de colunas da planilha
-
-O frontend aceita variações de nome de coluna (case-insensitive):
-
-| Campo interno | Colunas aceitas na planilha |
+| Comando | Objetivo |
 |---|---|
-| `name` | `nome`, `name` |
-| `company` | `empresa`, `company` |
-| `whatsapp` | `whatsapp`, `telefone`, `celular`, `phone` |
-| `layer` | `camada`, `layer` |
-| `score` | `score`, `pontuação` |
-| `segment` | `segmento`, `segment` |
-| `size` | `porte`, `size` |
+| `pnpm check` | Verificação TypeScript sem emissão |
+| `pnpm test` | Regressão Vitest |
+| `pnpm build:prod` | Build equivalente ao Railway |
+| `pnpm audit --prod` | Auditoria das dependências de produção |
 
----
+A suíte v3 cobre entrega Web Push, limpeza de subscrições expiradas, comportamento sem VAPID, cifragem autenticada, isolamento Trello por utilizador, deduplicação local/remota, concorrência e registo de falhas externas.
 
-## 9. Sistema de Toques e Mensagens
+Os testes que dependem de serviços externos devem ser condicionais à presença da respetiva chave. Testes unitários não devem abrir ligações reais ao PostgreSQL.
 
-### Geração do link WhatsApp
+## 15. Histórico v3
 
-A função `buildWaLink(lead, toque, templates)` no `server/routers.ts`:
-
-1. Seleciona o template do toque (1, 2 ou 3) — personalizado ou padrão.
-2. Substitui `{firstName}` pelo primeiro nome do lead.
-3. Substitui `{company}` pelo nome da empresa do lead.
-4. Codifica o texto com `encodeURIComponent`.
-5. Retorna `https://wa.me/${whatsapp}?text=${encodedText}`.
-
-### Controle de limite diário
-
-A função `canSendToque(userId, leadId, touchNumber, today)` verifica se o lead já recebeu aquele toque hoje, consultando a tabela `daily_sends`. O limite é de **30 toques por dia** por usuário.
-
-### Atualização de status
-
-Quando o usuário clica em "Enviar Toque X", o frontend chama `trpc.leads.updateStatus` que:
-
-1. Atualiza `leads.status` para `toque{N}_enviado`.
-2. Atualiza `leads.kanbanColumn` para `Toque N Enviado`.
-3. Registra o timestamp `toque{N}SentAt`.
-4. Insere um registro em `daily_sends`.
-
----
-
-## 10. Templates de Mensagem Personalizáveis
-
-### Funcionamento
-
-Os templates são armazenados na tabela `message_templates` com `userId` e `toque` (1, 2 ou 3). Quando o usuário salva um template na página de Agendamento, o sistema faz um **upsert** (cria se não existe, atualiza se já existe).
-
-### Textos padrão (fallback)
-
-Se o usuário não tiver templates salvos, ou se a tabela `message_templates` não existir no banco (tratado com try/catch), o sistema usa os textos padrão definidos em `server/db.ts` na constante `DEFAULT_TEMPLATES`. Esses textos já contêm as variáveis `{firstName}` e `{company}`.
-
-### Variáveis disponíveis
-
-| Variável | Substituído por |
+| Área | Alteração |
 |---|---|
-| `{firstName}` | Primeiro nome do lead |
-| `{company}` | Nome da empresa do lead |
+| Áudio | Upload privado, gestão por toque e partilha assistida |
+| Alertas | Substituição de temporizadores locais por Web Push persistente |
+| PWA | Manifesto, ícones e instruções para iPhone |
+| Trello | Configuração cifrada, sincronização idempotente e reintento |
+| Excel | Substituição do parser vulnerável por alternativa mantida |
+| Segurança | Remoção de segredos incorporados e atualização das dependências |
+| Migrações | Alterações aditivas testadas numa base PostgreSQL descartável |
+| Documentação | Guia Railway, manual e exemplo de ambiente atualizados |
 
-### Procedure `messageTemplates.get`
+## Fontes técnicas
 
-Retorna os 3 templates do usuário. Se a tabela não existir (banco sem migração), retorna os padrões sem lançar erro.
-
-### Procedure `messageTemplates.save`
-
-Recebe `{ toque: 1|2|3, text: string }` e faz upsert na tabela. Requer sessão autenticada.
-
----
-
-## 11. Variáveis de Ambiente
-
-Todas as variáveis são configuradas no painel **Variables** do Railway.
-
-| Variável | Obrigatório | Descrição |
-|---|---|---|
-| `DATABASE_URL` | **Sim** | Connection string do Supabase PostgreSQL |
-| `JWT_SECRET` | **Sim** | Chave secreta para assinar JWTs de sessão |
-| `NODE_ENV` | **Sim** | `production` em produção |
-| `OAUTH_SERVER_URL` | Não | Pode ficar vazio — o sistema não usa OAuth externo |
-| `BUILT_IN_FORGE_API_KEY` | Não | Chave da API Manus (para funcionalidades de IA) |
-| `BUILT_IN_FORGE_API_URL` | Não | URL da API Manus |
-| `VITE_APP_ID` | Não | ID do app Manus (legado) |
-| `OWNER_OPEN_ID` | Não | Open ID do dono (legado) |
-| `GEMINI_API_KEY` | Não | Chave Gemini (para funcionalidades de IA) |
-| `CRON_SECRET` | Não | Secret para autenticar chamadas de cron externo |
-
-> **Importante:** `OAUTH_SERVER_URL` pode ser deixado como string vazia. O sistema detecta isso e não tenta autenticação OAuth, usando apenas o JWT local.
-
----
-
-## 12. Scripts de Migração
-
-### `scripts/migrate.mjs`
-
-Script de migração que cria todas as tabelas necessárias no banco de dados. **Deve ser executado manualmente** no Supabase SQL Editor ou via `node scripts/migrate.mjs` localmente com `DATABASE_URL` configurado.
-
-Tabelas criadas pelo script:
-- `users` (com enums `role` e `approval_status`)
-- `leads` (com enums `layer`, `status`, `kanban_column`)
-- `daily_sends`
-- `send_schedules`
-- `message_templates`
-
-> **Não inclua o migrate no `startCommand` do Railway** — o healthcheck tem timeout de ~5 minutos e o migrate pode excedê-lo em conexões lentas ao Supabase.
-
----
-
-## 13. Histórico de Mudanças
-
-### v2.0 — Junho de 2026
-
-**Autenticação autônoma**
-- Removida dependência do Manus OAuth (`OAUTH_SERVER_URL`)
-- `sdk.ts` modificado: se `OAUTH_SERVER_URL` estiver vazio, não tenta fallback OAuth
-- `cookies.ts` modificado: em produção, `secure: true` sempre (independente de `req.protocol`)
-- `server/_core/index.ts`: adicionado `app.set('trust proxy', 1)` para compatibilidade com proxy do Railway
-
-**Importação de planilha**
-- Lote reduzido de 150 para **50 leads** por requisição (evita timeout no Railway)
-- Removido `.returning()` do `insertLeads` (melhora performance no servidor)
-- Adicionada **barra de progresso visual** com contador `X / Y` durante importação
-
-**Templates de mensagem personalizáveis**
-- Nova tabela `message_templates` no schema
-- Procedures `messageTemplates.get` e `messageTemplates.save`
-- Seção "Mensagens dos Toques" na página de Agendamento
-- Textos padrão atualizados com mensagens reais da InnoFlow
-- Try/catch defensivo: se tabela não existir, usa textos padrão sem quebrar
-
-**Correções de bugs**
-- Fix: leads não apareciam no Cockpit após relogin (causa: cookie sem flag `Secure` por falta de `trust proxy`)
-- Fix: `railway.json` revertido para `startCommand` simples (sem migrate, que causava healthcheck failure)
-
-### v1.0 — Maio de 2026
-
-- Versão inicial com Cockpit, Kanban CRM, Dashboard, Agendamento e Administração
-- Autenticação via Manus OAuth
-- Importação de planilha em lotes de 150 leads
-
----
-
-*Documentação técnica elaborada para uso interno da InnoFlow — ProspectaFluxus v2.0*
+[1]: https://developer.mozilla.org/en-US/docs/Web/API/Push_API "MDN — Push API"
+[2]: https://github.com/catamphetamine/read-excel-file "read-excel-file — documentação oficial"
+[3]: https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/ "WebKit — Web Push em iOS e iPadOS"
+[4]: https://developer.atlassian.com/cloud/trello/guides/rest-api/authorization/ "Atlassian — autorização REST do Trello"
+[5]: https://developer.atlassian.com/cloud/trello/rest/api-group-lists/ "Atlassian — cartões de uma lista"

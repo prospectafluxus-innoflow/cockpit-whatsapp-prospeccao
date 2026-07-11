@@ -4,9 +4,12 @@
  */
 import postgres from "postgres";
 
-const connectionString =
-  process.env.DATABASE_URL ||
-  "postgresql://postgres.blqtjvftkamzofpltlrj:AAvanTI%231213@aws-1-us-west-2.pooler.supabase.com:6543/postgres";
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  console.error("[migrate] DATABASE_URL is required.");
+  process.exit(1);
+}
 
 console.log("[migrate] Connecting to database...");
 

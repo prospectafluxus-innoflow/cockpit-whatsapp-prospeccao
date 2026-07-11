@@ -50,8 +50,11 @@ import {
   SkipForward,
   ChevronDown,
   ChevronUp,
+  Music2,
+  Share2,
+  Loader2,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import readExcelFile from "read-excel-file/browser";
 
 const DAILY_LIMIT = 30;
 
@@ -68,6 +71,12 @@ type Lead = {
   nextToque: number;
   canSendNow: boolean;
   waLink: string | null;
+  audio: {
+    url: string;
+    fileName: string;
+    mimeType: string;
+    size: number;
+  } | null;
   toque1SentAt: Date | null;
   toque2SentAt: Date | null;
   toque3SentAt: Date | null;
@@ -111,6 +120,7 @@ export default function CockpitPage() {
   });
   const [discardConfirm, setDiscardConfirm] = useState<Lead | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [sharingAudioFor, setSharingAudioFor] = useState<number | null>(null);
   const [importProgress, setImportProgress] = useState<{ current: number; total: number } | null>(null);
   const [showReminderBanner, setShowReminderBanner] = useState(() => {
     return localStorage.getItem("prospectafluxus_reminder_banner_dismissed") !== "1";
@@ -201,175 +211,207 @@ export default function CockpitPage() {
     toast.success("CSV exportado!");
   };
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: "array" });
-
-        // Mapeamento de abas para camadas
-        // Suporta: "Camada A — ICP", "Camada B — ICP", "Camada C — ICP" (com travessão especial)
-        // e variações como "Camada A", "Camada B", "Camada C"
-        const layerSheets: Record<string, "A" | "B" | "C"> = {};
-        for (const name of wb.SheetNames) {
-          const normalized = name.toLowerCase().replace(/[\u2014\u2013\-]/g, "-").trim();
-          if (normalized.includes("camada a")) layerSheets[name] = "A";
-          else if (normalized.includes("camada b")) layerSheets[name] = "B";
-          else if (normalized.includes("camada c")) layerSheets[name] = "C";
-        }
-
-        if (Object.keys(layerSheets).length === 0) {
-          toast.error(`Nenhuma aba de camada encontrada. Abas encontradas: ${wb.SheetNames.join(", ")}. Certifique-se de que as abas se chamam "Camada A — ICP", "Camada B — ICP" ou "Camada C — ICP".`);
-          setUploading(false);
-          return;
-        }
-
-        const allLeads: any[] = [];
-
-        for (const [sheetName, layer] of Object.entries(layerSheets)) {
-          const ws = wb.Sheets[sheetName]!;
-          // header: 2 = usa a linha 2 como cabeçalho (linha 1 é título da aba)
-          const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "", header: 1 });
-
-          if (rows.length < 2) continue;
-
-          // Linha 0 pode ser título, linha 1 é o cabeçalho real
-          // Detecta automaticamente qual linha é o cabeçalho (procura por "Nome" ou "WhatsApp")
-          let headerRowIndex = 0;
-          for (let i = 0; i < Math.min(3, rows.length); i++) {
-            const row = rows[i] as any[];
-            const rowStr = row.map(String).join(" ").toLowerCase();
-            if (rowStr.includes("nome") || rowStr.includes("whatsapp") || rowStr.includes("telefone")) {
-              headerRowIndex = i;
-              break;
-            }
-          }
-
-          const headers = (rows[headerRowIndex] as any[]).map(String);
-          const dataRows = rows.slice(headerRowIndex + 1);
-
-          for (const rawRow of dataRows) {
-            // Monta row com lookup case-insensitive
-            const rowRaw: Record<string, string> = {};
-            headers.forEach((h, i) => { rowRaw[h] = String((rawRow as any[])[i] ?? ""); });
-            // Cria proxy case-insensitive
-            const row = new Proxy(rowRaw, {
-              get(target, prop: string) {
-                if (prop in target) return target[prop];
-                const lower = prop.toLowerCase();
-                const found = Object.keys(target).find(k => k.toLowerCase() === lower);
-                return found ? target[found] : undefined;
-              }
-            }) as Record<string, string>;
-
-            const name = row["Nome"] || row["name"] || "";
-            const whatsapp = String(
-              row["WhatsApp"] || row["Telefone"] || row["Celular"] || row["Phone"] || ""
-            ).replace(/\D/g, "");
-
-            if (!name || !whatsapp || whatsapp.length < 10) continue;
-
-            allLeads.push({
-              name: String(name).trim(),
-              firstName: String(name).split(" ")[0] ?? String(name),
-              company: String(row["Empresa"] || row["empresa"] || row["Razão Social"] || "").trim() || undefined,
-              whatsapp,
-              score: Number(row["Score"] || row["score"] || row["Pontuação"] || 0) || 0,
-              layer,
-              segment: String(row["Segmento"] || row["segmento"] || row["Segment"] || row["Setor"] || row["setor"] || "").trim() || undefined,
-              size: String(row["Porte"] || row["porte"] || "").trim() || undefined,
-              employees: Number(row["Func."] || row["Funcionários"] || row["funcionarios"] || row["Colaboradores"] || 0) || undefined,
-              investment: String(row["Investe Mkt"] || row["Investimento Mkt"] || row["investment"] || "").trim() || undefined,
-              taxRegime: String(row["Regime"] || row["Regime Tributário"] || row["regime"] || "").trim() || undefined,
-              participations: Number(row["Part."] || row["Participações"] || row["participacoes"] || 0) || undefined,
-              lastEvent: String(row["Último evento"] || row["Ultimo Evento"] || row["ultimo_evento"] || "").trim() || undefined,
-              // Colunas opcionais para leads já trabalhados
-              toque: (() => {
-                const t = Number(row["Toque"] || row["toque"] || row["Toques"] || 0);
-                return (t >= 1 && t <= 3) ? t : undefined;
-              })(),
-              statusImport: (() => {
-                const s = String(row["Status"] || row["status"] || "").trim().toLowerCase()
-                  .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                const map: Record<string, string> = {
-                  "novo": "novo",
-                  "respondeu": "respondeu",
-                  "nao respondeu": "nao_respondeu",
-                  "nao_respondeu": "nao_respondeu",
-                  "nao respondido": "nao_respondeu",
-                  "descartado": "descartado",
-                  "fechado": "fechado",
-                  "ganho": "fechado",
-                };
-                return (map[s] as any) || undefined;
-              })(),
-            });
-          }
-        }
-
-        if (allLeads.length === 0) {
-          toast.error("Nenhum lead encontrado nas abas. Verifique se os cabeçalhos incluem 'Nome' e 'WhatsApp'.");
-          setUploading(false);
-          return;
-        }
-
-        // Importar em lotes de 50 leads por requisição separada
-        // para evitar timeout no Railway (180s limit)
-        const BATCH_SIZE = 50;
-        const batches: any[][] = [];
-        for (let i = 0; i < allLeads.length; i += BATCH_SIZE) {
-          batches.push(allLeads.slice(i, i + BATCH_SIZE));
-        }
-
-        setImportProgress({ current: 0, total: allLeads.length });
-
-        (async () => {
-          let totalInserted = 0;
-          try {
-            for (let b = 0; b < batches.length; b++) {
-              const batch = batches[b]!;
-              await utils.client.leads.upload.mutate({
-                leads: batch,
-                replaceAll: b === 0, // só limpa na primeira requisição
-              });
-              totalInserted += batch.length;
-              setImportProgress({ current: totalInserted, total: allLeads.length });
-            }
-            toast.success(`${totalInserted} leads importados com sucesso!`);
-            utils.leads.list.invalidate();
-            utils.dashboard.metrics.invalidate();
-          } catch (err: any) {
-            // Se deu erro mas já importou alguns, recarrega e avisa
-            if (totalInserted > 0) {
-              utils.leads.list.invalidate();
-              utils.dashboard.metrics.invalidate();
-              toast.warning(`${totalInserted} de ${allLeads.length} leads importados. Reimporte a planilha para completar.`);
-            } else {
-              toast.error(`Erro na importação: ${err?.message?.slice(0, 100) ?? 'Tente novamente.'}`);
-            }
-          } finally {
-            setUploading(false);
-            setImportProgress(null);
-          }
-        })();
-      } catch (err) {
-        toast.error("Erro ao ler a planilha. Verifique o formato.");
-        setUploading(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
     e.target.value = "";
-  }, [uploadLeads]);
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      toast.error("Use uma planilha no formato .xlsx.");
+      return;
+    }
+
+    setUploading(true);
+    let totalInserted = 0;
+
+    try {
+      const workbook = await readExcelFile(file);
+      const sheetNames = workbook.map((sheet) => sheet.sheet);
+
+      // Mapeamento de abas para camadas.
+      // Suporta "Camada A — ICP", "Camada B — ICP", "Camada C — ICP" e variações.
+      const layerSheets = workbook.flatMap((sheet) => {
+        const normalized = sheet.sheet.toLowerCase().replace(/[\u2014\u2013\-]/g, "-").trim();
+        const layer = normalized.includes("camada a")
+          ? "A"
+          : normalized.includes("camada b")
+            ? "B"
+            : normalized.includes("camada c")
+              ? "C"
+              : null;
+        return layer ? [{ sheet, layer: layer as "A" | "B" | "C" }] : [];
+      });
+
+      if (layerSheets.length === 0) {
+        toast.error(`Nenhuma aba de camada encontrada. Abas encontradas: ${sheetNames.join(", ")}. Certifique-se de que as abas se chamam "Camada A — ICP", "Camada B — ICP" ou "Camada C — ICP".`);
+        return;
+      }
+
+      const allLeads: any[] = [];
+      const cellToString = (value: unknown) => value == null ? "" : String(value);
+
+      for (const { sheet, layer } of layerSheets) {
+        const rows = sheet.data as unknown[][];
+        if (rows.length < 2) continue;
+
+        // A primeira linha pode ser um título. O cabeçalho é procurado nas três primeiras linhas.
+        let headerRowIndex = 0;
+        for (let i = 0; i < Math.min(3, rows.length); i++) {
+          const rowStr = (rows[i] ?? []).map(cellToString).join(" ").toLowerCase();
+          if (rowStr.includes("nome") || rowStr.includes("whatsapp") || rowStr.includes("telefone")) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        const headers = (rows[headerRowIndex] ?? []).map(cellToString);
+        const dataRows = rows.slice(headerRowIndex + 1);
+
+        for (const rawRow of dataRows) {
+          const rowRaw: Record<string, string> = {};
+          headers.forEach((header, index) => {
+            rowRaw[header] = cellToString(rawRow[index]);
+          });
+
+          const row = new Proxy(rowRaw, {
+            get(target, prop: string) {
+              if (prop in target) return target[prop];
+              const lower = prop.toLowerCase();
+              const found = Object.keys(target).find((key) => key.toLowerCase() === lower);
+              return found ? target[found] : undefined;
+            },
+          }) as Record<string, string>;
+
+          const name = row["Nome"] || row["name"] || "";
+          const whatsapp = String(
+            row["WhatsApp"] || row["Telefone"] || row["Celular"] || row["Phone"] || ""
+          ).replace(/\D/g, "");
+
+          if (!name || !whatsapp || whatsapp.length < 10) continue;
+
+          allLeads.push({
+            name: String(name).trim(),
+            firstName: String(name).split(" ")[0] ?? String(name),
+            company: String(row["Empresa"] || row["empresa"] || row["Razão Social"] || "").trim() || undefined,
+            whatsapp,
+            score: Number(row["Score"] || row["score"] || row["Pontuação"] || 0) || 0,
+            layer,
+            segment: String(row["Segmento"] || row["segmento"] || row["Segment"] || row["Setor"] || row["setor"] || "").trim() || undefined,
+            size: String(row["Porte"] || row["porte"] || "").trim() || undefined,
+            employees: Number(row["Func."] || row["Funcionários"] || row["funcionarios"] || row["Colaboradores"] || 0) || undefined,
+            investment: String(row["Investe Mkt"] || row["Investimento Mkt"] || row["investment"] || "").trim() || undefined,
+            taxRegime: String(row["Regime"] || row["Regime Tributário"] || row["regime"] || "").trim() || undefined,
+            participations: Number(row["Part."] || row["Participações"] || row["participacoes"] || 0) || undefined,
+            lastEvent: String(row["Último evento"] || row["Ultimo Evento"] || row["ultimo_evento"] || "").trim() || undefined,
+            toque: (() => {
+              const toque = Number(row["Toque"] || row["toque"] || row["Toques"] || 0);
+              return toque >= 1 && toque <= 3 ? toque : undefined;
+            })(),
+            statusImport: (() => {
+              const status = String(row["Status"] || row["status"] || "").trim().toLowerCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+              const statusMap: Record<string, string> = {
+                novo: "novo",
+                respondeu: "respondeu",
+                "nao respondeu": "nao_respondeu",
+                nao_respondeu: "nao_respondeu",
+                "nao respondido": "nao_respondeu",
+                descartado: "descartado",
+                fechado: "fechado",
+                ganho: "fechado",
+              };
+              return (statusMap[status] as any) || undefined;
+            })(),
+          });
+        }
+      }
+
+      if (allLeads.length === 0) {
+        toast.error("Nenhum lead encontrado nas abas. Verifique se os cabeçalhos incluem 'Nome' e 'WhatsApp'.");
+        return;
+      }
+
+      const BATCH_SIZE = 50;
+      const batches: any[][] = [];
+      for (let i = 0; i < allLeads.length; i += BATCH_SIZE) {
+        batches.push(allLeads.slice(i, i + BATCH_SIZE));
+      }
+
+      setImportProgress({ current: 0, total: allLeads.length });
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex]!;
+        await utils.client.leads.upload.mutate({
+          leads: batch,
+          replaceAll: batchIndex === 0,
+        });
+        totalInserted += batch.length;
+        setImportProgress({ current: totalInserted, total: allLeads.length });
+      }
+
+      toast.success(`${totalInserted} leads importados com sucesso!`);
+      utils.leads.list.invalidate();
+      utils.dashboard.metrics.invalidate();
+    } catch (error: any) {
+      if (totalInserted > 0) {
+        utils.leads.list.invalidate();
+        utils.dashboard.metrics.invalidate();
+        toast.warning(`${totalInserted} leads foram importados antes de ocorrer uma falha. Reimporte a planilha para completar.`);
+      } else {
+        const detail = typeof error?.message === "string" ? error.message.slice(0, 100) : "Verifique o formato do ficheiro.";
+        toast.error(`Erro ao importar a planilha: ${detail}`);
+      }
+    } finally {
+      setUploading(false);
+      setImportProgress(null);
+    }
+  }, [utils]);
 
   const handleSend = (lead: Lead) => {
     if (!lead.waLink) return;
-    window.open(lead.waLink, "_blank");
+    window.open(lead.waLink, "_blank", "noopener,noreferrer");
     registerSend.mutate({ leadId: lead.id });
+  };
+
+  const handleShareAudio = async (lead: Lead) => {
+    if (!lead.audio) return;
+    setSharingAudioFor(lead.id);
+
+    try {
+      const response = await fetch(lead.audio.url, { credentials: "include" });
+      if (!response.ok) throw new Error("Não foi possível carregar o áudio.");
+      const blob = await response.blob();
+      const file = new File([blob], lead.audio.fileName, {
+        type: lead.audio.mimeType || blob.type || "audio/mpeg",
+      });
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Áudio do toque ${lead.nextToque}`,
+          text: `Áudio para ${lead.firstName ?? lead.name}`,
+        });
+        return;
+      }
+
+      const downloadUrl = URL.createObjectURL(file);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = lead.audio.fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
+
+      const phone = lead.whatsapp.replace(/\D/g, "");
+      window.open(`https://wa.me/55${phone}`, "_blank", "noopener,noreferrer");
+      toast.info("Áudio transferido. Anexe o ficheiro na conversa do WhatsApp.", { duration: 6000 });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      toast.error(error instanceof Error ? error.message : "Não foi possível partilhar o áudio.");
+    } finally {
+      setSharingAudioFor(null);
+    }
   };
 
   const handleResponded = (lead: Lead) => {
@@ -417,7 +459,7 @@ export default function CockpitPage() {
               <Upload className="h-3.5 w-3.5" />
               {uploading ? "Importando..." : "Importar Planilha"}
             </Button>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileUpload} />
+            <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={handleFileUpload} />
           </div>
         </div>
 
@@ -584,6 +626,8 @@ export default function CockpitPage() {
                   index={i}
                   todaySends={todaySends}
                   onSend={handleSend}
+                  onShareAudio={handleShareAudio}
+                  sharingAudio={sharingAudioFor === lead.id}
                   onResponded={handleResponded}
                   onNotResponded={() => updateStatus.mutate({ leadId: lead.id, status: "nao_respondeu" })}
                   onDiscard={() => setDiscardConfirm(lead)}
@@ -609,6 +653,8 @@ export default function CockpitPage() {
                   index={i}
                   todaySends={todaySends}
                   onSend={handleSend}
+                  onShareAudio={handleShareAudio}
+                  sharingAudio={sharingAudioFor === lead.id}
                   onResponded={handleResponded}
                   onNotResponded={() => {}}
                   onDiscard={() => setDiscardConfirm(lead)}
@@ -709,6 +755,8 @@ function LeadCard({
   index,
   todaySends,
   onSend,
+  onShareAudio,
+  sharingAudio,
   onResponded,
   onNotResponded,
   onDiscard,
@@ -719,6 +767,8 @@ function LeadCard({
   index: number;
   todaySends: number;
   onSend: (l: Lead) => void;
+  onShareAudio: (l: Lead) => void;
+  sharingAudio: boolean;
   onResponded: (l: Lead) => void;
   onNotResponded: (l: Lead) => void;
   onDiscard: (l: Lead) => void;
@@ -855,6 +905,19 @@ function LeadCard({
         })}
       </div>
 
+      {lead.canSendNow && lead.audio && !readonly && (
+        <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-medium text-primary">
+            <Music2 className="h-3.5 w-3.5" />
+            Áudio associado ao Toque {lead.nextToque}
+            <span className="truncate text-muted-foreground">· {lead.audio.fileName}</span>
+          </div>
+          <audio controls preload="metadata" src={lead.audio.url} className="h-9 w-full max-w-xl">
+            O seu navegador não suporta reprodução de áudio.
+          </audio>
+        </div>
+      )}
+
       {/* Ações */}
       {!readonly && (
         <div className="flex items-center gap-2 mt-4 flex-wrap">
@@ -866,8 +929,24 @@ function LeadCard({
               disabled={limitReached}
             >
               <ExternalLink className="h-3.5 w-3.5" />
-              Enviar Toque {lead.nextToque}
+              Enviar texto do Toque {lead.nextToque}
               {limitReached && <AlertTriangle className="h-3.5 w-3.5" />}
+            </Button>
+          )}
+          {lead.canSendNow && lead.audio && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2 border-primary/40 text-primary hover:bg-primary/10"
+              onClick={() => onShareAudio(lead)}
+              disabled={sharingAudio}
+            >
+              {sharingAudio ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Share2 className="h-3.5 w-3.5" />
+              )}
+              Partilhar áudio
             </Button>
           )}
           <Button

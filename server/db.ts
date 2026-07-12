@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
-import { eq, and, sql, count, or, desc, asc } from "drizzle-orm";
+import { eq, and, sql, count, or, desc, asc, isNull } from "drizzle-orm";
 import {
   users,
   leads,
@@ -169,6 +169,22 @@ export async function getLeadById(
     .where(and(eq(leads.id, id), eq(leads.userId, userId)))
     .limit(1);
   return rows[0] ?? null;
+}
+
+export async function getRespondedLeadsWithoutTrelloCard(
+  userId: number
+): Promise<Lead[]> {
+  return db
+    .select()
+    .from(leads)
+    .where(
+      and(
+        eq(leads.userId, userId),
+        or(eq(leads.status, "respondeu"), eq(leads.kanbanColumn, "Respondeu")),
+        isNull(leads.trelloCardId)
+      )
+    )
+    .orderBy(asc(leads.createdAt));
 }
 
 export async function insertLeads(data: InsertLead[]): Promise<void> {

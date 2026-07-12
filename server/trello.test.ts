@@ -12,7 +12,7 @@ vi.mock("./integrationCrypto", () => ({
 }));
 
 import * as db from "./db";
-import { syncLeadToTrello } from "./trello";
+import { listBoardLists, listTrelloBoards, syncLeadToTrello } from "./trello";
 
 const integration = {
   id: 1,
@@ -67,6 +67,51 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+describe("descoberta de quadros e listas do Trello", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lista apenas quadros abertos, ordenados por nome, sem credenciais no URL", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse([
+      { id: "board-z", name: "Vendas", url: "https://trello.com/b/z", closed: false },
+      { id: "board-a", name: "Comercial", url: "https://trello.com/b/a", closed: false },
+      { id: "board-x", name: "Arquivo", url: "https://trello.com/b/x", closed: true },
+    ]));
+
+    await expect(listTrelloBoards({ apiKey: "abc123", token: "token456" })).resolves.toEqual([
+      { id: "board-a", name: "Comercial", url: "https://trello.com/b/a" },
+      { id: "board-z", name: "Vendas", url: "https://trello.com/b/z" },
+    ]);
+
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!;
+    expect(String(url)).toContain("/members/me/boards");
+    expect(String(url)).not.toContain("abc123");
+    expect(String(url)).not.toContain("token456");
+    expect((init?.headers as Record<string, string>).Authorization).toContain("oauth_token=\"token456\"");
+  });
+
+  it("lista apenas listas abertas do quadro selecionado", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse([
+      { id: "list-b", name: "Respondidos", closed: false },
+      { id: "list-a", name: "Novos", closed: false },
+      { id: "list-x", name: "Antigos", closed: true },
+    ]));
+
+    await expect(listBoardLists("board123", { apiKey: "abc123", token: "token456" })).resolves.toEqual([
+      { id: "list-a", name: "Novos" },
+      { id: "list-b", name: "Respondidos" },
+    ]);
+
+    expect(String(vi.mocked(fetch).mock.calls[0]![0])).toContain("/boards/board123/lists");
+  });
+});
 
 describe("sincronização de leads com o Trello", () => {
   beforeEach(() => {

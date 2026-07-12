@@ -33,7 +33,10 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [trelloApiKey, setTrelloApiKey] = useState("");
   const [trelloToken, setTrelloToken] = useState("");
+  const [trelloBoardId, setTrelloBoardId] = useState("");
   const [trelloListId, setTrelloListId] = useState("");
+  const [trelloBoards, setTrelloBoards] = useState<Array<{ id: string; name: string; url?: string }>>([]);
+  const [trelloLists, setTrelloLists] = useState<Array<{ id: string; name: string }>>([]);
 
   const {
     permission,
@@ -97,6 +100,25 @@ export default function ProfilePage() {
     },
   });
 
+  const loadTrelloBoards = trpc.trello.listBoards.useMutation({
+    onSuccess: boards => {
+      setTrelloBoards(boards);
+      setTrelloBoardId(current => boards.some(board => board.id === current) ? current : "");
+      setTrelloLists([]);
+      if (boards.length === 0) toast.info("Nenhum quadro aberto foi encontrado nesta conta Trello.");
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const loadTrelloLists = trpc.trello.listBoardLists.useMutation({
+    onSuccess: lists => {
+      setTrelloLists(lists);
+      setTrelloListId(current => lists.some(list => list.id === current) ? current : "");
+      if (lists.length === 0) toast.info("Este quadro não possui listas abertas.");
+    },
+    onError: error => toast.error(error.message),
+  });
+
   const saveTrello = trpc.trello.save.useMutation({
     onSuccess: async ({ listName }) => {
       setTrelloApiKey("");
@@ -122,6 +144,46 @@ export default function ProfilePage() {
     },
     onError: error => toast.error(error.message),
   });
+
+  const syncRespondedTrello = trpc.trello.syncResponded.useMutation({
+    onSuccess: summary => {
+      if (summary.total === 0) {
+        toast.success("Todos os leads respondidos já estão sincronizados com o Trello.");
+      } else if (summary.failed > 0) {
+        toast.warning(`${summary.synced} lead(s) sincronizado(s) e ${summary.failed} com falha. Pode tentar novamente sem criar duplicados.`);
+      } else {
+        toast.success(`${summary.synced} lead(s) respondido(s) sincronizado(s) com sucesso.`);
+      }
+      void utils.leads.list.invalidate();
+      void utils.trello.status.invalidate();
+    },
+    onError: error => toast.error(error.message),
+  });
+
+  const trelloCredentialDraft = () => trelloApiKey && trelloToken
+    ? { apiKey: trelloApiKey, token: trelloToken }
+    : {};
+
+  const handleLoadTrelloBoards = () => {
+    if (Boolean(trelloApiKey) !== Boolean(trelloToken)) {
+      toast.error("Informe a API key e o token em conjunto.");
+      return;
+    }
+    if (!trelloStatus?.connected && (!trelloApiKey || !trelloToken)) {
+      toast.error("Informe a API key e o token para carregar os quadros.");
+      return;
+    }
+    loadTrelloBoards.mutate(trelloCredentialDraft());
+  };
+
+  const handleTrelloBoardChange = (boardId: string) => {
+    setTrelloBoardId(boardId);
+    setTrelloListId("");
+    setTrelloLists([]);
+    if (boardId) {
+      loadTrelloLists.mutate({ boardId, ...trelloCredentialDraft() });
+    }
+  };
 
   const handleSave = () => {
     const cleaned = whatsappOwn.replace(/\D/g, "");
@@ -430,7 +492,13 @@ export default function ProfilePage() {
                     type="password"
                     autoComplete="new-password"
                     value={trelloApiKey}
-                    onChange={event => setTrelloApiKey(event.target.value.trim())}
+                    onChange={event => {
+                      setTrelloApiKey(event.target.value.trim());
+                      setTrelloBoards([]);
+                      setTrelloLists([]);
+                      setTrelloBoardId("");
+                      setTrelloListId("");
+                    }}
                     placeholder={trelloStatus.connected ? "Deixe vazio para manter a atual" : "Cole a API key"}
                     className="bg-muted/30"
                   />
@@ -441,24 +509,69 @@ export default function ProfilePage() {
                     type="password"
                     autoComplete="new-password"
                     value={trelloToken}
-                    onChange={event => setTrelloToken(event.target.value.trim())}
+                    onChange={event => {
+                      setTrelloToken(event.target.value.trim());
+                      setTrelloBoards([]);
+                      setTrelloLists([]);
+                      setTrelloBoardId("");
+                      setTrelloListId("");
+                    }}
                     placeholder={trelloStatus.connected ? "Deixe vazio para manter o atual" : "Cole o token"}
                     className="bg-muted/30"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium">ID da lista que receberá os leads</label>
-                  <Input
-                    value={trelloListId}
-                    onChange={event => setTrelloListId(event.target.value.trim())}
-                    placeholder="Ex.: 64f1a2b3c4d5e6f789012345"
-                    className="bg-muted/30"
-                  />
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleLoadTrelloBoards}
+                  disabled={loadTrelloBoards.isPending || Boolean(trelloApiKey) !== Boolean(trelloToken)}
+                  className="gap-2 justify-self-start"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadTrelloBoards.isPending ? "animate-spin" : ""}`} />
+                  {loadTrelloBoards.isPending ? "A carregar quadros..." : "Carregar os meus quadros"}
+                </Button>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="trello-board">Quadro</label>
+                    <select
+                      id="trello-board"
+                      value={trelloBoardId}
+                      onChange={event => handleTrelloBoardChange(event.target.value)}
+                      disabled={loadTrelloBoards.isPending || trelloBoards.length === 0}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">Selecione um quadro</option>
+                      {trelloBoards.map(board => (
+                        <option key={board.id} value={board.id}>{board.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium" htmlFor="trello-list">Lista que receberá os leads</label>
+                    <select
+                      id="trello-list"
+                      value={trelloListId}
+                      onChange={event => setTrelloListId(event.target.value)}
+                      disabled={!trelloBoardId || loadTrelloLists.isPending || trelloLists.length === 0}
+                      className="flex h-9 w-full rounded-md border border-input bg-muted/30 px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <option value="">{loadTrelloLists.isPending ? "A carregar listas..." : "Selecione uma lista"}</option>
+                      {trelloListId && !trelloLists.some(list => list.id === trelloListId) && (
+                        <option value={trelloListId}>{trelloStatus.listName ?? "Lista atual"}</option>
+                      )}
+                      {trelloLists.map(list => (
+                        <option key={list.id} value={list.id}>{list.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Obtenha a API key e autorize um token na página de administração do Trello. As credenciais nunca voltam a ser mostradas pelo sistema.{" "}
+                Obtenha a API key e autorize um token na página de administração do Trello. Depois, carregue os seus quadros e escolha a lista — já não é necessário copiar IDs. As credenciais nunca voltam a ser mostradas pelo sistema.{" "}
                 <a
                   href="https://trello.com/power-ups/admin"
                   target="_blank"
@@ -506,6 +619,15 @@ export default function ProfilePage() {
                       disabled={toggleTrello.isPending}
                     >
                       {trelloStatus.enabled ? "Pausar sincronização" : "Ativar sincronização"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => syncRespondedTrello.mutate()}
+                      disabled={!trelloStatus.enabled || syncRespondedTrello.isPending}
+                      className="gap-2"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncRespondedTrello.isPending ? "animate-spin" : ""}`} />
+                      {syncRespondedTrello.isPending ? "A sincronizar..." : "Sincronizar respondidos"}
                     </Button>
                   </>
                 )}

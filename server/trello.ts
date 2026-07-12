@@ -9,7 +9,14 @@ const TRELLO_API_BASE = "https://api.trello.com/1";
 const REQUEST_TIMEOUT_MS = 12_000;
 const inFlightSyncs = new Map<string, Promise<TrelloSyncResult>>();
 
-type TrelloList = {
+export type TrelloBoard = {
+  id: string;
+  name: string;
+  url?: string;
+  closed?: boolean;
+};
+
+export type TrelloList = {
   id: string;
   name: string;
   closed?: boolean;
@@ -71,6 +78,47 @@ async function trelloRequest<T>(
   }
 }
 
+function sortByName<T extends { name: string }>(items: T[]): T[] {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name, "pt-BR", {
+    sensitivity: "base",
+  }));
+}
+
+export async function listTrelloBoards(
+  credentials: TrelloCredentials
+): Promise<Array<Pick<TrelloBoard, "id" | "name" | "url">>> {
+  const boards = await trelloRequest<TrelloBoard[]>(
+    "/members/me/boards?fields=id,name,url,closed&filter=open",
+    credentials
+  );
+
+  return sortByName(
+    boards
+      .filter(board => !board.closed)
+      .map(board => ({ id: board.id, name: board.name, url: board.url }))
+  );
+}
+
+export async function listBoardLists(
+  boardId: string,
+  credentials: TrelloCredentials
+): Promise<Array<Pick<TrelloList, "id" | "name">>> {
+  if (!/^[A-Za-z0-9]+$/.test(boardId)) {
+    throw new Error("O quadro selecionado tem um identificador inválido.");
+  }
+
+  const lists = await trelloRequest<TrelloList[]>(
+    `/boards/${encodeURIComponent(boardId)}/lists?fields=id,name,closed&filter=open`,
+    credentials
+  );
+
+  return sortByName(
+    lists
+      .filter(list => !list.closed)
+      .map(list => ({ id: list.id, name: list.name }))
+  );
+}
+
 export async function testTrelloList(
   listId: string,
   credentials: TrelloCredentials
@@ -120,7 +168,7 @@ async function findExistingCard(
   credentials: TrelloCredentials
 ): Promise<TrelloCard | null> {
   const cards = await trelloRequest<TrelloCard[]>(
-    `/lists/${encodeURIComponent(listId)}/cards?fields=id,name,desc,url,shortUrl&filter=open`,
+    `/lists/${encodeURIComponent(listId)}/cards?fields=id,name,desc,url,shortUrl&filter=all`,
     credentials
   );
   return cards.find(card => card.desc?.includes(marker)) ?? null;

@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import {
   getLeadsByUser,
   getLeadById,
+  getRespondedLeadsWithoutTrelloCard,
   insertLeads,
   updateLead,
   deleteLeadsByUser,
@@ -43,8 +44,11 @@ import {
   decryptTrelloCredentials,
   encryptTrelloCredentials,
   isIntegrationEncryptionConfigured,
+  type TrelloCredentials,
 } from "./integrationCrypto";
 import {
+  listBoardLists,
+  listTrelloBoards,
   queueLeadTrelloSync,
   syncLeadToTrello,
   testTrelloList,
@@ -63,6 +67,40 @@ const ALLOWED_AUDIO_TYPES = new Set([
   "audio/wav",
   "audio/x-wav",
 ]);
+const trelloCredentialDraftSchema = z.object({
+  apiKey: z.string().trim().min(1).max(256).optional(),
+  token: z.string().trim().min(1).max(512).optional(),
+});
+type TrelloCredentialDraft = z.infer<typeof trelloCredentialDraftSchema>;
+
+async function resolveTrelloCredentials(
+  userId: number,
+  draft?: TrelloCredentialDraft
+): Promise<TrelloCredentials> {
+  const hasApiKey = Boolean(draft?.apiKey);
+  const hasToken = Boolean(draft?.token);
+
+  if (hasApiKey !== hasToken) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Informe a API key e o token em conjunto.",
+    });
+  }
+
+  if (hasApiKey && hasToken) {
+    return { apiKey: draft!.apiKey!, token: draft!.token! };
+  }
+
+  const integration = await getUserIntegration(userId, "trello");
+  if (!integration) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "Informe a API key e o token para carregar os quadros do Trello.",
+    });
+  }
+
+  return decryptTrelloCredentials(userId, integration.credentialsEncrypted);
+}
 
 function audioExtension(mimeType: string): string {
   const extensions: Record<string, string> = {
@@ -226,6 +264,38 @@ export const appRouter = router({
       };
     }),
 
+    listBoards: protectedProcedure
+      .input(trelloCredentialDraftSchema.optional())
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const credentials = await resolveTrelloCredentials(ctx.user.id, input);
+          return await listTrelloBoards(credentials);
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          const message = error instanceof Error
+            ? error.message
+            : "Não foi possível carregar os quadros do Trello.";
+          throw new TRPCError({ code: "BAD_REQUEST", message });
+        }
+      }),
+
+    listBoardLists: protectedProcedure
+      .input(trelloCredentialDraftSchema.extend({
+        boardId: z.string().trim().min(5).max(64).regex(/^[A-Za-z0-9]+$/, "ID do quadro inválido."),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const credentials = await resolveTrelloCredentials(ctx.user.id, input);
+          return await listBoardLists(input.boardId, credentials);
+        } catch (error) {
+          if (error instanceof TRPCError) throw error;
+          const message = error instanceof Error
+            ? error.message
+            : "Não foi possível carregar as listas do Trello.";
+          throw new TRPCError({ code: "BAD_REQUEST", message });
+        }
+      }),
+
     save: protectedProcedure
       .input(z.object({
         apiKey: z.string().trim().max(256).optional(),
@@ -318,6 +388,43 @@ export const appRouter = router({
         }
         return { success: true };
       }),
+
+    syncResponded: protectedProcedure.mutation(async ({ ctx }) => {
+      const integration = await getUserIntegration(ctx.user.id, "trello");
+      if (!integration || integration.enabled !== 1) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Ative a integração Trello antes de sincronizar os leads respondidos.",
+        });
+      }
+
+      const leads = await getRespondedLeadsWithoutTrelloCard(ctx.user.id);
+      const summary = {
+        total: leads.length,
+        synced: 0,
+        created: 0,
+        matched: 0,
+        failed: 0,
+        skipped: 0,
+      };
+
+      for (const lead of leads) {
+        const result = await syncLeadToTrello(ctx.user.id, lead.id);
+        if (result.status === "created") {
+          summary.created += 1;
+          summary.synced += 1;
+        } else if (result.status === "matched" || result.status === "already_synced") {
+          summary.matched += 1;
+          summary.synced += 1;
+        } else if (result.status === "failed") {
+          summary.failed += 1;
+        } else {
+          summary.skipped += 1;
+        }
+      }
+
+      return summary;
+    }),
 
     retryLead: protectedProcedure
       .input(z.object({ leadId: z.number().int().positive() }))

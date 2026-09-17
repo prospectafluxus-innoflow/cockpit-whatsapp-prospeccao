@@ -93,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="flex flex-col items-center gap-8 p-8 max-w-sm w-full">
           <div className="flex flex-col items-center gap-2 mb-2">
             <img
-              src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663667466619/jOvLxAxfEehmlwIV.png"
+              src="/icons/icon-master.png"
               alt="ProspectaFluxus"
               className="h-16 w-auto object-contain"
             />
@@ -183,7 +183,7 @@ function DashboardLayoutContent({
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
                   <img
-                    src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663667466619/jOvLxAxfEehmlwIV.png"
+                    src="/icons/icon-master.png"
                     alt="ProspectaFluxus"
                     className="h-10 w-auto object-contain shrink-0"
                   />

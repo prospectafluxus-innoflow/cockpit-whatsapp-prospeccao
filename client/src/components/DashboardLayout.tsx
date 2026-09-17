@@ -23,7 +23,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import { useNotifications } from "@/hooks/useNotifications";
 import { trpc } from "@/lib/trpc";
-import { BarChart3, Bell, Kanban, LogOut, MessageSquare, PanelLeft, Shield, UserCircle } from "lucide-react";
+import { BarChart3, Bell, Kanban, LogOut, MessageCircleMore, MessageSquare, PanelLeft, Shield, UserCircle } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -37,6 +37,7 @@ const menuItems = [
 ];
 
 const adminMenuItems = [
+  { icon: MessageCircleMore, label: "Área InnoFlow", path: "/innoflow" },
   { icon: Shield, label: "Administração", path: "/admin" },
 ];
 
@@ -139,7 +140,7 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
-  const activeItem = menuItems.find((i) => i.path === location);
+  const activeItem = [...menuItems, ...adminMenuItems].find((i) => i.path === location);
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);

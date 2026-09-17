@@ -14,6 +14,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
+import InnoFlowPage from "./pages/InnoFlowPage";
 import DashboardLayout from "./components/DashboardLayout";
 
 function Router() {
@@ -34,6 +35,7 @@ function Router() {
             <Route path="/kanban" component={KanbanPage} />
             <Route path="/dashboard" component={DashboardPage} />
             <Route path="/schedule" component={SchedulePage} />
+            <Route path="/innoflow" component={InnoFlowPage} />
             <Route path="/admin" component={AdminPage} />
             <Route path="/profile" component={ProfilePage} />
             <Route path="/404" component={NotFound} />

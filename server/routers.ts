@@ -1,7 +1,7 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import {
@@ -53,6 +53,16 @@ import {
   syncLeadToTrello,
   testTrelloList,
 } from "./trello";
+import { isWaBlastWebhookConfigured } from "./wablast";
+import {
+  getWaBlastAdminOverview,
+  getWaBlastEligibleLeads,
+  saveWaBlastConfiguration,
+  sendControlledWaBlastAudio,
+  sendControlledWaBlastTemplate,
+  testAndDiscoverWaBlast,
+} from "./wablastService";
+import { recordLeadWhatsAppConsent } from "./wablastDb";
 
 const DAILY_LIMIT = 30;
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
@@ -429,6 +439,140 @@ export const appRouter = router({
     retryLead: protectedProcedure
       .input(z.object({ leadId: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => syncLeadToTrello(ctx.user.id, input.leadId)),
+  }),
+
+  // ─── Área InnoFlow — API oficial WaBlast (somente administradores) ────────
+  wablast: router({
+    overview: adminProcedure.query(async ({ ctx }) => ({
+      ...(await getWaBlastAdminOverview(ctx.user.id)),
+      webhookConfigured: isWaBlastWebhookConfigured(),
+      webhookUrl: "/api/webhooks/wablast",
+    })),
+
+    discover: adminProcedure.mutation(async ({ ctx }) => {
+      try {
+        return await testAndDiscoverWaBlast(ctx.user.id);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Não foi possível consultar a WaBlast.",
+        });
+      }
+    }),
+
+    saveConfiguration: adminProcedure
+      .input(z.object({
+        accountId: z.string().trim().min(3).max(128),
+        templateName: z.string().trim().min(1).max(512).regex(/^[a-z][a-z0-9_]*$/),
+        templateLanguage: z.string().trim().min(2).max(20),
+        dailyLimit: z.number().int().min(1).max(200),
+        minIntervalSeconds: z.number().int().min(30).max(3600),
+        enabled: z.boolean(),
+        queuePaused: z.boolean(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await saveWaBlastConfiguration({ userId: ctx.user.id, ...input });
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Não foi possível salvar a configuração WaBlast.",
+          });
+        }
+      }),
+
+    leads: adminProcedure.query(async ({ ctx }) => getWaBlastEligibleLeads(ctx.user.id)),
+
+    setConsent: adminProcedure
+      .input(z.object({
+        leadId: z.number().int().positive(),
+        status: z.enum(["opted_in", "opted_out"]),
+        sourceType: z.enum([
+          "form",
+          "event_registration",
+          "existing_customer",
+          "written_request",
+          "other",
+          "admin_block",
+        ]),
+        evidenceReference: z.string().trim().min(5).max(2000).optional(),
+      }).superRefine((value, issue) => {
+        if (value.status === "opted_in" && !value.evidenceReference) {
+          issue.addIssue({
+            code: "custom",
+            path: ["evidenceReference"],
+            message: "Informe a referência da evidência de consentimento.",
+          });
+        }
+        if (value.status === "opted_in" && value.sourceType === "admin_block") {
+          issue.addIssue({
+            code: "custom",
+            path: ["sourceType"],
+            message: "Bloqueio administrativo não pode registrar opt-in.",
+          });
+        }
+        if (value.status === "opted_out" && value.sourceType !== "admin_block") {
+          issue.addIssue({
+            code: "custom",
+            path: ["sourceType"],
+            message: "O bloqueio manual deve usar a origem administrativa.",
+          });
+        }
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const updated = await recordLeadWhatsAppConsent({
+          userId: ctx.user.id,
+          leadId: input.leadId,
+          actorUserId: ctx.user.id,
+          status: input.status,
+          sourceType: input.sourceType,
+          evidenceReference: input.evidenceReference,
+        });
+        if (!updated) throw new TRPCError({ code: "NOT_FOUND", message: "Lead não encontrado." });
+        return { success: true };
+      }),
+
+    sendTemplate: adminProcedure
+      .input(z.object({
+        leadId: z.number().int().positive(),
+        bodyParameters: z.array(z.string().trim().max(1024)).max(20),
+        confirmed: z.literal(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await sendControlledWaBlastTemplate({
+            userId: ctx.user.id,
+            leadId: input.leadId,
+            bodyParameters: input.bodyParameters,
+          });
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Não foi possível enviar a mensagem.",
+          });
+        }
+      }),
+
+    sendAudio: adminProcedure
+      .input(z.object({
+        leadId: z.number().int().positive(),
+        touchNumber: z.number().int().min(1).max(3),
+        confirmed: z.literal(true),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await sendControlledWaBlastAudio({
+            userId: ctx.user.id,
+            leadId: input.leadId,
+            touchNumber: input.touchNumber,
+          });
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: error instanceof Error ? error.message : "Não foi possível enviar o áudio.",
+          });
+        }
+      }),
   }),
 
   // ─── Leads ────────────────────────────────────────────────────────────────

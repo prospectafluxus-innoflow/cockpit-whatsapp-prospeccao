@@ -1,4 +1,5 @@
 import {
+  check,
   integer,
   index,
   uniqueIndex,
@@ -10,7 +11,9 @@ import {
   real,
   serial,
   date,
+  jsonb,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export const roleEnum = pgEnum("role", ["user", "admin"]);
@@ -32,6 +35,23 @@ export const kanbanColumnEnum = pgEnum("kanban_column", [
   "Toque 3 Enviado",
   "Respondeu",
   "Fechado",
+]);
+export const whatsappOptInStatusEnum = pgEnum("whatsapp_opt_in_status", [
+  "unknown",
+  "opted_in",
+  "opted_out",
+]);
+export const wablastMessageStatusEnum = pgEnum("wablast_message_status", [
+  "sending",
+  "sent",
+  "delivered",
+  "read",
+  "failed",
+  "received",
+]);
+export const wablastMessageDirectionEnum = pgEnum("wablast_message_direction", [
+  "outbound",
+  "inbound",
 ]);
 
 // ─── Users ────────────────────────────────────────────────────────────────────
@@ -96,6 +116,14 @@ export const leads = pgTable("leads", {
   notes: text("notes"),
   lastAiSuggestion: text("lastAiSuggestion"),
 
+  // Consentimento e janela de atendimento para a API oficial
+  whatsappOptInStatus: whatsappOptInStatusEnum("whatsappOptInStatus").notNull().default("unknown"),
+  whatsappOptInAt: timestamp("whatsappOptInAt"),
+  whatsappOptInSource: varchar("whatsappOptInSource", { length: 255 }),
+  whatsappOptOutAt: timestamp("whatsappOptOutAt"),
+  whatsappConsentUpdatedAt: timestamp("whatsappConsentUpdatedAt"),
+  whatsappLastInboundAt: timestamp("whatsappLastInboundAt"),
+
   // Sincronização opcional com o Trello
   trelloCardId: varchar("trelloCardId", { length: 64 }),
   trelloCardUrl: text("trelloCardUrl"),
@@ -104,7 +132,35 @@ export const leads = pgTable("leads", {
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-});
+}, table => [
+  uniqueIndex("leads_wablast_opted_in_phone_idx")
+    .on(
+      table.userId,
+      sql`right(regexp_replace(${table.whatsapp}, '[^0-9]', '', 'g'), 11)`,
+    )
+    .where(sql`${table.whatsappOptInStatus} = 'opted_in'`),
+  check("leads_whatsapp_consent_consistency", sql`
+    (
+      ${table.whatsappOptInStatus} = 'unknown'
+      AND ${table.whatsappOptInAt} IS NULL
+      AND ${table.whatsappOptInSource} IS NULL
+      AND ${table.whatsappOptOutAt} IS NULL
+      AND ${table.whatsappConsentUpdatedAt} IS NULL
+    ) OR (
+      ${table.whatsappOptInStatus} = 'opted_in'
+      AND ${table.whatsappOptInAt} IS NOT NULL
+      AND nullif(trim(${table.whatsappOptInSource}), '') IS NOT NULL
+      AND ${table.whatsappOptOutAt} IS NULL
+      AND ${table.whatsappConsentUpdatedAt} IS NOT NULL
+    ) OR (
+      ${table.whatsappOptInStatus} = 'opted_out'
+      AND ${table.whatsappOptInAt} IS NULL
+      AND ${table.whatsappOptInSource} IS NULL
+      AND ${table.whatsappOptOutAt} IS NOT NULL
+      AND ${table.whatsappConsentUpdatedAt} IS NOT NULL
+    )
+  `),
+]);
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
@@ -218,3 +274,129 @@ export const messageTemplates = pgTable("message_templates", {
 
 export type MessageTemplate = typeof messageTemplates.$inferSelect;
 export type InsertMessageTemplate = typeof messageTemplates.$inferInsert;
+
+// ─── WaBlast: configuração privada da InnoFlow ────────────────────────────────
+export const wablastSettings = pgTable(
+  "wablast_settings",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull().unique(),
+    enabled: integer("enabled").notNull().default(0),
+    queuePaused: integer("queuePaused").notNull().default(1),
+    accountId: varchar("accountId", { length: 128 }),
+    wabaId: varchar("wabaId", { length: 128 }),
+    accountName: varchar("accountName", { length: 255 }),
+    phoneNumber: varchar("phoneNumber", { length: 30 }),
+    templateName: varchar("templateName", { length: 512 }),
+    templateLanguage: varchar("templateLanguage", { length: 20 }).notNull().default("pt_BR"),
+    dailyLimit: integer("dailyLimit").notNull().default(20),
+    minIntervalSeconds: integer("minIntervalSeconds").notNull().default(90),
+    lastConnectionCheckAt: timestamp("lastConnectionCheckAt"),
+    lastError: text("lastError"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("wablast_settings_account_id_idx").on(table.accountId),
+    uniqueIndex("wablast_settings_waba_id_idx").on(table.wabaId),
+  ]
+);
+
+export type WaBlastSetting = typeof wablastSettings.$inferSelect;
+export type InsertWaBlastSetting = typeof wablastSettings.$inferInsert;
+
+// ─── WaBlast: histórico de mensagens ─────────────────────────────────────────
+export const wablastMessages = pgTable(
+  "wablast_messages",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    leadId: integer("leadId"),
+    accountId: varchar("accountId", { length: 128 }).notNull(),
+    direction: wablastMessageDirectionEnum("direction").notNull(),
+    messageType: varchar("messageType", { length: 32 }).notNull(),
+    status: wablastMessageStatusEnum("status").notNull(),
+    phone: varchar("phone", { length: 30 }).notNull(),
+    touchNumber: integer("touchNumber"),
+    templateName: varchar("templateName", { length: 512 }),
+    templateLanguage: varchar("templateLanguage", { length: 20 }),
+    bodyPreview: text("bodyPreview"),
+    wablastMessageId: varchar("wablastMessageId", { length: 160 }),
+    metaMessageId: text("metaMessageId"),
+    intentKey: varchar("intentKey", { length: 160 }),
+    idempotencyKey: varchar("idempotencyKey", { length: 160 }),
+    errorCode: varchar("errorCode", { length: 128 }),
+    errorMessage: text("errorMessage"),
+    providerData: jsonb("providerData").$type<Record<string, unknown>>(),
+    sentAt: timestamp("sentAt"),
+    deliveredAt: timestamp("deliveredAt"),
+    readAt: timestamp("readAt"),
+    failedAt: timestamp("failedAt"),
+    receivedAt: timestamp("receivedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    index("wablast_messages_user_created_idx").on(table.userId, table.createdAt),
+    index("wablast_messages_lead_idx").on(table.leadId),
+    uniqueIndex("wablast_messages_provider_id_idx").on(table.accountId, table.wablastMessageId),
+    uniqueIndex("wablast_messages_meta_id_idx").on(table.accountId, table.metaMessageId),
+    uniqueIndex("wablast_messages_intent_idx").on(table.intentKey),
+    uniqueIndex("wablast_messages_idempotency_idx").on(table.idempotencyKey),
+  ]
+);
+
+export type WaBlastMessage = typeof wablastMessages.$inferSelect;
+export type InsertWaBlastMessage = typeof wablastMessages.$inferInsert;
+
+// ─── WaBlast: ledger imutável de consentimento ───────────────────────────────
+export const wablastConsentEvents = pgTable(
+  "wablast_consent_events",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    leadId: integer("leadId").notNull(),
+    actorUserId: integer("actorUserId"),
+    status: whatsappOptInStatusEnum("status").notNull(),
+    sourceType: varchar("sourceType", { length: 64 }).notNull(),
+    evidenceReference: text("evidenceReference"),
+    providerEventId: varchar("providerEventId", { length: 160 }),
+    eventAt: timestamp("eventAt").notNull(),
+    applied: integer("applied").notNull().default(1),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("wablast_consent_events_lead_idx").on(table.userId, table.leadId, table.createdAt),
+    uniqueIndex("wablast_consent_events_provider_event_idx").on(table.providerEventId),
+    check("wablast_consent_events_valid_state", sql`
+      (
+        ${table.status} = 'opted_in'
+        AND nullif(trim(${table.evidenceReference}), '') IS NOT NULL
+        AND ${table.sourceType} <> 'admin_block'
+      ) OR ${table.status} = 'opted_out'
+    `),
+  ]
+);
+
+export type WaBlastConsentEvent = typeof wablastConsentEvents.$inferSelect;
+
+// ─── WaBlast: eventos processados para idempotência de webhooks ───────────────
+export const wablastWebhookEvents = pgTable(
+  "wablast_webhook_events",
+  {
+    eventId: varchar("eventId", { length: 160 }).primaryKey(),
+    eventType: varchar("eventType", { length: 100 }).notNull(),
+    accountId: varchar("accountId", { length: 128 }),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    processingStatus: varchar("processingStatus", { length: 16 }).notNull().default("processing"),
+    processingToken: varchar("processingToken", { length: 64 }).notNull(),
+    processingStartedAt: timestamp("processingStartedAt").defaultNow().notNull(),
+    attempts: integer("attempts").notNull().default(1),
+    processedAt: timestamp("processedAt"),
+    processingError: text("processingError"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("wablast_webhook_events_type_idx").on(table.eventType)]
+);
+
+export type WaBlastWebhookEvent = typeof wablastWebhookEvents.$inferSelect;

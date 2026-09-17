@@ -57,6 +57,26 @@ if (!isTestEnvironment) {
 
 export const db = drizzle(client);
 
+export async function withDatabaseAdvisoryLock<T>(
+  lockKey: number,
+  callback: () => Promise<T>,
+): Promise<T> {
+  const reserved = await client.reserve();
+  let locked = false;
+  try {
+    await reserved`select pg_advisory_lock(${lockKey})`;
+    locked = true;
+    return await callback();
+  } finally {
+    if (locked) {
+      await reserved`select pg_advisory_unlock(${lockKey})`.catch(error => {
+        console.error("[DB] Falha ao libertar advisory lock:", error);
+      });
+    }
+    await reserved.release();
+  }
+}
+
 // ─── Helpers de usuário ───────────────────────────────────────────────────────
 export async function getUserById(id: number): Promise<User | null> {
   const rows = await db

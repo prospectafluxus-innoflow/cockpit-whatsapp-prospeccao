@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic } from "./static";
 import { sendReminderHandler } from "../scheduleHandler";
 import { cronSendReminderHandler } from "../cronHandler";
+import { wablastWebhookHandler } from "../wablastWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -32,6 +33,9 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+  app.set("trust proxy", 1);
+  // A assinatura Standard Webhooks exige os bytes exatos antes de JSON.parse.
+  app.post("/api/webhooks/wablast", express.raw({ type: "application/json", limit: "1mb" }), wablastWebhookHandler);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

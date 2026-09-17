@@ -14,4 +14,7 @@ export const ENV = {
   openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
   // Render Cron secret (para proteger endpoint /api/cron/*)
   cronSecret: process.env.CRON_SECRET ?? "",
+  // WaBlast — API oficial do WhatsApp e assinatura Standard Webhooks
+  waBlastApiKey: process.env.WABLAST_API_KEY ?? "",
+  waBlastWebhookSecret: process.env.WABLAST_WEBHOOK_SECRET ?? "",
 };

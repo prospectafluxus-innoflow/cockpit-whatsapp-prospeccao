@@ -52,6 +52,7 @@ import * as provider from "./wablast";
 import * as wablastDb from "./wablastDb";
 import * as storage from "./storage";
 import {
+  getWaBlastSendWindow,
   sendControlledWaBlastAudio,
   sendControlledWaBlastTemplate,
 } from "./wablastService";
@@ -138,6 +139,50 @@ describe("serviço WaBlast seguro", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("divide o dia em quatro períodos no horário de Brasília", () => {
+    expect(getWaBlastSendWindow(new Date("2026-09-17T10:59:00Z"))).toBeNull();
+    expect(getWaBlastSendWindow(new Date("2026-09-17T11:00:00Z"))).toMatchObject({
+      key: "morning",
+      label: "manhã (08h)",
+      start: new Date("2026-09-17T11:00:00Z"),
+    });
+    expect(getWaBlastSendWindow(new Date("2026-09-17T15:00:00Z"))).toMatchObject({
+      key: "lunch",
+      label: "almoço (12h)",
+      start: new Date("2026-09-17T15:00:00Z"),
+    });
+    expect(getWaBlastSendWindow(new Date("2026-09-17T18:00:00Z"))).toMatchObject({
+      key: "afternoon",
+      label: "meio da tarde (15h)",
+      start: new Date("2026-09-17T18:00:00Z"),
+    });
+    expect(getWaBlastSendWindow(new Date("2026-09-17T22:00:00Z"))).toMatchObject({
+      key: "evening",
+      label: "19h",
+      start: new Date("2026-09-17T22:00:00Z"),
+    });
+  });
+
+  it("reserva template com limite de 20 apenas no período atual", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T15:30:00Z"));
+    try {
+      await sendControlledWaBlastTemplate({
+        userId: 7,
+        leadId: 91,
+        bodyParameters: ["Ana"],
+      });
+
+      expect(wablastDb.reserveWaBlastOutbound).toHaveBeenCalledWith(expect.objectContaining({
+        periodLimit: 20,
+        periodLabel: "almoço (12h)",
+        periodStart: new Date("2026-09-17T15:00:00Z"),
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("não chama o provedor quando a intenção já foi reservada", async () => {

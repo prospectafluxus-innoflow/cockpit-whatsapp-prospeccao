@@ -385,6 +385,7 @@ export const wablastSettings = pgTable(
     templateLanguage: varchar("templateLanguage", { length: 20 })
       .notNull()
       .default("pt_BR"),
+    // Nome físico legado: representa a cota de cada período (08h, 12h, 15h e 19h).
     dailyLimit: integer("dailyLimit").notNull().default(20),
     minIntervalSeconds: integer("minIntervalSeconds").notNull().default(90),
     lastConnectionCheckAt: timestamp("lastConnectionCheckAt"),

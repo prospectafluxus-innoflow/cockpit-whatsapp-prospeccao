@@ -231,8 +231,9 @@ export async function updateWaBlastLastInbound(
 
 export async function reserveWaBlastOutbound(input: {
   message: InsertWaBlastMessage & { intentKey: string; idempotencyKey: string };
-  since: Date;
-  dailyLimit: number;
+  periodStart: Date;
+  periodLimit: number;
+  periodLabel: string;
   minIntervalSeconds: number;
 }): Promise<{ message: WaBlastMessage; created: boolean }> {
   return db.transaction(async tx => {
@@ -249,12 +250,12 @@ export async function reserveWaBlastOutbound(input: {
       .where(and(
         eq(wablastMessages.userId, input.message.userId),
         eq(wablastMessages.direction, "outbound"),
-        gte(wablastMessages.createdAt, input.since),
+        gte(wablastMessages.createdAt, input.periodStart),
         sql`${wablastMessages.status} <> 'failed'`,
       ));
     const total = Number(countRows[0]?.total ?? 0);
-    if (total >= input.dailyLimit) {
-      throw new Error(`Limite diário interno de ${input.dailyLimit} envios atingido.`);
+    if (total >= input.periodLimit) {
+      throw new Error(`Limite de ${input.periodLimit} envios do período ${input.periodLabel} atingido.`);
     }
 
     const lastRows = await tx

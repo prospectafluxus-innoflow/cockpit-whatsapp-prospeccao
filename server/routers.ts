@@ -467,7 +467,8 @@ export const appRouter = router({
         accountId: z.string().trim().min(3).max(128),
         templateName: z.string().trim().min(1).max(512).regex(/^[a-z][a-z0-9_]*$/),
         templateLanguage: z.string().trim().min(2).max(20),
-        dailyLimit: z.number().int().min(1).max(200),
+        // Campo legado no banco; representa a cota de cada um dos quatro períodos WaBlast.
+        dailyLimit: z.number().int().min(1).max(50),
         minIntervalSeconds: z.number().int().min(30).max(3600),
         enabled: z.boolean(),
         queuePaused: z.boolean(),

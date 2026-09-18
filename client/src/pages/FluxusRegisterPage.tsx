@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FluxusPersonaLogo } from "@/components/fluxus/FluxusBrand";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
@@ -136,11 +137,7 @@ export default function FluxusRegisterPage() {
                   enviados pela InnoFlow.
                 </p>
               </div>
-              <img
-                src="/icons/icon-master.png"
-                alt="InnoFlow"
-                className="h-14 w-auto object-contain"
-              />
+              <FluxusPersonaLogo className="h-auto w-full max-w-[250px] object-contain" />
             </div>
           </div>
 

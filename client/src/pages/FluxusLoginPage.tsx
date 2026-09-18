@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FluxusPersonaLogo } from "@/components/fluxus/FluxusBrand";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Eye, EyeOff, Loader2, LockKeyhole } from "lucide-react";
 import { useState } from "react";
@@ -51,7 +52,7 @@ export default function FluxusLoginPage() {
           href="/login"
           className="inline-flex items-center gap-2 text-sm text-zinc-400 transition-colors hover:text-white"
         >
-          <ArrowLeft className="h-4 w-4" /> ProspectaFluxus
+          <ArrowLeft className="h-4 w-4" /> Portal InnoFlow
         </Link>
         <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium text-emerald-300">
           Ambiente protegido
@@ -62,13 +63,9 @@ export default function FluxusLoginPage() {
         <div className="grid w-full max-w-5xl overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.045] shadow-2xl shadow-black/30 backdrop-blur-xl lg:grid-cols-[1.05fr_.95fr]">
           <section className="hidden min-h-[610px] flex-col justify-between border-r border-white/10 bg-gradient-to-br from-emerald-400/10 via-transparent to-cyan-400/10 p-10 lg:flex">
             <div>
-              <img
-                src="/icons/icon-master.png"
-                alt="InnoFlow"
-                className="h-16 w-auto object-contain"
-              />
-              <p className="mt-14 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
-                Fluxus Persona
+              <FluxusPersonaLogo className="h-auto w-full max-w-[330px] object-contain" />
+              <p className="mt-12 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-300">
+                Desenvolvimento comportamental
               </p>
               <h1 className="mt-4 max-w-md text-4xl font-semibold leading-tight tracking-tight">
                 Compreenda seu estilo. Desenvolva escolhas melhores.
@@ -98,11 +95,7 @@ export default function FluxusLoginPage() {
           <section className="p-6 sm:p-10 lg:p-12">
             <div className="mx-auto max-w-sm">
               <div className="mb-8 lg:hidden">
-                <img
-                  src="/icons/icon-master.png"
-                  alt="InnoFlow"
-                  className="h-16 w-auto object-contain"
-                />
+                <FluxusPersonaLogo className="h-auto w-full max-w-[280px] object-contain" />
               </div>
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/10 text-emerald-300">
                 <LockKeyhole className="h-5 w-5" />

@@ -14,10 +14,23 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { FluxusResult } from "../shared/fluxus";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export const roleEnum = pgEnum("role", ["user", "admin"]);
-export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "rejected"]);
+export const approvalStatusEnum = pgEnum("approval_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+export const accountTypeEnum = pgEnum("account_type", [
+  "prospecting",
+  "fluxus",
+]);
+export const fluxusAssessmentStatusEnum = pgEnum("fluxus_assessment_status", [
+  "draft",
+  "completed",
+]);
 export const layerEnum = pgEnum("layer", ["A", "B", "C"]);
 export const statusEnum = pgEnum("status", [
   "novo",
@@ -54,6 +67,30 @@ export const wablastMessageDirectionEnum = pgEnum("wablast_message_direction", [
   "inbound",
 ]);
 
+// ─── Empresas Fluxus ──────────────────────────────────────────────────────────
+export const fluxusCompanies = pgTable(
+  "fluxus_companies",
+  {
+    id: serial("id").primaryKey(),
+    name: varchar("name", { length: 255 }).notNull(),
+    normalizedName: varchar("normalizedName", { length: 255 }).notNull(),
+    accessCodeHash: varchar("accessCodeHash", { length: 255 }).notNull(),
+    accessCodeHint: varchar("accessCodeHint", { length: 12 }),
+    active: integer("active").notNull().default(1),
+    createdBy: integer("createdBy"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("fluxus_companies_normalized_name_idx").on(
+      table.normalizedName
+    ),
+  ]
+);
+
+export type FluxusCompany = typeof fluxusCompanies.$inferSelect;
+export type InsertFluxusCompany = typeof fluxusCompanies.$inferInsert;
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -62,7 +99,15 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }).unique(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
-  approvalStatus: approvalStatusEnum("approvalStatus").default("pending").notNull(),
+  accountType: accountTypeEnum("accountType").default("prospecting").notNull(),
+  companyId: integer("companyId").references(() => fluxusCompanies.id, {
+    onDelete: "restrict",
+  }),
+  jobTitle: varchar("jobTitle", { length: 180 }),
+  department: varchar("department", { length: 180 }),
+  approvalStatus: approvalStatusEnum("approvalStatus")
+    .default("pending")
+    .notNull(),
   // WhatsApp do próprio usuário (para lembretes)
   whatsappOwn: varchar("whatsappOwn", { length: 30 }),
   // Autenticação própria
@@ -77,69 +122,113 @@ export const users = pgTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Avaliações Fluxus Persona ────────────────────────────────────────────────
+export const fluxusAssessments = pgTable(
+  "fluxus_assessments",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    companyId: integer("companyId")
+      .notNull()
+      .references(() => fluxusCompanies.id, { onDelete: "restrict" }),
+    status: fluxusAssessmentStatusEnum("status").notNull().default("draft"),
+    instrumentVersion: varchar("instrumentVersion", { length: 40 }).notNull(),
+    formulaVersion: varchar("formulaVersion", { length: 40 }).notNull(),
+    answers: jsonb("answers")
+      .$type<Record<string, number>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    result: jsonb("result").$type<FluxusResult>(),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    index("fluxus_assessments_user_idx").on(table.userId, table.createdAt),
+    index("fluxus_assessments_company_idx").on(
+      table.companyId,
+      table.status,
+      table.createdAt
+    ),
+  ]
+);
+
+export type FluxusAssessment = typeof fluxusAssessments.$inferSelect;
+export type InsertFluxusAssessment = typeof fluxusAssessments.$inferInsert;
+
 // ─── Leads ────────────────────────────────────────────────────────────────────
-export const leads = pgTable("leads", {
-  id: serial("id").primaryKey(),
-  userId: integer("userId").notNull(),
+export const leads = pgTable(
+  "leads",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
 
-  // Dados do lead
-  name: varchar("name", { length: 255 }).notNull(),
-  firstName: varchar("firstName", { length: 100 }),
-  company: varchar("company", { length: 255 }),
-  whatsapp: varchar("whatsapp", { length: 30 }).notNull(),
-  score: integer("score").default(0),
-  layer: layerEnum("layer").notNull().default("B"),
+    // Dados do lead
+    name: varchar("name", { length: 255 }).notNull(),
+    firstName: varchar("firstName", { length: 100 }),
+    company: varchar("company", { length: 255 }),
+    whatsapp: varchar("whatsapp", { length: 30 }).notNull(),
+    score: integer("score").default(0),
+    layer: layerEnum("layer").notNull().default("B"),
 
-  // Dados extras da planilha
-  segment: varchar("segment", { length: 150 }),
-  size: varchar("size", { length: 100 }),
-  employees: integer("employees"),
-  investment: varchar("investment", { length: 100 }),
-  taxRegime: varchar("taxRegime", { length: 100 }),
-  participations: integer("participations"),
-  lastEvent: varchar("lastEvent", { length: 100 }),
-  skippedUntil: date("skippedUntil"),
+    // Dados extras da planilha
+    segment: varchar("segment", { length: 150 }),
+    size: varchar("size", { length: 100 }),
+    employees: integer("employees"),
+    investment: varchar("investment", { length: 100 }),
+    taxRegime: varchar("taxRegime", { length: 100 }),
+    participations: integer("participations"),
+    lastEvent: varchar("lastEvent", { length: 100 }),
+    skippedUntil: date("skippedUntil"),
 
-  // Status e ciclo de abordagem
-  status: statusEnum("status").notNull().default("novo"),
+    // Status e ciclo de abordagem
+    status: statusEnum("status").notNull().default("novo"),
 
-  // Kanban column
-  kanbanColumn: kanbanColumnEnum("kanbanColumn").notNull().default("Novo"),
+    // Kanban column
+    kanbanColumn: kanbanColumnEnum("kanbanColumn").notNull().default("Novo"),
 
-  // Controle de toques
-  toque1SentAt: timestamp("toque1SentAt"),
-  toque2SentAt: timestamp("toque2SentAt"),
-  toque3SentAt: timestamp("toque3SentAt"),
-  respondedAt: timestamp("respondedAt"),
+    // Controle de toques
+    toque1SentAt: timestamp("toque1SentAt"),
+    toque2SentAt: timestamp("toque2SentAt"),
+    toque3SentAt: timestamp("toque3SentAt"),
+    respondedAt: timestamp("respondedAt"),
 
-  // Notas e IA
-  notes: text("notes"),
-  lastAiSuggestion: text("lastAiSuggestion"),
+    // Notas e IA
+    notes: text("notes"),
+    lastAiSuggestion: text("lastAiSuggestion"),
 
-  // Consentimento e janela de atendimento para a API oficial
-  whatsappOptInStatus: whatsappOptInStatusEnum("whatsappOptInStatus").notNull().default("unknown"),
-  whatsappOptInAt: timestamp("whatsappOptInAt"),
-  whatsappOptInSource: varchar("whatsappOptInSource", { length: 255 }),
-  whatsappOptOutAt: timestamp("whatsappOptOutAt"),
-  whatsappConsentUpdatedAt: timestamp("whatsappConsentUpdatedAt"),
-  whatsappLastInboundAt: timestamp("whatsappLastInboundAt"),
+    // Consentimento e janela de atendimento para a API oficial
+    whatsappOptInStatus: whatsappOptInStatusEnum("whatsappOptInStatus")
+      .notNull()
+      .default("unknown"),
+    whatsappOptInAt: timestamp("whatsappOptInAt"),
+    whatsappOptInSource: varchar("whatsappOptInSource", { length: 255 }),
+    whatsappOptOutAt: timestamp("whatsappOptOutAt"),
+    whatsappConsentUpdatedAt: timestamp("whatsappConsentUpdatedAt"),
+    whatsappLastInboundAt: timestamp("whatsappLastInboundAt"),
 
-  // Sincronização opcional com o Trello
-  trelloCardId: varchar("trelloCardId", { length: 64 }),
-  trelloCardUrl: text("trelloCardUrl"),
-  trelloSyncedAt: timestamp("trelloSyncedAt"),
-  trelloSyncError: text("trelloSyncError"),
+    // Sincronização opcional com o Trello
+    trelloCardId: varchar("trelloCardId", { length: 64 }),
+    trelloCardUrl: text("trelloCardUrl"),
+    trelloSyncedAt: timestamp("trelloSyncedAt"),
+    trelloSyncError: text("trelloSyncError"),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
-}, table => [
-  uniqueIndex("leads_wablast_opted_in_phone_idx")
-    .on(
-      table.userId,
-      sql`right(regexp_replace(${table.whatsapp}, '[^0-9]', '', 'g'), 11)`,
-    )
-    .where(sql`${table.whatsappOptInStatus} = 'opted_in'`),
-  check("leads_whatsapp_consent_consistency", sql`
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("leads_wablast_opted_in_phone_idx")
+      .on(
+        table.userId,
+        sql`right(regexp_replace(${table.whatsapp}, '[^0-9]', '', 'g'), 11)`
+      )
+      .where(sql`${table.whatsappOptInStatus} = 'opted_in'`),
+    check(
+      "leads_whatsapp_consent_consistency",
+      sql`
     (
       ${table.whatsappOptInStatus} = 'unknown'
       AND ${table.whatsappOptInAt} IS NULL
@@ -159,8 +248,10 @@ export const leads = pgTable("leads", {
       AND ${table.whatsappOptOutAt} IS NOT NULL
       AND ${table.whatsappConsentUpdatedAt} IS NOT NULL
     )
-  `),
-]);
+  `
+    ),
+  ]
+);
 
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
@@ -250,7 +341,10 @@ export const userIntegrations = pgTable(
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => [
-    uniqueIndex("user_integrations_user_provider_idx").on(table.userId, table.provider),
+    uniqueIndex("user_integrations_user_provider_idx").on(
+      table.userId,
+      table.provider
+    ),
   ]
 );
 
@@ -288,7 +382,9 @@ export const wablastSettings = pgTable(
     accountName: varchar("accountName", { length: 255 }),
     phoneNumber: varchar("phoneNumber", { length: 30 }),
     templateName: varchar("templateName", { length: 512 }),
-    templateLanguage: varchar("templateLanguage", { length: 20 }).notNull().default("pt_BR"),
+    templateLanguage: varchar("templateLanguage", { length: 20 })
+      .notNull()
+      .default("pt_BR"),
     dailyLimit: integer("dailyLimit").notNull().default(20),
     minIntervalSeconds: integer("minIntervalSeconds").notNull().default(90),
     lastConnectionCheckAt: timestamp("lastConnectionCheckAt"),
@@ -337,10 +433,19 @@ export const wablastMessages = pgTable(
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => [
-    index("wablast_messages_user_created_idx").on(table.userId, table.createdAt),
+    index("wablast_messages_user_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
     index("wablast_messages_lead_idx").on(table.leadId),
-    uniqueIndex("wablast_messages_provider_id_idx").on(table.accountId, table.wablastMessageId),
-    uniqueIndex("wablast_messages_meta_id_idx").on(table.accountId, table.metaMessageId),
+    uniqueIndex("wablast_messages_provider_id_idx").on(
+      table.accountId,
+      table.wablastMessageId
+    ),
+    uniqueIndex("wablast_messages_meta_id_idx").on(
+      table.accountId,
+      table.metaMessageId
+    ),
     uniqueIndex("wablast_messages_intent_idx").on(table.intentKey),
     uniqueIndex("wablast_messages_idempotency_idx").on(table.idempotencyKey),
   ]
@@ -366,15 +471,24 @@ export const wablastConsentEvents = pgTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [
-    index("wablast_consent_events_lead_idx").on(table.userId, table.leadId, table.createdAt),
-    uniqueIndex("wablast_consent_events_provider_event_idx").on(table.providerEventId),
-    check("wablast_consent_events_valid_state", sql`
+    index("wablast_consent_events_lead_idx").on(
+      table.userId,
+      table.leadId,
+      table.createdAt
+    ),
+    uniqueIndex("wablast_consent_events_provider_event_idx").on(
+      table.providerEventId
+    ),
+    check(
+      "wablast_consent_events_valid_state",
+      sql`
       (
         ${table.status} = 'opted_in'
         AND nullif(trim(${table.evidenceReference}), '') IS NOT NULL
         AND ${table.sourceType} <> 'admin_block'
       ) OR ${table.status} = 'opted_out'
-    `),
+    `
+    ),
   ]
 );
 
@@ -388,9 +502,13 @@ export const wablastWebhookEvents = pgTable(
     eventType: varchar("eventType", { length: 100 }).notNull(),
     accountId: varchar("accountId", { length: 128 }),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-    processingStatus: varchar("processingStatus", { length: 16 }).notNull().default("processing"),
+    processingStatus: varchar("processingStatus", { length: 16 })
+      .notNull()
+      .default("processing"),
     processingToken: varchar("processingToken", { length: 64 }).notNull(),
-    processingStartedAt: timestamp("processingStartedAt").defaultNow().notNull(),
+    processingStartedAt: timestamp("processingStartedAt")
+      .defaultNow()
+      .notNull(),
     attempts: integer("attempts").notNull().default(1),
     processedAt: timestamp("processedAt"),
     processingError: text("processingError"),

@@ -34,6 +34,7 @@ import { parse as parseCookie } from "cookie";
 import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
 import { invokeLLM } from "./_core/gemini";
 import { authOwnRouter } from "./routers/authOwn";
+import { fluxusRouter } from "./routers/fluxus";
 import { storagePut } from "./storage";
 import {
   getVapidPublicKey,
@@ -182,6 +183,7 @@ function buildWaLink(
 export const appRouter = router({
   system: systemRouter,
   authOwn: authOwnRouter,
+  fluxus: fluxusRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

@@ -5,7 +5,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { nanoid } from "nanoid";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import {
   getUserByEmail,
@@ -24,6 +24,36 @@ import { ENV } from "../_core/env";
 import { COOKIE_NAME } from "../../shared/const";
 
 const JWT_SECRET = new TextEncoder().encode(ENV.cookieSecret);
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+const loginFailures = new Map<string, number[]>();
+
+function loginAttemptKey(
+  ctx: {
+    req: {
+      ip?: string;
+      socket?: { remoteAddress?: string };
+      headers: Record<string, unknown>;
+    };
+  },
+  email: string
+) {
+  const forwarded = ctx.req.headers["x-forwarded-for"];
+  const ip =
+    typeof forwarded === "string"
+      ? forwarded.split(",")[0]?.trim()
+      : (ctx.req.ip ?? ctx.req.socket?.remoteAddress ?? "unknown");
+  return `${ip}:${email.toLowerCase()}`;
+}
+
+function currentLoginFailures(key: string) {
+  const threshold = Date.now() - LOGIN_WINDOW_MS;
+  const failures = (loginFailures.get(key) ?? []).filter(
+    timestamp => timestamp > threshold
+  );
+  loginFailures.set(key, failures);
+  return failures;
+}
 
 async function signToken(userId: number, role: string) {
   return new SignJWT({ sub: String(userId), role })
@@ -77,9 +107,21 @@ export const authOwnRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const attemptKey = loginAttemptKey(ctx as never, input.email);
+      if (currentLoginFailures(attemptKey).length >= LOGIN_MAX_FAILURES) {
+        throw new TRPCError({
+          code: "TOO_MANY_REQUESTS",
+          message:
+            "Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.",
+        });
+      }
       const user = await getUserByEmail(input.email);
 
       if (!user || !user.passwordHash) {
+        loginFailures.set(attemptKey, [
+          ...currentLoginFailures(attemptKey),
+          Date.now(),
+        ]);
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Email ou senha incorretos.",
@@ -88,6 +130,10 @@ export const authOwnRouter = router({
 
       const valid = await bcrypt.compare(input.password, user.passwordHash);
       if (!valid) {
+        loginFailures.set(attemptKey, [
+          ...currentLoginFailures(attemptKey),
+          Date.now(),
+        ]);
         throw new TRPCError({
           code: "UNAUTHORIZED",
           message: "Email ou senha incorretos.",
@@ -98,17 +144,20 @@ export const authOwnRouter = router({
       if ((user as any).approvalStatus === "pending") {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "PENDING: Seu cadastro está aguardando aprovação. Você será notificado assim que liberado.",
+          message:
+            "PENDING: Seu cadastro está aguardando aprovação. Você será notificado assim que liberado.",
         });
       }
       if ((user as any).approvalStatus === "rejected") {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "REJECTED: Seu acesso foi negado. Entre em contato com o suporte.",
+          message:
+            "REJECTED: Seu acesso foi negado. Entre em contato com o suporte.",
         });
       }
 
       await updateUser(user.id, { lastSignedIn: new Date() });
+      loginFailures.delete(attemptKey);
 
       const token = await signToken(user.id, user.role);
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -117,7 +166,12 @@ export const authOwnRouter = router({
         maxAge: 30 * 24 * 60 * 60 * 1000,
       });
 
-      return { success: true, name: user.name, role: user.role };
+      return {
+        success: true,
+        name: user.name,
+        role: user.role,
+        accountType: user.accountType,
+      };
     }),
 
   // ─── Logout ────────────────────────────────────────────────────────────────
@@ -136,16 +190,23 @@ export const authOwnRouter = router({
       // Sempre retornar sucesso para não revelar se email existe
       if (!user) return { success: true };
 
-      const resetToken = nanoid(48);
+      const resetToken = randomBytes(36).toString("base64url");
+      const resetTokenHash = createHash("sha256")
+        .update(resetToken)
+        .digest("hex");
       const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2h
 
       await updateUser(user.id, {
-        resetToken,
+        resetToken: resetTokenHash,
         resetTokenExpiresAt: expiresAt,
       });
 
-      // Em produção, enviar email. Por ora, retornamos o token para exibição.
-      return { success: true, resetToken };
+      // Em produção, o token deve ser enviado por provedor de e-mail e nunca devolvido ao cliente.
+      return {
+        success: true,
+        resetToken:
+          process.env.NODE_ENV === "production" ? undefined : resetToken,
+      };
     }),
 
   // ─── Redefinir senha com token ─────────────────────────────────────────────
@@ -166,10 +227,7 @@ export const authOwnRouter = router({
         });
       }
 
-      if (
-        !user.resetTokenExpiresAt ||
-        user.resetTokenExpiresAt < new Date()
-      ) {
+      if (!user.resetTokenExpiresAt || user.resetTokenExpiresAt < new Date()) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Token expirado. Solicite um novo.",
@@ -254,14 +312,21 @@ export const authOwnRouter = router({
 
   // ─── Atualizar perfil do usuário logado
   updateProfile: protectedProcedure
-    .input(z.object({
-      name: z.string().min(2).optional(),
-      whatsappOwn: z.string().regex(/^\d{10,15}$/, "Número inválido (somente dígitos, 10-15)").optional().or(z.literal("")),
-    }))
+    .input(
+      z.object({
+        name: z.string().min(2).optional(),
+        whatsappOwn: z
+          .string()
+          .regex(/^\d{10,15}$/, "Número inválido (somente dígitos, 10-15)")
+          .optional()
+          .or(z.literal("")),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const updates: Record<string, any> = { updatedAt: new Date() };
       if (input.name !== undefined) updates.name = input.name;
-      if (input.whatsappOwn !== undefined) updates.whatsappOwn = input.whatsappOwn || null;
+      if (input.whatsappOwn !== undefined)
+        updates.whatsappOwn = input.whatsappOwn || null;
       await db.update(users).set(updates).where(eq(users.id, ctx.user.id));
       return { success: true };
     }),

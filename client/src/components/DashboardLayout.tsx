@@ -23,7 +23,18 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import { useNotifications } from "@/hooks/useNotifications";
 import { trpc } from "@/lib/trpc";
-import { BarChart3, Bell, Kanban, LogOut, MessageCircleMore, MessageSquare, PanelLeft, Shield, UserCircle } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  BrainCircuit,
+  Kanban,
+  LogOut,
+  MessageCircleMore,
+  MessageSquare,
+  PanelLeft,
+  Shield,
+  UserCircle,
+} from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -38,6 +49,7 @@ const menuItems = [
 
 const adminMenuItems = [
   { icon: MessageCircleMore, label: "Área InnoFlow", path: "/innoflow" },
+  { icon: BrainCircuit, label: "Fluxus Persona", path: "/fluxus/admin" },
   { icon: Shield, label: "Administração", path: "/admin" },
 ];
 
@@ -74,12 +86,18 @@ function NotificationReScheduler() {
   return null;
 }
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
   const { loading, user } = useAuth();
+  const isFluxusAdminRoute =
+    window.location.pathname.startsWith("/fluxus/admin");
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -99,13 +117,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             />
           </div>
           <div className="flex flex-col items-center gap-3 text-center">
-            <h1 className="text-xl font-semibold tracking-tight">Acesse sua conta</h1>
+            <h1 className="text-xl font-semibold tracking-tight">
+              Acesse sua conta
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Faça login para acessar seu cockpit de prospecção e gerenciar seus leads.
+              Faça login para acessar seu cockpit de prospecção e gerenciar seus
+              leads.
             </p>
           </div>
           <Button
-            onClick={() => { window.location.href = "/login"; }}
+            onClick={() => {
+              window.location.href = "/login";
+            }}
             size="lg"
             className="w-full"
           >
@@ -116,9 +139,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  if (user.accountType === "fluxus") {
+    window.location.href = "/fluxus";
+    return null;
+  }
+
   return (
-    <SidebarProvider style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
-      <NotificationReScheduler />
+    <SidebarProvider
+      style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+    >
+      {!isFluxusAdminRoute && <NotificationReScheduler />}
       <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
         {children}
       </DashboardLayoutContent>
@@ -140,7 +170,9 @@ function DashboardLayoutContent({
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
-  const activeItem = [...menuItems, ...adminMenuItems].find((i) => i.path === location);
+  const activeItem = [...menuItems, ...adminMenuItems].find(
+    i => i.path === location
+  );
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -170,7 +202,7 @@ function DashboardLayoutContent({
 
   return (
     <>
-      <div className="relative" ref={sidebarRef}>
+      <div className="relative print:hidden" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50">
           <SidebarHeader className="h-16 justify-center border-b border-border/50 py-2">
             <div className="flex items-center gap-3 px-2 w-full">
@@ -194,8 +226,10 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0 pt-2">
             <SidebarMenu className="px-2">
-              {menuItems.map((item) => {
-                const isActive = location === item.path || (item.path === "/" && location === "");
+              {menuItems.map(item => {
+                const isActive =
+                  location === item.path ||
+                  (item.path === "/" && location === "");
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
@@ -204,7 +238,9 @@ function DashboardLayoutContent({
                       tooltip={item.label}
                       className="h-10 font-normal"
                     >
-                      <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
+                      <item.icon
+                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                      />
                       <span>{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -217,7 +253,7 @@ function DashboardLayoutContent({
               <>
                 <div className="mx-3 my-2 border-t border-border/30" />
                 <SidebarMenu className="px-2">
-                  {adminMenuItems.map((item) => {
+                  {adminMenuItems.map(item => {
                     const isActive = location === item.path;
                     return (
                       <SidebarMenuItem key={item.path}>
@@ -227,7 +263,9 @@ function DashboardLayoutContent({
                           tooltip={item.label}
                           className="h-10 font-normal"
                         >
-                          <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : "text-amber-400"}`} />
+                          <item.icon
+                            className={`h-4 w-4 ${isActive ? "text-primary" : "text-amber-400"}`}
+                          />
                           <span className="text-amber-400">{item.label}</span>
                         </SidebarMenuButton>
                       </SidebarMenuItem>
@@ -249,18 +287,28 @@ function DashboardLayoutContent({
                   </Avatar>
                   {!isCollapsed && (
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate leading-none">{user?.name ?? "-"}</p>
-                      <p className="text-xs text-muted-foreground truncate mt-1">{user?.email ?? "-"}</p>
+                      <p className="text-sm font-medium truncate leading-none">
+                        {user?.name ?? "-"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate mt-1">
+                        {user?.email ?? "-"}
+                      </p>
                     </div>
                   )}
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setLocation("/profile")} className="cursor-pointer">
+                <DropdownMenuItem
+                  onClick={() => setLocation("/profile")}
+                  className="cursor-pointer"
+                >
                   <UserCircle className="mr-2 h-4 w-4" />
                   Meu Perfil
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
+                <DropdownMenuItem
+                  onClick={logout}
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                >
                   <LogOut className="mr-2 h-4 w-4" />
                   Sair
                 </DropdownMenuItem>
@@ -278,12 +326,14 @@ function DashboardLayoutContent({
         )}
       </div>
 
-      <SidebarInset>
+      <SidebarInset className="print:m-0 print:w-full print:min-w-full">
         {isMobile && (
-          <div className="flex border-b border-border/50 h-14 items-center justify-between bg-background/95 px-3 backdrop-blur sticky top-0 z-40">
+          <div className="flex border-b border-border/50 h-14 items-center justify-between bg-background/95 px-3 backdrop-blur sticky top-0 z-40 print:hidden">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg" />
-              <span className="font-medium text-sm">{activeItem?.label ?? "Menu"}</span>
+              <span className="font-medium text-sm">
+                {activeItem?.label ?? "Menu"}
+              </span>
             </div>
           </div>
         )}

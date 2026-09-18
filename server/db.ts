@@ -26,40 +26,48 @@ import {
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL não configurada. Defina a ligação ao PostgreSQL nas variáveis de ambiente.");
+  throw new Error(
+    "DATABASE_URL não configurada. Defina a ligação ao PostgreSQL nas variáveis de ambiente."
+  );
 }
 
-const isTestEnvironment = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+const isTestEnvironment =
+  process.env.NODE_ENV === "test" || process.env.VITEST === "true";
 
 if (!isTestEnvironment) {
   console.log("[DB] Connecting to database...");
-  console.log("[DB] Host:", connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80));
+  console.log(
+    "[DB] Host:",
+    connectionString.replace(/:[^:@]+@/, ":***@").substring(0, 80)
+  );
 }
 
 const client = postgres(connectionString, {
   ssl: { rejectUnauthorized: false },
   max: 5,
-  onnotice: (notice) => console.log("[DB] Notice:", notice.message),
+  onnotice: notice => console.log("[DB] Notice:", notice.message),
   debug: (connection, query, params) => {
     // only log errors
   },
-  onclose: (connId) => console.log("[DB] Connection closed:", connId),
+  onclose: connId => console.log("[DB] Connection closed:", connId),
   connect_timeout: 10,
 });
 
 if (!isTestEnvironment) {
-  client`SELECT 1`.then(() => {
-    console.log("[DB] Database connection successful.");
-  }).catch((err) => {
-    console.error("[DB] Database connection failed:", err.message);
-  });
+  client`SELECT 1`
+    .then(() => {
+      console.log("[DB] Database connection successful.");
+    })
+    .catch(err => {
+      console.error("[DB] Database connection failed:", err.message);
+    });
 }
 
 export const db = drizzle(client);
 
 export async function withDatabaseAdvisoryLock<T>(
   lockKey: number,
-  callback: () => Promise<T>,
+  callback: () => Promise<T>
 ): Promise<T> {
   const reserved = await client.reserve();
   let locked = false;
@@ -79,11 +87,7 @@ export async function withDatabaseAdvisoryLock<T>(
 
 // ─── Helpers de usuário ───────────────────────────────────────────────────────
 export async function getUserById(id: number): Promise<User | null> {
-  const rows = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, id))
-    .limit(1);
+  const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
   return rows[0] ?? null;
 }
 
@@ -141,10 +145,11 @@ export async function listUsers(): Promise<User[]> {
 }
 
 export async function getUserByResetToken(token: string): Promise<User | null> {
+  const tokenHash = createHash("sha256").update(token).digest("hex");
   const rows = await db
     .select()
     .from(users)
-    .where(eq(users.resetToken, token))
+    .where(eq(users.resetToken, tokenHash))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -154,7 +159,11 @@ export async function getLeadsByUser(
   userId: number,
   filters?: { layer?: "A" | "B" | "C"; status?: string; search?: string }
 ): Promise<Lead[]> {
-  let query = db.select().from(leads).where(eq(leads.userId, userId)).$dynamic();
+  let query = db
+    .select()
+    .from(leads)
+    .where(eq(leads.userId, userId))
+    .$dynamic();
 
   if (filters?.layer) {
     query = query.where(
@@ -165,7 +174,7 @@ export async function getLeadsByUser(
   const results = await query.orderBy(desc(leads.createdAt));
 
   // Filter in memory for status and search (simpler than complex SQL)
-  return results.filter((l) => {
+  return results.filter(l => {
     if (filters?.status && l.status !== filters.status) return false;
     if (filters?.search) {
       const s = filters.search.toLowerCase();
@@ -239,9 +248,7 @@ export async function getDailySendCount(
   const rows = await db
     .select({ total: count() })
     .from(dailySends)
-    .where(
-      and(eq(dailySends.userId, userId), eq(dailySends.sentDate, date))
-    );
+    .where(and(eq(dailySends.userId, userId), eq(dailySends.sentDate, date)));
   return rows[0]?.total ?? 0;
 }
 
@@ -315,9 +322,15 @@ export async function getDistributedQueueForDay(
   lunchCount: number,
   afternoonCount: number,
   eveningCount: number
-): Promise<{ morning: Lead[]; lunch: Lead[]; afternoon: Lead[]; evening: Lead[] }> {
+): Promise<{
+  morning: Lead[];
+  lunch: Lead[];
+  afternoon: Lead[];
+  evening: Lead[];
+}> {
   const total = morningCount + lunchCount + afternoonCount + eveningCount;
-  if (total === 0) return { morning: [], lunch: [], afternoon: [], evening: [] };
+  if (total === 0)
+    return { morning: [], lunch: [], afternoon: [], evening: [] };
 
   const today = new Date().toISOString().split("T")[0]!;
 
@@ -325,10 +338,8 @@ export async function getDistributedQueueForDay(
   const sentTodayRows = await db
     .select({ leadId: dailySends.leadId })
     .from(dailySends)
-    .where(
-      and(eq(dailySends.userId, userId), eq(dailySends.sentDate, today))
-    );
-  const sentTodayIds = new Set(sentTodayRows.map((r) => r.leadId));
+    .where(and(eq(dailySends.userId, userId), eq(dailySends.sentDate, today)));
+  const sentTodayIds = new Set(sentTodayRows.map(r => r.leadId));
 
   // Busca leads prontos para envio (status novo ou aguardando próximo toque)
   const allLeads = await db
@@ -340,13 +351,19 @@ export async function getDistributedQueueForDay(
   const now = Date.now();
   const DAY = 86_400_000;
 
-  const readyLeads = allLeads.filter((l) => {
+  const readyLeads = allLeads.filter(l => {
     if (sentTodayIds.has(l.id)) return false;
-    if (l.status === "respondeu" || l.status === "fechado" || l.status === "descartado") return false;
+    if (
+      l.status === "respondeu" ||
+      l.status === "fechado" ||
+      l.status === "descartado"
+    )
+      return false;
     // Verifica se o lead foi pulado hoje
     if ((l as any).skippedUntil) {
       const skippedDate = new Date((l as any).skippedUntil + "T00:00:00");
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
       if (skippedDate > todayStart) return false;
     }
     if (l.status === "novo") return true;
@@ -406,10 +423,15 @@ export async function getMetrics(userId: number) {
     respondeuCount;
 
   const responseRate =
-    totalContacted > 0 ? Math.round((respondeuCount / totalContacted) * 100) : 0;
+    totalContacted > 0
+      ? Math.round((respondeuCount / totalContacted) * 100)
+      : 0;
 
   // Taxa de resposta por camada
-  const byLayer: Record<"A" | "B" | "C", { contacted: number; responded: number }> = {
+  const byLayer: Record<
+    "A" | "B" | "C",
+    { contacted: number; responded: number }
+  > = {
     A: { contacted: 0, responded: 0 },
     B: { contacted: 0, responded: 0 },
     C: { contacted: 0, responded: 0 },
@@ -479,7 +501,7 @@ function hashPushEndpoint(endpoint: string): string {
 export async function upsertPushSubscription(
   userId: number,
   subscription: PushSubscriptionInput,
-  userAgent?: string,
+  userAgent?: string
 ): Promise<PushSubscription> {
   const endpointHash = hashPushEndpoint(subscription.endpoint);
   const now = new Date();
@@ -492,7 +514,9 @@ export async function upsertPushSubscription(
       p256dh: subscription.keys.p256dh,
       auth: subscription.keys.auth,
       userAgent: userAgent?.slice(0, 1000) ?? null,
-      expiresAt: subscription.expirationTime ? new Date(subscription.expirationTime) : null,
+      expiresAt: subscription.expirationTime
+        ? new Date(subscription.expirationTime)
+        : null,
       updatedAt: now,
     })
     .onConflictDoUpdate({
@@ -503,7 +527,9 @@ export async function upsertPushSubscription(
         p256dh: subscription.keys.p256dh,
         auth: subscription.keys.auth,
         userAgent: userAgent?.slice(0, 1000) ?? null,
-        expiresAt: subscription.expirationTime ? new Date(subscription.expirationTime) : null,
+        expiresAt: subscription.expirationTime
+          ? new Date(subscription.expirationTime)
+          : null,
         updatedAt: now,
       },
     })
@@ -511,35 +537,50 @@ export async function upsertPushSubscription(
   return rows[0]!;
 }
 
-export async function getPushSubscriptionsByUser(userId: number): Promise<PushSubscription[]> {
+export async function getPushSubscriptionsByUser(
+  userId: number
+): Promise<PushSubscription[]> {
   return db
     .select()
     .from(pushSubscriptions)
     .where(eq(pushSubscriptions.userId, userId));
 }
 
-export async function removePushSubscription(userId: number, endpoint: string): Promise<void> {
+export async function removePushSubscription(
+  userId: number,
+  endpoint: string
+): Promise<void> {
   await db
     .delete(pushSubscriptions)
     .where(
       and(
         eq(pushSubscriptions.userId, userId),
-        eq(pushSubscriptions.endpointHash, hashPushEndpoint(endpoint)),
-      ),
+        eq(pushSubscriptions.endpointHash, hashPushEndpoint(endpoint))
+      )
     );
 }
 
-export async function removePushSubscriptionById(userId: number, id: number): Promise<void> {
+export async function removePushSubscriptionById(
+  userId: number,
+  id: number
+): Promise<void> {
   await db
     .delete(pushSubscriptions)
-    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id)));
+    .where(
+      and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id))
+    );
 }
 
-export async function markPushSubscriptionUsed(userId: number, id: number): Promise<void> {
+export async function markPushSubscriptionUsed(
+  userId: number,
+  id: number
+): Promise<void> {
   await db
     .update(pushSubscriptions)
     .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id)));
+    .where(
+      and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.id, id))
+    );
 }
 
 export async function countPushSubscriptions(userId: number): Promise<number> {
@@ -558,7 +599,12 @@ export async function getUserIntegration(
   const rows = await db
     .select()
     .from(userIntegrations)
-    .where(and(eq(userIntegrations.userId, userId), eq(userIntegrations.provider, provider)))
+    .where(
+      and(
+        eq(userIntegrations.userId, userId),
+        eq(userIntegrations.provider, provider)
+      )
+    )
     .limit(1);
   return rows[0] ?? null;
 }
@@ -607,12 +653,19 @@ export async function upsertUserIntegration(input: {
 export async function updateUserIntegrationState(
   userId: number,
   provider: string,
-  data: Partial<Pick<UserIntegration, "enabled" | "lastError" | "lastTestedAt" | "listName">>
+  data: Partial<
+    Pick<UserIntegration, "enabled" | "lastError" | "lastTestedAt" | "listName">
+  >
 ): Promise<UserIntegration | null> {
   const rows = await db
     .update(userIntegrations)
     .set({ ...data, updatedAt: new Date() })
-    .where(and(eq(userIntegrations.userId, userId), eq(userIntegrations.provider, provider)))
+    .where(
+      and(
+        eq(userIntegrations.userId, userId),
+        eq(userIntegrations.provider, provider)
+      )
+    )
     .returning();
   return rows[0] ?? null;
 }
@@ -624,7 +677,9 @@ export const DEFAULT_TEMPLATES: Record<number, string> = {
   3: "{firstName}, vou parar de te perturbar por aqui \uD83D\uDE04 Mas fica o convite: quando bater aquela dúvida de quanto sua empresa vale \u2014 ou se ela andaria sem você por uma semana \u2014 é só preencher o formulário no innoflow.com.br e você entra na fila da mentoria do próximo mês. Sucesso aí, e até os encontros do Clube dos Decisores! \uD83C\uDFF0",
 };
 
-export async function getMessageTemplates(userId: number): Promise<MessageTemplate[]> {
+export async function getMessageTemplates(
+  userId: number
+): Promise<MessageTemplate[]> {
   return db
     .select()
     .from(messageTemplates)
@@ -640,14 +695,24 @@ export async function upsertMessageTemplate(
   const existing = await db
     .select()
     .from(messageTemplates)
-    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .where(
+      and(
+        eq(messageTemplates.userId, userId),
+        eq(messageTemplates.toque, toque)
+      )
+    )
     .limit(1);
 
   if (existing[0]) {
     const updated = await db
       .update(messageTemplates)
       .set({ text, updatedAt: new Date() })
-      .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+      .where(
+        and(
+          eq(messageTemplates.userId, userId),
+          eq(messageTemplates.toque, toque)
+        )
+      )
       .returning();
     return updated[0]!;
   }
@@ -670,19 +735,29 @@ export type MessageTemplateAudio = {
 export async function upsertMessageTemplateAudio(
   userId: number,
   toque: number,
-  audio: MessageTemplateAudio,
+  audio: MessageTemplateAudio
 ): Promise<MessageTemplate> {
   const existing = await db
     .select()
     .from(messageTemplates)
-    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .where(
+      and(
+        eq(messageTemplates.userId, userId),
+        eq(messageTemplates.toque, toque)
+      )
+    )
     .limit(1);
 
   if (existing[0]) {
     const updated = await db
       .update(messageTemplates)
       .set({ ...audio, updatedAt: new Date() })
-      .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+      .where(
+        and(
+          eq(messageTemplates.userId, userId),
+          eq(messageTemplates.toque, toque)
+        )
+      )
       .returning();
     return updated[0]!;
   }
@@ -701,19 +776,24 @@ export async function upsertMessageTemplateAudio(
 
 export async function userOwnsMessageTemplateAudio(
   userId: number,
-  audioKey: string,
+  audioKey: string
 ): Promise<boolean> {
   const rows = await db
     .select({ id: messageTemplates.id })
     .from(messageTemplates)
-    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.audioKey, audioKey)))
+    .where(
+      and(
+        eq(messageTemplates.userId, userId),
+        eq(messageTemplates.audioKey, audioKey)
+      )
+    )
     .limit(1);
   return rows.length > 0;
 }
 
 export async function removeMessageTemplateAudio(
   userId: number,
-  toque: number,
+  toque: number
 ): Promise<MessageTemplate | null> {
   const updated = await db
     .update(messageTemplates)
@@ -725,7 +805,12 @@ export async function removeMessageTemplateAudio(
       audioSize: null,
       updatedAt: new Date(),
     })
-    .where(and(eq(messageTemplates.userId, userId), eq(messageTemplates.toque, toque)))
+    .where(
+      and(
+        eq(messageTemplates.userId, userId),
+        eq(messageTemplates.toque, toque)
+      )
+    )
     .returning();
 
   return updated[0] ?? null;

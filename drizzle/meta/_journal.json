@@ -64,6 +64,20 @@
       "when": 1789659422493,
       "tag": "0008_modern_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789689680412,
+      "tag": "0009_heavy_pyro",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789689738087,
+      "tag": "0010_brainy_violations",
+      "breakpoints": true
     }
   ]
 }

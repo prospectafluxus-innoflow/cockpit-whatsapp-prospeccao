@@ -8,30 +8,30 @@ Este documento descreve a atualização de uma instalação existente do Prospec
 
 Trabalhe sempre numa branch separada. Confirme que o Railway acompanha apenas a branch de produção e que um push na branch de revisão não inicia um deploy automático.
 
-| Verificação | Critério de aprovação |
-|---|---|
-| Backup | Snapshot ou backup exportável do PostgreSQL concluído |
-| Instalação | `pnpm install --frozen-lockfile` concluído |
-| Tipos | `pnpm check` sem erros |
-| Testes | `pnpm test` sem falhas |
-| Build | `pnpm build:prod` concluído |
-| Segurança | Auditoria de dependências sem avisos críticos ou altos |
+| Verificação | Critério de aprovação                                  |
+| ----------- | ------------------------------------------------------ |
+| Backup      | Snapshot ou backup exportável do PostgreSQL concluído  |
+| Instalação  | `pnpm install --frozen-lockfile` concluído             |
+| Tipos       | `pnpm check` sem erros                                 |
+| Testes      | `pnpm test` sem falhas                                 |
+| Build       | `pnpm build:prod` concluído                            |
+| Segurança   | Auditoria de dependências sem avisos críticos ou altos |
 
 ## 2. Variáveis obrigatórias no Railway
 
 Configure os valores em **Service → Variables**. Nunca coloque valores reais em ficheiros versionados.
 
-| Variável | Finalidade | Como gerar ou obter |
-|---|---|---|
-| `NODE_ENV` | Execução de produção | `production` |
-| `PORT` | Porta da aplicação | `3000` ou a porta fornecida pelo Railway |
-| `DATABASE_URL` | PostgreSQL | Nova connection string do Supabase/PostgreSQL |
-| `JWT_SECRET` | Sessões | `openssl rand -base64 48` |
-| `CRON_SECRET` | Proteção do endpoint de lembretes | Gere outro valor com `openssl rand -base64 48` |
-| `VAPID_PUBLIC_KEY` | Web Push no navegador | Par gerado por `npx web-push generate-vapid-keys` |
-| `VAPID_PRIVATE_KEY` | Assinatura Web Push no servidor | Chave privada do mesmo par VAPID |
-| `VAPID_SUBJECT` | Contacto do emissor Web Push | `mailto:SEU_EMAIL_DE_SUPORTE` |
-| `INTEGRATION_ENCRYPTION_KEY` | Cifragem das credenciais Trello | `openssl rand -hex 32` |
+| Variável                     | Finalidade                        | Como gerar ou obter                               |
+| ---------------------------- | --------------------------------- | ------------------------------------------------- |
+| `NODE_ENV`                   | Execução de produção              | `production`                                      |
+| `PORT`                       | Porta da aplicação                | `3000` ou a porta fornecida pelo Railway          |
+| `DATABASE_URL`               | PostgreSQL                        | Nova connection string do Supabase/PostgreSQL     |
+| `JWT_SECRET`                 | Sessões                           | `openssl rand -base64 48`                         |
+| `CRON_SECRET`                | Proteção do endpoint de lembretes | Gere outro valor com `openssl rand -base64 48`    |
+| `VAPID_PUBLIC_KEY`           | Web Push no navegador             | Par gerado por `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY`          | Assinatura Web Push no servidor   | Chave privada do mesmo par VAPID                  |
+| `VAPID_SUBJECT`              | Contacto do emissor Web Push      | `mailto:SEU_EMAIL_DE_SUPORTE`                     |
+| `INTEGRATION_ENCRYPTION_KEY` | Cifragem das credenciais Trello   | `openssl rand -hex 32`                            |
 
 `INTEGRATION_ENCRYPTION_KEY` deve permanecer estável. Se for alterada depois de o Trello ser configurado, cada utilizador terá de ligar novamente a integração.
 
@@ -39,24 +39,24 @@ Configure os valores em **Service → Variables**. Nunca coloque valores reais e
 
 No Railway, configure um bucket S3, Cloudflare R2 ou outro serviço compatível com S3. O bucket deve permanecer privado; a aplicação entrega URLs temporárias apenas a utilizadores autenticados.
 
-| Variável | Valor esperado |
-|---|---|
-| `S3_BUCKET` | Nome do bucket privado |
-| `S3_REGION` | Região do serviço; use `auto` quando o fornecedor indicar |
-| `S3_ENDPOINT` | Endpoint HTTPS do fornecedor, se não for AWS S3 |
-| `S3_ACCESS_KEY_ID` | Identificador de acesso com permissão restrita ao bucket |
-| `S3_SECRET_ACCESS_KEY` | Segredo correspondente |
-| `S3_FORCE_PATH_STYLE` | `true` apenas quando exigido pelo fornecedor |
+| Variável               | Valor esperado                                            |
+| ---------------------- | --------------------------------------------------------- |
+| `S3_BUCKET`            | Nome do bucket privado                                    |
+| `S3_REGION`            | Região do serviço; use `auto` quando o fornecedor indicar |
+| `S3_ENDPOINT`          | Endpoint HTTPS do fornecedor, se não for AWS S3           |
+| `S3_ACCESS_KEY_ID`     | Identificador de acesso com permissão restrita ao bucket  |
+| `S3_SECRET_ACCESS_KEY` | Segredo correspondente                                    |
+| `S3_FORCE_PATH_STYLE`  | `true` apenas quando exigido pelo fornecedor              |
 
 A infraestrutura integrada legada também é suportada por `BUILT_IN_FORGE_API_URL` e `BUILT_IN_FORGE_API_KEY`. Não configure os dois modos ao mesmo tempo; quando as variáveis integradas existem, elas têm prioridade.
 
 ## 4. Variáveis opcionais
 
-| Variável | Finalidade |
-|---|---|
-| `GEMINI_API_KEY` | Sugestões de follow-up por IA |
-| `OPENROUTER_API_KEY` | Alternativa de IA, quando usada |
-| `RESEND_API_KEY` | Lembretes adicionais por email |
+| Variável             | Finalidade                        |
+| -------------------- | --------------------------------- |
+| `GEMINI_API_KEY`     | Sugestões de follow-up por IA     |
+| `OPENROUTER_API_KEY` | Alternativa de IA, quando usada   |
+| `RESEND_API_KEY`     | Lembretes adicionais por email    |
 | `NOTIFICATION_EMAIL` | Destinatário do email de lembrete |
 
 ## 5. Migrações do banco
@@ -71,12 +71,17 @@ O comando utiliza `DATABASE_URL` e o histórico em `drizzle/`. Não use `scripts
 
 Depois da execução, confirme a existência das seguintes alterações:
 
-| Objeto | Resultado esperado |
-|---|---|
-| `message_templates` | Metadados opcionais do áudio |
-| `push_subscriptions` | Dispositivos Web Push por utilizador |
-| `trello_integrations` | Configuração Trello cifrada por utilizador |
-| `leads` | Estado e identificador de sincronização Trello |
+| Objeto                | Resultado esperado                                            |
+| --------------------- | ------------------------------------------------------------- |
+| `message_templates`   | Metadados opcionais do áudio                                  |
+| `push_subscriptions`  | Dispositivos Web Push por utilizador                          |
+| `trello_integrations` | Configuração Trello cifrada por utilizador                    |
+| `leads`               | Estado e identificador de sincronização Trello                |
+| `users`               | Colunas `accountType`, `companyId`, `jobTitle` e `department` |
+| `fluxus_companies`    | Empresas, estado e hash do código de acesso                   |
+| `fluxus_assessments`  | Rascunhos, respostas, versões e resultados Fluxus             |
+
+A migração `0009_heavy_pyro` é aditiva. Os utilizadores atuais recebem `accountType = 'prospecting'`, portanto o cockpit existente continua a ser o destino padrão após o login.
 
 ## 6. Build e início
 
@@ -84,10 +89,10 @@ O `railway.json` usa:
 
 ```text
 Build: pnpm run build:prod
-Start: node dist/index.js
+Start: pnpm db:migrate && node dist/index.js
 ```
 
-A aplicação deve responder normalmente antes de ativar integrações na interface. Se o deploy falhar, não repita migrações manualmente sem primeiro consultar os logs.
+A migração é aplicada automaticamente e de forma idempotente antes da nova versão iniciar. A aplicação deve responder normalmente antes de ativar integrações na interface. Se o deploy falhar, não repita migrações manualmente sem primeiro consultar os logs.
 
 ## 7. Alertas Web Push
 
@@ -120,15 +125,22 @@ O áudio é configurado junto de cada template de toque. A aplicação aceita os
 
 Execute a verificação com uma conta de teste e dados não sensíveis.
 
-| Teste | Resultado esperado |
-|---|---|
-| Login e cockpit | Acesso normal e filas preservadas |
-| Importação Excel | Ficheiro válido importado sem regressão |
-| Áudio | Upload, reprodução, substituição, remoção e partilha funcionam |
-| Web Push | Ativação e notificação de teste chegam ao dispositivo |
-| Agendamento | Um período de teste dispara apenas para a conta correta |
-| Trello | Teste da lista aprovado e um lead respondido cria somente um cartão |
-| Reintento Trello | Falha temporária não reverte o estado local do lead |
+| Teste            | Resultado esperado                                                                |
+| ---------------- | --------------------------------------------------------------------------------- |
+| Login e cockpit  | Acesso normal e filas preservadas                                                 |
+| Importação Excel | Ficheiro válido importado sem regressão                                           |
+| Áudio            | Upload, reprodução, substituição, remoção e partilha funcionam                    |
+| Web Push         | Ativação e notificação de teste chegam ao dispositivo                             |
+| Agendamento      | Um período de teste dispara apenas para a conta correta                           |
+| Trello           | Teste da lista aprovado e um lead respondido cria somente um cartão               |
+| Reintento Trello | Falha temporária não reverte o estado local do lead                               |
+| Botão Fluxus     | O botão aparece na tela de login e o item aparece no menu administrativo          |
+| Nova empresa     | O administrador cria uma empresa e o código não é exibido novamente               |
+| Cadastro Fluxus  | Um colaborador com empresa e código válidos é vinculado ao `companyId` correto    |
+| Isolamento       | Uma conta Fluxus não abre o cockpit nem as rotas administrativas                  |
+| Avaliação        | As quatro etapas salvam rascunho e exigem 56 respostas para concluir              |
+| Relatório        | O resultado individual abre para o participante e para o administrador autorizado |
+| Consolidado      | A visão por empresa permanece protegida enquanto houver menos de três conclusões  |
 
 ## 11. Rollback
 

@@ -5,7 +5,7 @@
     "buildCommand": "pnpm run build:prod"
   },
   "deploy": {
-    "startCommand": "pnpm db:migrate:fluxus && node dist/index.js",
+    "startCommand": "pnpm start:railway",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3
   }

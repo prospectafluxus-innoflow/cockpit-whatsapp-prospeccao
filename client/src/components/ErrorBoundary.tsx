@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { reloadOnceAfterStaleAssetError } from "@/lib/chunkRecovery";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { Component, ReactNode } from "react";
 
@@ -21,6 +22,11 @@ class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  componentDidCatch(error: Error) {
+    if (reloadOnceAfterStaleAssetError(error)) return;
+    console.error("[Application Error]", error);
+  }
+
   render() {
     if (this.state.hasError) {
       return (
@@ -31,11 +37,18 @@ class ErrorBoundary extends Component<Props, State> {
               className="text-destructive mb-6 flex-shrink-0"
             />
 
-            <h2 className="text-xl mb-4">An unexpected error occurred.</h2>
+            <h2 className="mb-3 text-xl font-semibold">
+              Não foi possível carregar esta página
+            </h2>
 
-            <div className="p-4 w-full rounded bg-muted overflow-auto mb-6">
+            <p className="mb-6 text-center text-sm text-muted-foreground">
+              Atualize a página para carregar a versão mais recente da
+              aplicação.
+            </p>
+
+            <div className="mb-6 w-full overflow-auto rounded bg-muted p-4">
               <pre className="text-sm text-muted-foreground whitespace-break-spaces">
-                {this.state.error?.stack}
+                {this.state.error?.message}
               </pre>
             </div>
 
@@ -48,7 +61,7 @@ class ErrorBoundary extends Component<Props, State> {
               )}
             >
               <RotateCcw size={16} />
-              Reload Page
+              Atualizar página
             </button>
           </div>
         </div>

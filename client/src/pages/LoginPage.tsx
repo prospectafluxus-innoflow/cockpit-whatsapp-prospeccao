@@ -5,7 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
-import { Eye, EyeOff, Loader2, Clock, XCircle } from "lucide-react";
+import {
+  BrainCircuit,
+  Eye,
+  EyeOff,
+  Loader2,
+  Clock,
+  XCircle,
+} from "lucide-react";
 import { Link } from "wouter";
 
 export default function LoginPage() {
@@ -13,14 +20,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [blockStatus, setBlockStatus] = useState<"pending" | "rejected" | null>(null);
+  const [blockStatus, setBlockStatus] = useState<"pending" | "rejected" | null>(
+    null
+  );
 
   const loginMutation = trpc.authOwn.login.useMutation({
-    onSuccess: () => {
+    onSuccess: data => {
       toast.success("Login realizado com sucesso!");
-      window.location.href = "/";
+      window.location.href = data.accountType === "fluxus" ? "/fluxus" : "/";
     },
-    onError: (err) => {
+    onError: err => {
       const msg = err.message || "";
       if (msg.startsWith("PENDING:")) {
         setBlockStatus("pending");
@@ -49,6 +58,14 @@ export default function LoginPage() {
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-emerald-500/5 rounded-full blur-3xl" />
       </div>
 
+      <Link
+        href="/fluxus/login"
+        className="absolute right-4 top-4 z-20 inline-flex items-center gap-2 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-400/15 sm:right-7 sm:top-6"
+      >
+        <BrainCircuit className="h-4 w-4" />
+        Fluxus Persona
+      </Link>
+
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-10">
@@ -57,7 +74,9 @@ export default function LoginPage() {
             alt="ProspectaFluxus"
             className="h-36 w-auto object-contain mx-auto mb-4"
           />
-          <p className="text-sm text-zinc-500 mt-1">Acesse sua conta para continuar</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Acesse sua conta para continuar
+          </p>
         </div>
 
         {/* Alerta de status bloqueado */}
@@ -65,8 +84,13 @@ export default function LoginPage() {
           <div className="mb-4 flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
             <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-amber-300">Cadastro aguardando aprovação</p>
-              <p className="text-xs text-amber-400/80 mt-0.5">Seu acesso ainda não foi liberado. Aguarde o contato do administrador.</p>
+              <p className="text-sm font-medium text-amber-300">
+                Cadastro aguardando aprovação
+              </p>
+              <p className="text-xs text-amber-400/80 mt-0.5">
+                Seu acesso ainda não foi liberado. Aguarde o contato do
+                administrador.
+              </p>
             </div>
           </div>
         )}
@@ -75,7 +99,9 @@ export default function LoginPage() {
             <XCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-red-300">Acesso negado</p>
-              <p className="text-xs text-red-400/80 mt-0.5">Seu cadastro foi recusado. Entre em contato com o suporte.</p>
+              <p className="text-xs text-red-400/80 mt-0.5">
+                Seu cadastro foi recusado. Entre em contato com o suporte.
+              </p>
             </div>
           </div>
         )}
@@ -84,13 +110,18 @@ export default function LoginPage() {
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8 backdrop-blur-sm shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-zinc-300 text-sm font-medium">Email</Label>
+              <Label
+                htmlFor="email"
+                className="text-zinc-300 text-sm font-medium"
+              >
+                Email
+              </Label>
               <Input
                 id="email"
                 type="email"
                 placeholder="seu@email.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={e => setEmail(e.target.value)}
                 className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20 h-11 rounded-xl"
                 autoComplete="email"
                 disabled={loginMutation.isPending}
@@ -98,14 +129,19 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-zinc-300 text-sm font-medium">Senha</Label>
+              <Label
+                htmlFor="password"
+                className="text-zinc-300 text-sm font-medium"
+              >
+                Senha
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={e => setPassword(e.target.value)}
                   className="bg-zinc-800/50 border-zinc-700 text-white placeholder:text-zinc-500 focus:border-emerald-500 focus:ring-emerald-500/20 h-11 rounded-xl pr-11"
                   autoComplete="current-password"
                   disabled={loginMutation.isPending}
@@ -115,13 +151,20 @@ export default function LoginPage() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
 
             <div className="flex justify-end">
-              <Link href="/forgot-password" className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+              <Link
+                href="/forgot-password"
+                className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+              >
                 Esqueci minha senha
               </Link>
             </div>
@@ -132,15 +175,22 @@ export default function LoginPage() {
               className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-xl transition-all duration-150 active:scale-[0.97]"
             >
               {loginMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Entrando...</>
-              ) : "Entrar"}
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" /> Entrando...
+                </>
+              ) : (
+                "Entrar"
+              )}
             </Button>
           </form>
 
           <div className="mt-6 pt-6 border-t border-zinc-800 text-center">
             <p className="text-sm text-zinc-500">
               Não tem uma conta?{" "}
-              <Link href="/register" className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors">
+              <Link
+                href="/register"
+                className="text-emerald-400 hover:text-emerald-300 font-medium transition-colors"
+              >
                 Criar conta
               </Link>
             </p>

@@ -1,0 +1,3 @@
+ALTER TABLE "fluxus_assessments" ADD CONSTRAINT "fluxus_assessments_userId_users_id_fk" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "fluxus_assessments" ADD CONSTRAINT "fluxus_assessments_companyId_fluxus_companies_id_fk" FOREIGN KEY ("companyId") REFERENCES "public"."fluxus_companies"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "users" ADD CONSTRAINT "users_companyId_fluxus_companies_id_fk" FOREIGN KEY ("companyId") REFERENCES "public"."fluxus_companies"("id") ON DELETE restrict ON UPDATE no action;

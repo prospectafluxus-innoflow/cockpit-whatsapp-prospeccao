@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { lazy, Suspense } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import CockpitPage from "./pages/CockpitPage";
@@ -16,6 +17,17 @@ import AdminPage from "./pages/AdminPage";
 import ProfilePage from "./pages/ProfilePage";
 import InnoFlowPage from "./pages/InnoFlowPage";
 import DashboardLayout from "./components/DashboardLayout";
+import { FluxusLayout } from "./components/fluxus/FluxusLayout";
+
+const FluxusLoginPage = lazy(() => import("./pages/FluxusLoginPage"));
+const FluxusRegisterPage = lazy(() => import("./pages/FluxusRegisterPage"));
+const FluxusHomePage = lazy(() => import("./pages/FluxusHomePage"));
+const FluxusAssessmentPage = lazy(() => import("./pages/FluxusAssessmentPage"));
+const FluxusAdminPage = lazy(() => import("./pages/FluxusAdminPage"));
+const FluxusCompanyPage = lazy(() => import("./pages/FluxusCompanyPage"));
+const FluxusAdminReportPage = lazy(
+  () => import("./pages/FluxusAdminReportPage")
+);
 
 function Router() {
   return (
@@ -25,6 +37,20 @@ function Router() {
       <Route path="/register" component={RegisterPage} />
       <Route path="/forgot-password" component={ForgotPasswordPage} />
       <Route path="/reset-password" component={ResetPasswordPage} />
+      <Route path="/fluxus/login" component={FluxusLoginPage} />
+      <Route path="/fluxus/cadastro" component={FluxusRegisterPage} />
+
+      {/* Área exclusiva do colaborador Fluxus */}
+      <Route path="/fluxus/avaliacao">
+        <FluxusLayout>
+          <FluxusAssessmentPage />
+        </FluxusLayout>
+      </Route>
+      <Route path="/fluxus">
+        <FluxusLayout>
+          <FluxusHomePage />
+        </FluxusLayout>
+      </Route>
 
       {/* Rotas protegidas — com DashboardLayout */}
       <Route>
@@ -36,6 +62,15 @@ function Router() {
             <Route path="/dashboard" component={DashboardPage} />
             <Route path="/schedule" component={SchedulePage} />
             <Route path="/innoflow" component={InnoFlowPage} />
+            <Route path="/fluxus/admin" component={FluxusAdminPage} />
+            <Route
+              path="/fluxus/admin/empresa/:id"
+              component={FluxusCompanyPage}
+            />
+            <Route
+              path="/fluxus/admin/relatorio/:id"
+              component={FluxusAdminReportPage}
+            />
             <Route path="/admin" component={AdminPage} />
             <Route path="/profile" component={ProfilePage} />
             <Route path="/404" component={NotFound} />
@@ -53,7 +88,9 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Suspense fallback={<div className="min-h-screen bg-background" />}>
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

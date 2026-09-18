@@ -1,8 +1,8 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
-import { lazy, Suspense } from "react";
+import { Route, Switch, useLocation } from "wouter";
+import { lazy, Suspense, useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import CockpitPage from "./pages/CockpitPage";
@@ -28,6 +28,18 @@ const FluxusCompanyPage = lazy(() => import("./pages/FluxusCompanyPage"));
 const FluxusAdminReportPage = lazy(
   () => import("./pages/FluxusAdminReportPage")
 );
+
+function ApplicationTitle() {
+  const [location] = useLocation();
+
+  useEffect(() => {
+    document.title = location.startsWith("/fluxus")
+      ? "Fluxus Persona | InnoFlow"
+      : "ProspectaFluxus";
+  }, [location]);
+
+  return null;
+}
 
 function Router() {
   return (
@@ -88,6 +100,7 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
+          <ApplicationTitle />
           <Suspense fallback={<div className="min-h-screen bg-background" />}>
             <Router />
           </Suspense>

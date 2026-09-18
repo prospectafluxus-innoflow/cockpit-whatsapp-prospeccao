@@ -40,14 +40,44 @@ const DAY_MS = 86_400_000;
 const FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 const BRAZIL_OFFSET_MS = 3 * 60 * 60 * 1000;
 
-function brazilDayStartUtc(now = new Date()): Date {
+export type WaBlastSendWindow = {
+  key: "morning" | "lunch" | "afternoon" | "evening";
+  label: string;
+  start: Date;
+};
+
+export function getWaBlastSendWindow(now = new Date()): WaBlastSendWindow | null {
   const inBrazil = new Date(now.getTime() - BRAZIL_OFFSET_MS);
-  return new Date(Date.UTC(
-    inBrazil.getUTCFullYear(),
-    inBrazil.getUTCMonth(),
-    inBrazil.getUTCDate(),
-    3,
-  ));
+  const hour = inBrazil.getUTCHours();
+  const window = hour >= 19
+    ? { key: "evening" as const, label: "19h", hour: 19 }
+    : hour >= 15
+      ? { key: "afternoon" as const, label: "meio da tarde (15h)", hour: 15 }
+      : hour >= 12
+        ? { key: "lunch" as const, label: "almoço (12h)", hour: 12 }
+        : hour >= 8
+          ? { key: "morning" as const, label: "manhã (08h)", hour: 8 }
+          : null;
+  if (!window) return null;
+
+  return {
+    key: window.key,
+    label: window.label,
+    start: new Date(Date.UTC(
+      inBrazil.getUTCFullYear(),
+      inBrazil.getUTCMonth(),
+      inBrazil.getUTCDate(),
+      window.hour + 3,
+    )),
+  };
+}
+
+function requireWaBlastSendWindow(now = new Date()): WaBlastSendWindow {
+  const window = getWaBlastSendWindow(now);
+  if (!window) {
+    throw new Error("Envios permitidos somente nos períodos das 08h, 12h, 15h e 19h (horário de Brasília).");
+  }
+  return window;
 }
 
 function sha256(value: string): string {
@@ -341,6 +371,7 @@ export async function sendControlledWaBlastTemplate(input: {
       throw new Error("A configuração WaBlast mudou durante o preparo. Revise antes de enviar.");
     }
 
+    const sendWindow = requireWaBlastSendWindow();
     const intentKey = `template:${input.userId}:${settings.accountId}:${lead.id}:initial`;
     const idempotencyKey = idempotencyKeyForIntent(intentKey);
     const reservation = await reserveWaBlastOutbound({
@@ -359,8 +390,9 @@ export async function sendControlledWaBlastTemplate(input: {
         intentKey,
         idempotencyKey,
       },
-      since: brazilDayStartUtc(),
-      dailyLimit: settings.dailyLimit,
+      periodStart: sendWindow.start,
+      periodLimit: settings.dailyLimit,
+      periodLabel: sendWindow.label,
       minIntervalSeconds: settings.minIntervalSeconds,
     });
     if (!reservation.created) {
@@ -429,6 +461,7 @@ export async function sendControlledWaBlastAudio(input: {
       throw new Error("A conexão WaBlast mudou durante o preparo. Revise antes de enviar.");
     }
 
+    const sendWindow = requireWaBlastSendWindow();
     const intentKey = `audio:${input.userId}:${settings.accountId}:${lead.id}:${input.touchNumber}:${inboundAt.toISOString()}`;
     const idempotencyKey = idempotencyKeyForIntent(intentKey);
     const reservation = await reserveWaBlastOutbound({
@@ -445,8 +478,9 @@ export async function sendControlledWaBlastAudio(input: {
         intentKey,
         idempotencyKey,
       },
-      since: brazilDayStartUtc(),
-      dailyLimit: settings.dailyLimit,
+      periodStart: sendWindow.start,
+      periodLimit: settings.dailyLimit,
+      periodLabel: sendWindow.label,
       minIntervalSeconds: settings.minIntervalSeconds,
     });
     if (!reservation.created) {
@@ -482,6 +516,10 @@ export async function sendControlledWaBlastAudio(input: {
       const freshInboundAt = assertOpenServiceWindow(freshLead.whatsappLastInboundAt);
       if (freshInboundAt.getTime() !== inboundAt.getTime()) {
         throw new Error("Uma nova mensagem chegou durante o preparo. Confirme novamente o envio do áudio.");
+      }
+      const freshWindow = requireWaBlastSendWindow();
+      if (freshWindow.key !== sendWindow.key || freshWindow.start.getTime() !== sendWindow.start.getTime()) {
+        throw new Error("O período de envio mudou durante o upload. Confirme novamente no novo período.");
       }
       response = await sendWaBlastAudio({
         to: freshLead.whatsapp,

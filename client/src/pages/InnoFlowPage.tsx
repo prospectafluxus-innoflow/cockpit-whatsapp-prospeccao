@@ -395,8 +395,11 @@ export default function InnoFlowPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Limite interno por dia</Label>
-              <Input type="number" min={1} max={200} value={form.dailyLimit} onChange={event => setForm(current => ({ ...current, dailyLimit: Number(event.target.value) }))} />
+              <Label>Leads por período</Label>
+              <Input type="number" min={1} max={50} value={form.dailyLimit} onChange={event => setForm(current => ({ ...current, dailyLimit: Number(event.target.value) }))} />
+              <p className="text-xs text-muted-foreground">
+                4 períodos: 08h, 12h, 15h e 19h · máximo diário atual: {form.dailyLimit * 4}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>Intervalo mínimo (segundos)</Label>
@@ -423,6 +426,14 @@ export default function InnoFlowPage() {
               >
                 {saveConfiguration.isPending ? "Salvando..." : "Salvar configuração"}
               </Button>
+            </div>
+            <div className="grid gap-2 md:col-span-2 md:grid-cols-4 xl:col-span-4">
+              {["Manhã · 08h", "Almoço · 12h", "Meio da tarde · 15h", "Noite · 19h"].map(period => (
+                <div key={period} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-center">
+                  <div className="text-xs text-muted-foreground">{period}</div>
+                  <div className="mt-1 font-semibold">{form.dailyLimit} leads</div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

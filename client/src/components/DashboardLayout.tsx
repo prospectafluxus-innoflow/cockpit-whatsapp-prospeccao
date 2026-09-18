@@ -115,7 +115,7 @@ export default function DashboardLayout({
               <FluxusPersonaLogo className="h-auto w-full max-w-[280px] object-contain" />
             ) : (
             <img
-                src="/brand/prospecta-fluxus-logo.png"
+                src="/brand/prospecta-fluxus-logo-white.png"
                 alt="ProspectaFluxus"
                 className="h-24 w-auto max-w-full object-contain"
               />
@@ -227,7 +227,7 @@ function DashboardLayoutContent({
                     <FluxusPersonaLogo className="h-10 w-auto max-w-[155px] shrink-0 object-contain" />
                   ) : (
                     <img
-                      src="/brand/prospecta-fluxus-logo.png"
+                      src="/brand/prospecta-fluxus-logo-white.png"
                       alt="ProspectaFluxus"
                       className="max-h-16 w-full min-w-0 object-contain object-left"
                     />

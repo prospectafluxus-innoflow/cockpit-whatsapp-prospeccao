@@ -70,7 +70,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-10">
           <img
-            src="/brand/prospecta-fluxus-logo.png"
+            src="/brand/prospecta-fluxus-logo-white.png"
             alt="ProspectaFluxus"
             className="h-auto w-full max-w-[420px] object-contain mx-auto mb-4"
           />

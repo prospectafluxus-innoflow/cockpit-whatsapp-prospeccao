@@ -10,4 +10,5 @@ client/dist
 README.md
 DEPLOY_GUIDE.md
 env.example.txt
-scripts/
+scripts/*
+!scripts/migrate-fluxus.mjs

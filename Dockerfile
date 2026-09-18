@@ -34,6 +34,9 @@ COPY patches/ ./patches/
 # Instalar apenas dependências de produção
 RUN pnpm install --frozen-lockfile --prod
 
+# Migração idempotente da Fluxus Persona para o banco legado
+COPY scripts/migrate-fluxus.mjs ./scripts/migrate-fluxus.mjs
+
 # Copiar build completo (frontend em dist/public, backend em dist/index.js)
 COPY --from=builder /app/dist ./dist
 

@@ -89,10 +89,10 @@ O `railway.json` usa:
 
 ```text
 Build: pnpm run build:prod
-Start: pnpm db:migrate && node dist/index.js
+Start: pnpm db:migrate:fluxus && node dist/index.js
 ```
 
-A migração é aplicada automaticamente e de forma idempotente antes da nova versão iniciar. A aplicação deve responder normalmente antes de ativar integrações na interface. Se o deploy falhar, não repita migrações manualmente sem primeiro consultar os logs.
+A migração aditiva da Fluxus Persona é aplicada automaticamente e de forma idempotente antes da nova versão iniciar, sem reaplicar o histórico legado. A aplicação deve responder normalmente antes de ativar integrações na interface. Se o deploy falhar, não repita migrações manualmente sem primeiro consultar os logs.
 
 ## 7. Alertas Web Push
 

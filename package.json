@@ -12,6 +12,7 @@
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:fluxus": "node scripts/migrate-fluxus.mjs",
     "db:generate": "drizzle-kit generate",
     "build:prod": "vite build && esbuild server/_core/index.prod.ts --platform=node --packages=external --bundle --format=esm --outfile=dist/index.js",
     "start:prod": "NODE_ENV=production node dist/index.js"

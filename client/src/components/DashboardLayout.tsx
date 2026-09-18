@@ -111,9 +111,9 @@ export default function DashboardLayout({
         <div className="flex flex-col items-center gap-8 p-8 max-w-sm w-full">
           <div className="flex flex-col items-center gap-2 mb-2">
             <img
-              src="/icons/icon-master.png"
+              src="/brand/prospecta-fluxus-logo.png"
               alt="ProspectaFluxus"
-              className="h-16 w-auto object-contain"
+              className="h-24 w-auto max-w-full object-contain"
             />
           </div>
           <div className="flex flex-col items-center gap-3 text-center">
@@ -204,7 +204,7 @@ function DashboardLayoutContent({
     <>
       <div className="relative print:hidden" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50">
-          <SidebarHeader className="h-16 justify-center border-b border-border/50 py-2">
+          <SidebarHeader className={`${isCollapsed ? "h-16" : "h-24"} justify-center border-b border-border/50 py-2`}>
             <div className="flex items-center gap-3 px-2 w-full">
               <button
                 onClick={toggleSidebar}
@@ -213,11 +213,11 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed && (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-1 items-center min-w-0 overflow-hidden">
                   <img
-                    src="/icons/icon-master.png"
+                    src="/brand/prospecta-fluxus-logo.png"
                     alt="ProspectaFluxus"
-                    className="h-10 w-auto object-contain shrink-0"
+                    className="max-h-16 w-full min-w-0 object-contain object-left"
                   />
                 </div>
               )}

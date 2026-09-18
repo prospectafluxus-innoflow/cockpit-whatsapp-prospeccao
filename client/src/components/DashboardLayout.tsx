@@ -38,6 +38,7 @@ import {
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
+import { FluxusPersonaLogo } from "./fluxus/FluxusBrand";
 import { Button } from "./ui/button";
 
 const menuItems = [
@@ -110,19 +111,26 @@ export default function DashboardLayout({
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-sm w-full">
           <div className="flex flex-col items-center gap-2 mb-2">
-            <img
-              src="/brand/prospecta-fluxus-logo.png"
-              alt="ProspectaFluxus"
-              className="h-24 w-auto max-w-full object-contain"
-            />
+            {isFluxusAdminRoute ? (
+              <FluxusPersonaLogo className="h-auto w-full max-w-[280px] object-contain" />
+            ) : (
+              <img
+                src="/icons/icon-master.png"
+                alt="ProspectaFluxus"
+                className="h-16 w-auto object-contain"
+              />
+            )}
           </div>
           <div className="flex flex-col items-center gap-3 text-center">
             <h1 className="text-xl font-semibold tracking-tight">
-              Acesse sua conta
+              {isFluxusAdminRoute
+                ? "Acesse a administração Fluxus Persona"
+                : "Acesse sua conta"}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Faça login para acessar seu cockpit de prospecção e gerenciar seus
-              leads.
+              {isFluxusAdminRoute
+                ? "Faça login com sua conta administrativa para gerenciar empresas e avaliações."
+                : "Faça login para acessar seu cockpit de prospecção e gerenciar seus leads."}
             </p>
           </div>
           <Button
@@ -167,6 +175,7 @@ function DashboardLayoutContent({
   const [location, setLocation] = useLocation();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
+  const isFluxusAdminRoute = location.startsWith("/fluxus/admin");
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -204,7 +213,7 @@ function DashboardLayoutContent({
     <>
       <div className="relative print:hidden" ref={sidebarRef}>
         <Sidebar collapsible="icon" className="border-r border-border/50">
-          <SidebarHeader className={`${isCollapsed ? "h-16" : "h-24"} justify-center border-b border-border/50 py-2`}>
+          <SidebarHeader className="h-16 justify-center border-b border-border/50 py-2">
             <div className="flex items-center gap-3 px-2 w-full">
               <button
                 onClick={toggleSidebar}
@@ -213,12 +222,16 @@ function DashboardLayoutContent({
                 <PanelLeft className="h-4 w-4 text-muted-foreground" />
               </button>
               {!isCollapsed && (
-                <div className="flex flex-1 items-center min-w-0 overflow-hidden">
-                  <img
-                    src="/brand/prospecta-fluxus-logo.png"
-                    alt="ProspectaFluxus"
-                    className="max-h-16 w-full min-w-0 object-contain object-left"
-                  />
+                <div className="flex items-center gap-2 min-w-0">
+                  {isFluxusAdminRoute ? (
+                    <FluxusPersonaLogo className="h-10 w-auto max-w-[155px] shrink-0 object-contain" />
+                  ) : (
+                    <img
+                      src="/icons/icon-master.png"
+                      alt="ProspectaFluxus"
+                      className="h-10 w-auto object-contain shrink-0"
+                    />
+                  )}
                 </div>
               )}
             </div>

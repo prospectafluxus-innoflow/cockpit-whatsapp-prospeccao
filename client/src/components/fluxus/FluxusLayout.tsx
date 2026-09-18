@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClipboardCheck, Home, LogOut, UserRound } from "lucide-react";
 import { useLocation } from "wouter";
+import { FluxusPersonaLogo } from "./FluxusBrand";
 
 export function FluxusLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -35,7 +36,7 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
             colaborador recebido da InnoFlow.
           </p>
           <Button className="mt-6" onClick={() => setLocation("/")}>
-            Voltar ao ProspectaFluxus
+            Ir para o Portal InnoFlow
           </Button>
         </div>
       </div>
@@ -55,19 +56,7 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
             onClick={() => setLocation("/fluxus")}
             className="flex items-center gap-3 text-left"
           >
-            <img
-              src="/icons/icon-master.png"
-              alt="InnoFlow"
-              className="h-10 w-auto object-contain"
-            />
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold leading-tight">
-                Fluxus Persona
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Desenvolvimento comportamental
-              </p>
-            </div>
+            <FluxusPersonaLogo className="h-auto w-[170px] object-contain sm:w-[210px]" />
           </button>
 
           <nav className="flex items-center gap-1">

@@ -18,11 +18,11 @@ import ProfilePage from "./pages/ProfilePage";
 import InnoFlowPage from "./pages/InnoFlowPage";
 import DashboardLayout from "./components/DashboardLayout";
 import { FluxusLayout } from "./components/fluxus/FluxusLayout";
+import FluxusAssessmentPage from "./pages/FluxusAssessmentPage";
 
 const FluxusLoginPage = lazy(() => import("./pages/FluxusLoginPage"));
 const FluxusRegisterPage = lazy(() => import("./pages/FluxusRegisterPage"));
 const FluxusHomePage = lazy(() => import("./pages/FluxusHomePage"));
-const FluxusAssessmentPage = lazy(() => import("./pages/FluxusAssessmentPage"));
 const FluxusAdminPage = lazy(() => import("./pages/FluxusAdminPage"));
 const FluxusCompanyPage = lazy(() => import("./pages/FluxusCompanyPage"));
 const FluxusAdminReportPage = lazy(

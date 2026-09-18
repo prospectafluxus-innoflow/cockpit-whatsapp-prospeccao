@@ -1,5 +1,9 @@
 import { trpc } from "@/lib/trpc";
-import { UNAUTHED_ERR_MSG } from '@shared/const';
+import {
+  clearStaleAssetReloadGuard,
+  reloadOnceAfterStaleAssetError,
+} from "@/lib/chunkRecovery";
+import { UNAUTHED_ERR_MSG } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -9,6 +13,17 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+window.addEventListener("vite:preloadError", event => {
+  const preloadEvent = event as Event & { payload?: unknown };
+  const error =
+    preloadEvent.payload ??
+    new Error("Failed to fetch dynamically imported module");
+
+  if (reloadOnceAfterStaleAssetError(error)) event.preventDefault();
+});
+
+clearStaleAssetReloadGuard();
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -17,8 +32,13 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  const publicPaths = ["/login", "/register", "/forgot-password", "/reset-password"];
-  if (!publicPaths.some((p) => window.location.pathname.startsWith(p))) {
+  const publicPaths = [
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+  ];
+  if (!publicPaths.some(p => window.location.pathname.startsWith(p))) {
     window.location.href = "/login";
   }
 };

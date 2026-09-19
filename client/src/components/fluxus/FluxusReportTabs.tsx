@@ -51,11 +51,13 @@ function profileData(result: FluxusResult) {
 }
 
 function ChartCard({ title, children }: { title: string; children: ReactElement }) {
+  const profileLegend = title === "Perfil Fluxus — Natural × Adaptado";
   return (
     <Card className="border-border/60">
       <CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader>
-      <CardContent className={chartHeight}>
-        <ResponsiveContainer width="100%" height="100%">{children}</ResponsiveContainer>
+      <CardContent className="p-5 pt-0">
+        {profileLegend && <div className="mb-2 flex flex-wrap gap-4 text-xs text-muted-foreground"><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#43a97b]" />Natural — tendência do perfil</span><span className="inline-flex items-center gap-2"><i className="h-2.5 w-2.5 rounded-full bg-[#4f82d1]" />Adaptado — exigência percebida da função</span></div>}
+        <div className={`${chartHeight} min-h-[280px] w-full`}><ResponsiveContainer width="100%" height="100%">{children}</ResponsiveContainer></div>
       </CardContent>
     </Card>
   );

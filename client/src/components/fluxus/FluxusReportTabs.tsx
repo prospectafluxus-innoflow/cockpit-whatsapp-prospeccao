@@ -22,6 +22,7 @@ import {
   YAxis,
 } from "recharts";
 import { FluxusReport } from "./FluxusReport";
+import { FluxusManagerGuidance } from "./FluxusManagerGuidance";
 import type { ReactElement } from "react";
 
 const chartHeight = "h-[320px]";
@@ -158,6 +159,6 @@ export function FluxusReportTabs(props: { result: FluxusResult; personName?: str
     <TabsContent value="tendencias"><InstrumentReport result={props.result} kind="tendencias" /></TabsContent>
     <TabsContent value="perfil"><ProfileReport result={props.result} /></TabsContent>
     <TabsContent value="comparativo"><ComparisonReport result={props.result} /></TabsContent>
-    <TabsContent value="consolidada"><FluxusReport {...props} /></TabsContent>
+    <TabsContent value="consolidada"><div className="space-y-6"><FluxusManagerGuidance result={props.result} /><FluxusReport {...props} /></div></TabsContent>
   </Tabs>;
 }

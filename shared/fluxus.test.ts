@@ -5,6 +5,7 @@ import {
   FLUXUS_TOTAL_ITEMS,
   calculateFluxusResult,
   fluxusBand,
+  getFluxusDevelopmentPriorities,
   getFluxusCompletion,
   sanitizeFluxusAnswers,
 } from "./fluxus";
@@ -104,5 +105,62 @@ describe("Fluxus Persona Beta 1.0", () => {
     expect(result.maiorDemanda).toBe("planejador");
     expect(result.maiorGap).toBe(4);
     expect(result.dimensoesComDemandaRelevante).toBe(1);
+  });
+
+  it("transforma demanda positiva relevante em prioridade para intensificar", () => {
+    const answers = answersWith(4);
+    for (const item of FLUXUS_ITEMS) {
+      if (
+        item.dimension === "planejador" &&
+        ["comportamental", "tendencias"].includes(item.section)
+      )
+        answers[item.id] = 2;
+      if (item.dimension === "planejador" && item.section === "funcao")
+        answers[item.id] = 6;
+    }
+
+    const priorities = getFluxusDevelopmentPriorities(
+      calculateFluxusResult(answers)
+    );
+
+    expect(priorities).toHaveLength(1);
+    expect(priorities[0]).toMatchObject({
+      dimension: "planejador",
+      direction: "intensificar",
+      gap: 4,
+    });
+    expect(priorities[0]?.practice).toMatch(/prioridades/i);
+    expect(priorities[0]?.managerSupport).toMatch(/acompanhamento/i);
+  });
+
+  it("transforma demanda negativa relevante em prioridade para modular", () => {
+    const answers = answersWith(4);
+    for (const item of FLUXUS_ITEMS) {
+      if (
+        item.dimension === "comunicador" &&
+        ["comportamental", "tendencias"].includes(item.section)
+      )
+        answers[item.id] = 7;
+      if (item.dimension === "comunicador" && item.section === "funcao")
+        answers[item.id] = 3;
+    }
+
+    const priorities = getFluxusDevelopmentPriorities(
+      calculateFluxusResult(answers)
+    );
+
+    expect(priorities[0]).toMatchObject({
+      dimension: "comunicador",
+      direction: "modular",
+      gap: -4,
+    });
+    expect(priorities[0]?.behavior).toMatch(/objetiva/i);
+  });
+
+  it("não inventa prioridade quando os gaps estão abaixo do limite", () => {
+    const priorities = getFluxusDevelopmentPriorities(
+      calculateFluxusResult(answersWith(4))
+    );
+    expect(priorities).toEqual([]);
   });
 });

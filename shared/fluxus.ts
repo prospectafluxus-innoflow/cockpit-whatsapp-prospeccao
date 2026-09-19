@@ -458,6 +458,136 @@ export type FluxusResult = {
   completedAt: string;
 };
 
+export type FluxusDevelopmentDirection = "intensificar" | "modular";
+
+export type FluxusDevelopmentPriority = {
+  dimension: FluxusDimension;
+  direction: FluxusDevelopmentDirection;
+  gap: number;
+  natural: number;
+  funcaoPercebida: number;
+  behavior: string;
+  practice: string;
+  indicator: string;
+  managerSupport: string;
+  avoid: string;
+};
+
+type FluxusDevelopmentGuide = Omit<
+  FluxusDevelopmentPriority,
+  "dimension" | "direction" | "gap" | "natural" | "funcaoPercebida"
+>;
+
+export const FLUXUS_DEVELOPMENT_GUIDES: Record<
+  FluxusDimension,
+  Record<FluxusDevelopmentDirection, FluxusDevelopmentGuide>
+> = {
+  realizador: {
+    intensificar: {
+      behavior:
+        "Ampliar assertividade, protagonismo e velocidade para decidir diante de obstáculos.",
+      practice:
+        "Em decisões com prazo ou conflito, explicitar a decisão, o critério, o responsável e o próximo passo.",
+      indicator:
+        "Decisões assumidas no prazo e encaminhamentos registrados sem dependência excessiva de validação.",
+      managerSupport:
+        "Definir alçadas claras, critérios mínimos e espaço seguro para decisões com risco controlado.",
+      avoid:
+        "Cobrar protagonismo sem autoridade ou confundir firmeza com imposição.",
+    },
+    modular: {
+      behavior:
+        "Preservar iniciativa, acrescentando escuta, ponderação de riscos e participação das pessoas afetadas.",
+      practice:
+        "Antes de decisões de alto impacto, ouvir ao menos uma perspectiva contrária e registrar o principal risco.",
+      indicator:
+        "Menos retrabalho ou resistência após decisões, mantendo velocidade compatível com a urgência.",
+      managerSupport:
+        "Sinalizar quais decisões exigem consulta e quais podem ser tomadas com autonomia imediata.",
+      avoid:
+        "Desestimular iniciativa; o objetivo é calibrar impacto, não tornar a atuação passiva.",
+    },
+  },
+  comunicador: {
+    intensificar: {
+      behavior:
+        "Aumentar clareza de exposição, influência e construção intencional de relacionamentos.",
+      practice:
+        "Preparar mensagens em três pontos — contexto, proposta e pedido — e apresentá-las em reuniões relevantes.",
+      indicator:
+        "Ideias compreendidas, acordos confirmados e participação mais consistente em situações de exposição.",
+      managerSupport:
+        "Criar oportunidades graduais de apresentação e oferecer feedback específico sobre clareza e impacto.",
+      avoid:
+        "Exigir exposição improvisada ou medir comunicação apenas pelo volume de fala.",
+    },
+    modular: {
+      behavior:
+        "Tornar a comunicação mais objetiva, seletiva e orientada à escuta e à confirmação de entendimento.",
+      practice:
+        "Em reuniões, resumir a mensagem principal, fazer uma pergunta de escuta e confirmar o acordo final.",
+      indicator:
+        "Reuniões mais focadas, menos ruído de interpretação e maior proporção de acordos concluídos.",
+      managerSupport:
+        "Alinhar previamente objetivo, público e tempo disponível para comunicações importantes.",
+      avoid:
+        "Reduzir espontaneidade ou relacionamento; o foco é dar direção e precisão à comunicação.",
+    },
+  },
+  planejador: {
+    intensificar: {
+      behavior:
+        "Desenvolver constância, organização de sequência, previsibilidade e acompanhamento de compromissos.",
+      practice:
+        "Planejar a semana por prioridades, limitar frentes simultâneas e concluir cada ciclo com responsável e prazo.",
+      indicator:
+        "Maior percentual de entregas no prazo, menos tarefas interrompidas e acompanhamento regular dos combinados.",
+      managerSupport:
+        "Definir prioridades estáveis, reduzir mudanças sem contexto e realizar acompanhamento curto e periódico.",
+      avoid:
+        "Adicionar controles excessivos; a estrutura deve sustentar constância sem gerar burocracia.",
+    },
+    modular: {
+      behavior:
+        "Aumentar flexibilidade, velocidade de resposta e conforto com mudanças justificadas de prioridade.",
+      practice:
+        "Replanejar conscientemente uma prioridade por semana, definindo o que será interrompido, mantido e comunicado.",
+      indicator:
+        "Adaptações realizadas com menor demora e sem perda relevante de qualidade ou alinhamento.",
+      managerSupport:
+        "Explicar o motivo das mudanças, preservar referências mínimas e negociar transições realistas.",
+      avoid:
+        "Tratar estabilidade como resistência; o objetivo é ampliar repertório diante de mudanças necessárias.",
+    },
+  },
+  analista: {
+    intensificar: {
+      behavior:
+        "Elevar o uso de dados, critérios, revisão, rastreabilidade e padrões claros de qualidade.",
+      practice:
+        "Antes de uma entrega relevante, registrar critérios de aceite e executar uma revisão objetiva com checklist.",
+      indicator:
+        "Menos erros e retrabalho, decisões justificadas e entregas aderentes aos critérios acordados.",
+      managerSupport:
+        "Disponibilizar dados, padrões e tempo proporcional ao risco da entrega, com feedback baseado em fatos.",
+      avoid:
+        "Fazer cobranças vagas, impor prazos irreais sem critério ou pressionar por respostas sem informação mínima.",
+    },
+    modular: {
+      behavior:
+        "Manter qualidade com proporcionalidade, simplificando critérios e decidindo com informação suficiente.",
+      practice:
+        "Definir previamente o nível de qualidade necessário e um limite de tempo para análise antes de decidir.",
+      indicator:
+        "Decisões mais rápidas sem aumento relevante de erros, revisões ou não conformidades.",
+      managerSupport:
+        "Diferenciar tarefas críticas das reversíveis e explicitar quando velocidade vale mais que refinamento.",
+      avoid:
+        "Desvalorizar precisão; o objetivo é prevenir perfeccionismo e excesso de análise, não reduzir qualidade.",
+    },
+  },
+};
+
 const round = (value: number) => Math.round(value * 100) / 100;
 
 export function fluxusBand(score: number): FluxusBand {
@@ -608,6 +738,27 @@ export function calculateFluxusResult(
     sustentabilidade,
     completedAt: now.toISOString(),
   };
+}
+
+export function getFluxusDevelopmentPriorities(
+  result: FluxusResult,
+  relevantGap = 1.5
+): FluxusDevelopmentPriority[] {
+  return FLUXUS_DIMENSIONS.map(dimension => {
+    const dimensionResult = result.dimensions[dimension];
+    const direction: FluxusDevelopmentDirection =
+      dimensionResult.demanda >= 0 ? "intensificar" : "modular";
+    return {
+      dimension,
+      direction,
+      gap: dimensionResult.demanda,
+      natural: dimensionResult.natural,
+      funcaoPercebida: dimensionResult.funcaoPercebida,
+      ...FLUXUS_DEVELOPMENT_GUIDES[dimension][direction],
+    };
+  })
+    .filter(priority => Math.abs(priority.gap) >= relevantGap)
+    .sort((a, b) => Math.abs(b.gap) - Math.abs(a.gap));
 }
 
 export const FLUXUS_SECTION_META: Record<

@@ -39,34 +39,48 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
   return <Card className="border-border/60"><CardHeader><CardTitle className="text-base">{title}</CardTitle></CardHeader><CardContent className="p-5 pt-0">{children}</CardContent></Card>;
 }
 
+function ChartDataTable({ labels, series }: { labels: string[]; series: { name: string; values: number[]; color: string }[] }) {
+  return <div className="mb-4 overflow-hidden rounded-xl" style={{ border: "1px solid #334155", background: "#0f172a", color: "#f8fafc" }}>
+    <div className="flex flex-wrap gap-4 px-4 py-3" style={{ borderBottom: "1px solid #334155" }}>
+      {series.map(item => <span key={item.name} className="inline-flex items-center gap-2 text-sm font-semibold"><i className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />{item.name}</span>)}
+      <span className="ml-auto text-xs" style={{ color: "#cbd5e1" }}>Escala: 1 a 7</span>
+    </div>
+    <div className="grid grid-cols-2 gap-px sm:grid-cols-4" style={{ background: "#334155" }}>
+      {labels.map((label, index) => <div key={label} className="p-3" style={{ background: "#0f172a" }}><p className="text-xs font-bold uppercase tracking-wide" style={{ color: "#e2e8f0" }}>{label}</p>{series.map(item => <p key={item.name} className="mt-1 text-sm" style={{ color: "#cbd5e1" }}>{item.name}: <strong style={{ color: "#ffffff" }}>{Number(item.values[index]).toFixed(1)}</strong></p>)}</div>)}
+    </div>
+  </div>;
+}
+
 function SvgRadar({ series, labels }: { series: { name: string; values: number[]; color: string }[]; labels: string[] }) {
   const cx = 220, cy = 150, radius = 100, count = labels.length;
-  const point = (value: number, index: number) => { const angle = -Math.PI / 2 + (index * 2 * Math.PI) / count; const r = radius * Math.max(0, Math.min(7, value)) / 7; return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]; };
+  const point = (value: number, index: number) => { const angle = -Math.PI / 2 + (index * 2 * Math.PI) / count; const r = radius * Math.max(0, Math.min(7, Number(value) || 0)) / 7; return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]; };
   const axis = (index: number, r = radius) => { const angle = -Math.PI / 2 + (index * 2 * Math.PI) / count; return [cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]; };
   return <div>
-    <svg viewBox="0 0 440 285" className="h-[300px] w-full" role="img" aria-label="Gráfico radar">
+    <ChartDataTable labels={labels} series={series} />
+    <svg viewBox="0 0 440 285" className="h-[300px] w-full" style={{ display: "block", colorScheme: "dark" }} role="img" aria-label="Gráfico radar">
+      <rect x="0" y="0" width="440" height="285" rx="12" fill="#071017" />
       <g>
-        {[1, 2, 3, 4, 5, 6, 7].map(level => <polygon key={level} points={labels.map((_, i) => axis(i, radius * level / 7).join(",")).join(" ")} fill="none" stroke="#475569" strokeOpacity={level === 7 ? 0.95 : 0.55} />)}
-        {labels.map((label, i) => { const [x, y] = axis(i); return <g key={label}><line x1={cx} y1={cy} x2={x} y2={y} stroke="#475569" strokeOpacity=".8" /><text x={x} y={y + (y < cy ? -10 : 20)} textAnchor="middle" fill="#e2e8f0" fontSize="13" fontWeight="600">{label}</text></g>; })}
-        {series.map(item => <polygon key={item.name} points={item.values.map((value, i) => point(value, i).join(",")).join(" ")} fill={item.color} fillOpacity=".30" stroke={item.color} strokeWidth="3" />)}
+        {[1, 2, 3, 4, 5, 6, 7].map(level => <polygon key={level} points={labels.map((_, i) => axis(i, radius * level / 7).join(",")).join(" ")} fill="none" stroke="#64748b" strokeOpacity={level === 7 ? 1 : 0.55} />)}
+        {labels.map((label, i) => { const [x, y] = axis(i); return <g key={label}><line x1={cx} y1={cy} x2={x} y2={y} stroke="#64748b" strokeOpacity=".85" /><text x={x} y={y + (y < cy ? -10 : 20)} textAnchor="middle" fill="#ffffff" stroke="#071017" strokeWidth="3" paintOrder="stroke" fontSize="14" fontWeight="700">{label}</text></g>; })}
+        {series.map(item => <polygon key={item.name} points={item.values.map((value, i) => point(value, i).join(",")).join(" ")} fill={item.color} fillOpacity=".32" stroke={item.color} strokeWidth="4" />)}
       </g>
     </svg>
-    <div className="mt-1 grid gap-2 sm:grid-cols-2">
-      {labels.map((label, index) => <div key={label} className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2"><p className="text-xs font-semibold text-foreground">{label}</p><div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">{series.map(item => <span key={item.name} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><i className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />{item.name}: <strong className="text-foreground">{Number(item.values[index]).toFixed(1)}</strong></span>)}</div></div>)}
-    </div>
   </div>;
 }
 
 function ScoreBar({ data, color, name }: { data: { dimension: string; score: number }[]; color: string; name: string }) {
   const max = 7, chartTop = 28, chartBottom = 235, barWidth = 48, gap = 35;
+  const labels = data.map(item => item.dimension);
+  const series = [{ name, values: data.map(item => item.score), color }];
   return <div>
-    <svg viewBox="0 0 440 285" className="h-[300px] w-full" role="img" aria-label={`Pontuação ${name}`}>
+    <ChartDataTable labels={labels} series={series} />
+    <svg viewBox="0 0 440 285" className="h-[300px] w-full" style={{ display: "block", colorScheme: "dark" }} role="img" aria-label={`Pontuação ${name}`}>
+      <rect x="0" y="0" width="440" height="285" rx="12" fill="#071017" />
       <g>
-        {[1, 2, 3, 4, 5, 6, 7].map(tick => { const y = chartBottom - (tick / max) * (chartBottom - chartTop); return <g key={tick}><line x1="42" x2="420" y1={y} y2={y} stroke="#475569" strokeOpacity=".65" /><text x="32" y={y + 4} textAnchor="end" fill="#cbd5e1" fontSize="12">{tick}</text></g>; })}
-        {data.map((item, i) => { const x = 57 + i * (barWidth + gap); const height = Math.max(0, item.score / max) * (chartBottom - chartTop); return <g key={item.dimension}><rect x={x} y={chartBottom - height} width={barWidth} height={height} rx="6" fill={color} /><text x={x + barWidth / 2} y={chartBottom - height - 8} textAnchor="middle" fill="#f8fafc" fontSize="14" fontWeight="700">{item.score.toFixed(1)}</text><text x={x + barWidth / 2} y="260" textAnchor="middle" fill="#e2e8f0" fontSize="12" fontWeight="600">{item.dimension}</text></g>; })}
+        {[1, 2, 3, 4, 5, 6, 7].map(tick => { const y = chartBottom - (tick / max) * (chartBottom - chartTop); return <g key={tick}><line x1="42" x2="420" y1={y} y2={y} stroke="#64748b" strokeOpacity=".7" /><text x="32" y={y + 4} textAnchor="end" fill="#ffffff" fontSize="12" fontWeight="600">{tick}</text></g>; })}
+        {data.map((item, i) => { const x = 57 + i * (barWidth + gap); const score = Number(item.score) || 0; const height = Math.max(0, score / max) * (chartBottom - chartTop); return <g key={item.dimension}><rect x={x} y={chartBottom - height} width={barWidth} height={height} rx="6" fill={color} /><text x={x + barWidth / 2} y={chartBottom - height - 8} textAnchor="middle" fill="#ffffff" stroke="#071017" strokeWidth="3" paintOrder="stroke" fontSize="15" fontWeight="800">{score.toFixed(1)}</text><text x={x + barWidth / 2} y="260" textAnchor="middle" fill="#ffffff" stroke="#071017" strokeWidth="3" paintOrder="stroke" fontSize="13" fontWeight="700">{item.dimension}</text></g>; })}
       </g>
     </svg>
-    <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">{data.map(item => <div key={item.dimension} className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-center"><p className="text-xs font-medium text-muted-foreground">{item.dimension}</p><p className="mt-1 text-base font-bold text-foreground">{item.score.toFixed(1)}</p></div>)}</div>
   </div>;
 }
 

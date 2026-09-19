@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FluxusReport } from "@/components/fluxus/FluxusReport";
+import { FluxusReportTabs } from "@/components/fluxus/FluxusReportTabs";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Download } from "lucide-react";
 import { useLocation } from "wouter";
@@ -52,7 +52,7 @@ export default function FluxusAdminReportPage({
             <Download className="h-4 w-4" /> Imprimir / salvar PDF
           </Button>
         </div>
-        <FluxusReport
+        <FluxusReportTabs
           result={data.assessment.result!}
           personName={data.person?.name}
           companyName={data.company?.name}

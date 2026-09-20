@@ -208,7 +208,7 @@ export function FluxusReport({
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Resposta direta
+              Hipótese de foco
             </p>
             <h2 className="mt-1 text-xl font-semibold sm:text-2xl">
               {priorities.length
@@ -365,7 +365,11 @@ export function FluxusReport({
                     </Badge>
                   </div>
                   <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {item.natural >= 4 ? meta.high : meta.low}
+                    {item.natural >= 5
+                      ? meta.high
+                      : item.natural <= 3
+                        ? meta.low
+                        : `Pontuação moderada em ${meta.label.toLowerCase()}; confirme como essa tendência varia conforme a situação.`}
                   </p>
                 </CardContent>
               </Card>
@@ -408,7 +412,7 @@ export function FluxusReport({
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6 print:hidden xl:grid-cols-2">
         <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">
@@ -519,7 +523,13 @@ export function FluxusReport({
                   <Metric label="Natural" value={item.natural} strong />
                 </div>
                 <div className="rounded-xl bg-muted/50 p-4 text-sm">
-                  <p>{item.natural >= 4 ? meta.high : meta.low}</p>
+                  <p>
+                    {item.natural >= 5
+                      ? meta.high
+                      : item.natural <= 3
+                        ? meta.low
+                        : `Faixa moderada; confirme como ${meta.label.toLowerCase()} varia conforme a situação.`}
+                  </p>
                 </div>
                 <div className="flex items-start gap-3 rounded-xl border border-border/60 p-4">
                   <DemandIcon

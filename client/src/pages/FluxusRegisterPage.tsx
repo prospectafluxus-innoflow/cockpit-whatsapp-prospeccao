@@ -266,10 +266,15 @@ export default function FluxusRegisterPage() {
                 htmlFor="privacy"
                 className="cursor-pointer text-xs font-normal leading-relaxed text-zinc-400"
               >
-                Estou ciente de que as respostas serão utilizadas para
-                autoconhecimento, devolutiva e relatórios da empresa. A
-                ferramenta não realiza diagnóstico psicológico nem decisão
-                automática de contratação.
+                Li o aviso de privacidade 2026-09-01 e estou ciente de que as
+                respostas serão tratadas para autoconhecimento, devolutiva e
+                desenvolvimento profissional. Meu resultado ficará disponível
+                para mim e poderá ser compartilhado conforme a política de
+                visibilidade da empresa informada. A ferramenta não realiza
+                diagnóstico, ranking ou decisão automática de contratação,
+                promoção ou desligamento. Após o cadastro, poderei consultar a
+                finalidade, retenção, consentimentos e exercer meus direitos na
+                Central de Privacidade.
               </Label>
             </div>
 

@@ -1,7 +1,11 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import {
+  fluxusAuditLogs,
   fluxusAssessments,
   fluxusCompanies,
+  fluxusConsents,
+  fluxusDebriefs,
+  fluxusPrivacyRequests,
   users,
   type FluxusAssessment,
   type FluxusCompany,
@@ -85,6 +89,38 @@ export async function getCurrentFluxusAssessment(
   return rows[0] ?? null;
 }
 
+export async function listFluxusAssessmentsForUser(userId: number) {
+  return db
+    .select()
+    .from(fluxusAssessments)
+    .where(eq(fluxusAssessments.userId, userId))
+    .orderBy(desc(fluxusAssessments.createdAt));
+}
+
+export async function startNewFluxusAssessment(
+  userId: number,
+  companyId: number,
+  cycleLabel?: string
+) {
+  const current = await getCurrentFluxusAssessment(userId);
+  if (current?.status === "draft") return current;
+  const history = await listFluxusAssessmentsForUser(userId);
+  const cycleNumber = history.reduce(
+    (highest, assessment) => Math.max(highest, assessment.cycleNumber),
+    0
+  ) + 1;
+  return createFluxusAssessment({
+    userId,
+    companyId,
+    status: "draft",
+    cycleNumber,
+    cycleLabel: cycleLabel || null,
+    instrumentVersion: FLUXUS_INSTRUMENT_VERSION,
+    formulaVersion: FLUXUS_FORMULA_VERSION,
+    answers: {},
+  });
+}
+
 export async function createFluxusAssessment(
   data: InsertFluxusAssessment
 ): Promise<FluxusAssessment> {
@@ -115,11 +151,16 @@ export async function saveFluxusAnswers(
 ) {
   const rows = await db
     .update(fluxusAssessments)
-    .set({ answers, updatedAt: new Date() })
+    .set({
+      answers,
+      revision: sql`${fluxusAssessments.revision} + 1`,
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(fluxusAssessments.id, assessmentId),
-        eq(fluxusAssessments.userId, userId)
+        eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.status, "draft")
       )
     )
     .returning();
@@ -145,7 +186,8 @@ export async function completeFluxusAssessment(
     .where(
       and(
         eq(fluxusAssessments.id, assessmentId),
-        eq(fluxusAssessments.userId, userId)
+        eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.status, "draft")
       )
     )
     .returning();
@@ -159,6 +201,120 @@ export async function getFluxusAssessmentById(id: number) {
     .where(eq(fluxusAssessments.id, id))
     .limit(1);
   return rows[0] ?? null;
+}
+
+export async function updateFluxusCompanyGovernance(
+  id: number,
+  values: {
+    reportVisibility: "participant_only" | "participant_manager_hr" | "participant_hr";
+    minimumAggregateSize: number;
+    retentionMonths: number;
+    processingPurpose: string;
+  }
+) {
+  const rows = await db
+    .update(fluxusCompanies)
+    .set({ ...values, updatedAt: new Date() })
+    .where(eq(fluxusCompanies.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function setFluxusUserRole(
+  userId: number,
+  companyId: number,
+  fluxusRole: "collaborator" | "manager" | "hr"
+) {
+  const rows = await db
+    .update(users)
+    .set({ fluxusRole, updatedAt: new Date() })
+    .where(and(eq(users.id, userId), eq(users.companyId, companyId), eq(users.accountType, "fluxus")))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function recordFluxusConsent(values: {
+  userId: number;
+  companyId: number;
+  noticeVersion: string;
+  purpose: string;
+  source: string;
+  ipHash?: string | null;
+  userAgent?: string | null;
+}) {
+  const rows = await db.insert(fluxusConsents).values(values).returning();
+  return rows[0]!;
+}
+
+export async function listFluxusConsents(userId: number) {
+  return db.select().from(fluxusConsents).where(eq(fluxusConsents.userId, userId)).orderBy(desc(fluxusConsents.acceptedAt));
+}
+
+export async function revokeLatestFluxusConsent(userId: number) {
+  const consents = await listFluxusConsents(userId);
+  const active = consents.find(consent => !consent.revokedAt);
+  if (!active) return null;
+  const rows = await db.update(fluxusConsents).set({ revokedAt: new Date() }).where(eq(fluxusConsents.id, active.id)).returning();
+  return rows[0] ?? null;
+}
+
+export async function createFluxusPrivacyRequest(values: {
+  userId: number;
+  companyId: number;
+  type: "access" | "correction" | "deletion" | "revocation";
+  details?: string | null;
+}) {
+  const rows = await db.insert(fluxusPrivacyRequests).values(values).returning();
+  return rows[0]!;
+}
+
+export async function listFluxusPrivacyRequests(userId: number) {
+  return db.select().from(fluxusPrivacyRequests).where(eq(fluxusPrivacyRequests.userId, userId)).orderBy(desc(fluxusPrivacyRequests.createdAt));
+}
+
+export async function recordFluxusAudit(values: {
+  actorUserId?: number | null;
+  subjectUserId?: number | null;
+  companyId?: number | null;
+  assessmentId?: number | null;
+  action: string;
+  resourceType: string;
+  metadata?: Record<string, string | number | boolean | null>;
+  ipHash?: string | null;
+}) {
+  const rows = await db.insert(fluxusAuditLogs).values(values).returning();
+  return rows[0]!;
+}
+
+export async function listFluxusAuditLogs(companyId: number, limit = 100) {
+  return db.select().from(fluxusAuditLogs).where(eq(fluxusAuditLogs.companyId, companyId)).orderBy(desc(fluxusAuditLogs.createdAt)).limit(limit);
+}
+
+export async function getFluxusDebrief(assessmentId: number) {
+  const rows = await db.select().from(fluxusDebriefs).where(eq(fluxusDebriefs.assessmentId, assessmentId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertFluxusDebrief(values: {
+  assessmentId: number;
+  participantUserId: number;
+  facilitatorUserId: number;
+  status: "not_started" | "in_progress" | "completed";
+  evidenceExamples?: string | null;
+  hypothesesTested?: string | null;
+  agreedActions?: string | null;
+  managerSupport?: string | null;
+  followUpDate?: string | null;
+  participantNotes?: string | null;
+}) {
+  const now = new Date();
+  const existing = await getFluxusDebrief(values.assessmentId);
+  if (existing) {
+    const rows = await db.update(fluxusDebriefs).set({ ...values, startedAt: existing.startedAt ?? now, completedAt: values.status === "completed" ? now : null, updatedAt: now }).where(eq(fluxusDebriefs.id, existing.id)).returning();
+    return rows[0]!;
+  }
+  const rows = await db.insert(fluxusDebriefs).values({ ...values, startedAt: now, completedAt: values.status === "completed" ? now : null }).returning();
+  return rows[0]!;
 }
 
 export type FluxusCompanySummary = FluxusCompany & {
@@ -236,6 +392,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
         id: users.id,
         name: users.name,
         email: users.email,
+        fluxusRole: users.fluxusRole,
         jobTitle: users.jobTitle,
         department: users.department,
         createdAt: users.createdAt,
@@ -258,7 +415,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
       latestByUser.set(assessment.userId, assessment);
   }
 
-  const people = collaborators.map(collaborator => {
+  const peopleWithResults = collaborators.map(collaborator => {
     const assessment = latestByUser.get(collaborator.id) ?? null;
     return {
       ...collaborator,
@@ -272,7 +429,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
     };
   });
 
-  const completedResults = people
+  const completedResults = peopleWithResults
     .map(person => person.result)
     .filter((result): result is FluxusResult => Boolean(result));
   const totals = emptyDimensionTotals();
@@ -304,15 +461,16 @@ export async function getFluxusCompanyDashboard(companyId: number) {
     { natural: number; funcao: number; demanda: number }
   >;
 
+  const people = peopleWithResults.map(({ result: _result, ...person }) => person);
   return {
     company,
     people,
     summary: {
       collaborators: collaborators.length,
       completed: completedResults.length,
-      inProgress: people.filter(person => person.assessmentStatus === "draft")
+      inProgress: peopleWithResults.filter(person => person.assessmentStatus === "draft")
         .length,
-      notStarted: people.filter(
+      notStarted: peopleWithResults.filter(
         person => person.assessmentStatus === "not_started"
       ).length,
       completionRate: collaborators.length
@@ -320,6 +478,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
         : 0,
       averages,
       predominantCount,
+      canAggregate: completedResults.length >= Math.max(5, company.minimumAggregateSize),
     },
   };
 }

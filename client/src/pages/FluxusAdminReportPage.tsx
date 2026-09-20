@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FluxusReportTabs } from "@/components/fluxus/FluxusReportTabs";
+import { FluxusDebriefGuide } from "@/components/fluxus/FluxusDebriefGuide";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Download } from "lucide-react";
 import { useLocation } from "wouter";
@@ -11,7 +12,8 @@ export default function FluxusAdminReportPage({
   params: { id: string };
 }) {
   const assessmentId = Number(params.id);
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const isPlatformAdminRoute = location.startsWith("/fluxus/admin/");
   const { data, isLoading, error } = trpc.fluxus.adminAssessment.useQuery(
     { assessmentId },
     { enabled: Number.isInteger(assessmentId) && assessmentId > 0 }
@@ -38,11 +40,15 @@ export default function FluxusAdminReportPage({
           <Button
             variant="ghost"
             onClick={() =>
-              navigate(`/fluxus/admin/empresa/${data.assessment.companyId}`)
+              navigate(
+                isPlatformAdminRoute
+                  ? `/fluxus/admin/empresa/${data.assessment.companyId}`
+                  : "/fluxus/equipe"
+              )
             }
             className="gap-2"
           >
-            <ArrowLeft className="h-4 w-4" /> Voltar à empresa
+            <ArrowLeft className="h-4 w-4" /> Voltar
           </Button>
           <Button
             variant="outline"
@@ -57,6 +63,12 @@ export default function FluxusAdminReportPage({
           personName={data.person?.name}
           companyName={data.company?.name}
           jobTitle={data.person?.jobTitle}
+          department={data.person?.department}
+          audience="manager"
+        />
+        <FluxusDebriefGuide
+          assessmentId={data.assessment.id}
+          initial={data.debrief}
         />
       </div>
     </div>

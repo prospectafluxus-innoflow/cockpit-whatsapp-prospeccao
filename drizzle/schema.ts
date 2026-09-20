@@ -31,6 +31,24 @@ export const fluxusAssessmentStatusEnum = pgEnum("fluxus_assessment_status", [
   "draft",
   "completed",
 ]);
+export const fluxusAccessRoleEnum = pgEnum("fluxus_access_role", [
+  "collaborator",
+  "manager",
+  "hr",
+]);
+export const fluxusPrivacyRequestTypeEnum = pgEnum(
+  "fluxus_privacy_request_type",
+  ["access", "correction", "deletion", "revocation"]
+);
+export const fluxusPrivacyRequestStatusEnum = pgEnum(
+  "fluxus_privacy_request_status",
+  ["submitted", "in_review", "completed", "rejected"]
+);
+export const fluxusDebriefStatusEnum = pgEnum("fluxus_debrief_status", [
+  "not_started",
+  "in_progress",
+  "completed",
+]);
 export const layerEnum = pgEnum("layer", ["A", "B", "C"]);
 export const statusEnum = pgEnum("status", [
   "novo",
@@ -77,6 +95,16 @@ export const fluxusCompanies = pgTable(
     accessCodeHash: varchar("accessCodeHash", { length: 255 }).notNull(),
     accessCodeHint: varchar("accessCodeHint", { length: 12 }),
     active: integer("active").notNull().default(1),
+    reportVisibility: varchar("reportVisibility", { length: 24 })
+      .notNull()
+      .default("participant_manager_hr"),
+    minimumAggregateSize: integer("minimumAggregateSize").notNull().default(5),
+    retentionMonths: integer("retentionMonths").notNull().default(60),
+    processingPurpose: text("processingPurpose")
+      .notNull()
+      .default(
+        "Autoconhecimento, devolutiva e desenvolvimento profissional, sem decisão automatizada."
+      ),
     createdBy: integer("createdBy"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -100,6 +128,9 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: roleEnum("role").default("user").notNull(),
   accountType: accountTypeEnum("accountType").default("prospecting").notNull(),
+  fluxusRole: fluxusAccessRoleEnum("fluxusRole")
+    .default("collaborator")
+    .notNull(),
   companyId: integer("companyId").references(() => fluxusCompanies.id, {
     onDelete: "restrict",
   }),
@@ -117,6 +148,7 @@ export const users = pgTable("users", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  privacyDeletedAt: timestamp("privacyDeletedAt"),
 });
 
 export type User = typeof users.$inferSelect;
@@ -134,6 +166,9 @@ export const fluxusAssessments = pgTable(
       .notNull()
       .references(() => fluxusCompanies.id, { onDelete: "restrict" }),
     status: fluxusAssessmentStatusEnum("status").notNull().default("draft"),
+    cycleNumber: integer("cycleNumber").notNull().default(1),
+    cycleLabel: varchar("cycleLabel", { length: 120 }),
+    revision: integer("revision").notNull().default(0),
     instrumentVersion: varchar("instrumentVersion", { length: 40 }).notNull(),
     formulaVersion: varchar("formulaVersion", { length: 40 }).notNull(),
     answers: jsonb("answers")
@@ -147,6 +182,10 @@ export const fluxusAssessments = pgTable(
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => [
+    uniqueIndex("fluxus_assessments_user_cycle_idx").on(
+      table.userId,
+      table.cycleNumber
+    ),
     index("fluxus_assessments_user_idx").on(table.userId, table.createdAt),
     index("fluxus_assessments_company_idx").on(
       table.companyId,
@@ -158,6 +197,118 @@ export const fluxusAssessments = pgTable(
 
 export type FluxusAssessment = typeof fluxusAssessments.$inferSelect;
 export type InsertFluxusAssessment = typeof fluxusAssessments.$inferInsert;
+
+// ─── Consentimento, privacidade e governança Fluxus ──────────────────────────
+export const fluxusConsents = pgTable(
+  "fluxus_consents",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    companyId: integer("companyId")
+      .notNull()
+      .references(() => fluxusCompanies.id, { onDelete: "restrict" }),
+    noticeVersion: varchar("noticeVersion", { length: 40 }).notNull(),
+    purpose: text("purpose").notNull(),
+    acceptedAt: timestamp("acceptedAt").defaultNow().notNull(),
+    revokedAt: timestamp("revokedAt"),
+    source: varchar("source", { length: 40 }).notNull().default("registration"),
+    ipHash: varchar("ipHash", { length: 64 }),
+    userAgent: text("userAgent"),
+  },
+  table => [index("fluxus_consents_user_idx").on(table.userId, table.acceptedAt)]
+);
+
+export const fluxusPrivacyRequests = pgTable(
+  "fluxus_privacy_requests",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    companyId: integer("companyId")
+      .notNull()
+      .references(() => fluxusCompanies.id, { onDelete: "restrict" }),
+    type: fluxusPrivacyRequestTypeEnum("type").notNull(),
+    status: fluxusPrivacyRequestStatusEnum("status")
+      .notNull()
+      .default("submitted"),
+    details: text("details"),
+    resolutionNote: text("resolutionNote"),
+    resolvedBy: integer("resolvedBy"),
+    resolvedAt: timestamp("resolvedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    index("fluxus_privacy_requests_user_idx").on(table.userId, table.createdAt),
+    index("fluxus_privacy_requests_company_idx").on(
+      table.companyId,
+      table.status,
+      table.createdAt
+    ),
+  ]
+);
+
+export const fluxusAuditLogs = pgTable(
+  "fluxus_audit_logs",
+  {
+    id: serial("id").primaryKey(),
+    actorUserId: integer("actorUserId"),
+    subjectUserId: integer("subjectUserId"),
+    companyId: integer("companyId"),
+    assessmentId: integer("assessmentId"),
+    action: varchar("action", { length: 80 }).notNull(),
+    resourceType: varchar("resourceType", { length: 60 }).notNull(),
+    metadata: jsonb("metadata")
+      .$type<Record<string, string | number | boolean | null>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    ipHash: varchar("ipHash", { length: 64 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("fluxus_audit_company_idx").on(table.companyId, table.createdAt),
+    index("fluxus_audit_subject_idx").on(table.subjectUserId, table.createdAt),
+  ]
+);
+
+export const fluxusDebriefs = pgTable(
+  "fluxus_debriefs",
+  {
+    id: serial("id").primaryKey(),
+    assessmentId: integer("assessmentId")
+      .notNull()
+      .references(() => fluxusAssessments.id, { onDelete: "restrict" }),
+    participantUserId: integer("participantUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    facilitatorUserId: integer("facilitatorUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: fluxusDebriefStatusEnum("status")
+      .notNull()
+      .default("not_started"),
+    evidenceExamples: text("evidenceExamples"),
+    hypothesesTested: text("hypothesesTested"),
+    agreedActions: text("agreedActions"),
+    managerSupport: text("managerSupport"),
+    followUpDate: date("followUpDate"),
+    participantNotes: text("participantNotes"),
+    startedAt: timestamp("startedAt"),
+    completedAt: timestamp("completedAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("fluxus_debriefs_assessment_idx").on(table.assessmentId),
+    index("fluxus_debriefs_company_user_idx").on(
+      table.participantUserId,
+      table.updatedAt
+    ),
+  ]
+);
 
 // ─── Leads ────────────────────────────────────────────────────────────────────
 export const leads = pgTable(

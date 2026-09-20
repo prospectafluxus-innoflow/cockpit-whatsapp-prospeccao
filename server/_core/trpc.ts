@@ -10,11 +10,26 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
+function isActiveUser(
+  user: TrpcContext["user"]
+): user is NonNullable<TrpcContext["user"]> {
+  return Boolean(
+    user && user.approvalStatus === "approved" && !user.privacyDeletedAt
+  );
+}
+
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
 
   if (!ctx.user) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+
+  if (!isActiveUser(ctx.user)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Esta conta não está ativa.",
+    });
   }
 
   return next({
@@ -31,7 +46,7 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
+    if (!isActiveUser(ctx.user) || ctx.user.role !== "admin") {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 

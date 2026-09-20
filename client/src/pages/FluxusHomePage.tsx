@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Clock3,
   Download,
+  History,
   ShieldCheck,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -43,7 +44,14 @@ export default function FluxusHomePage() {
   if (completed) {
     return (
       <div>
-        <div className="mb-5 flex items-center justify-end print:hidden">
+        <div className="mb-5 flex flex-wrap items-center justify-end gap-2 print:hidden">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/fluxus/historico")}
+            className="gap-2"
+          >
+            <History className="h-4 w-4" /> Histórico e evolução
+          </Button>
           <Button
             variant="outline"
             onClick={() => window.print()}
@@ -57,6 +65,8 @@ export default function FluxusHomePage() {
           personName={user.name}
           companyName={company?.name}
           jobTitle={user.jobTitle}
+          department={user.department}
+          audience="participant"
         />
       </div>
     );

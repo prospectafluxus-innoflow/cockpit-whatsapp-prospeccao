@@ -55,7 +55,7 @@ export default function FluxusAdminReportPage({
             onClick={() => window.print()}
             className="gap-2"
           >
-            <Download className="h-4 w-4" /> Imprimir / salvar PDF
+            <Download className="h-4 w-4" /> Salvar PDF de RH/gestor
           </Button>
         </div>
         <FluxusReportTabs

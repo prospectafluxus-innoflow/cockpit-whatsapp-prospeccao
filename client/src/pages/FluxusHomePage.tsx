@@ -87,7 +87,7 @@ export default function FluxusHomePage() {
             onClick={() => window.print()}
             className="gap-2"
           >
-            <Download className="h-4 w-4" /> Imprimir / salvar PDF
+            <Download className="h-4 w-4" /> Salvar PDF do colaborador
           </Button>
         </div>
         <FluxusReportTabs

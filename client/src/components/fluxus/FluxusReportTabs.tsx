@@ -7,9 +7,18 @@ import {
   type FluxusDimension,
   type FluxusResult,
 } from "@shared/fluxus";
+import {
+  isFluxusV2Result,
+  type FluxusStoredResult,
+} from "@shared/fluxusVersioning";
 
 import { FluxusReport } from "./FluxusReport";
 import { FluxusManagerGuidance } from "./FluxusManagerGuidance";
+import { FluxusPersonaLogo } from "./FluxusBrand";
+import {
+  FluxusBeta2PrintableReport,
+  FluxusBeta2ReportTabs,
+} from "./FluxusBeta2Report";
 
 
 function scoreData(result: FluxusResult, key: "comportamental" | "tendencias") {
@@ -31,7 +40,7 @@ function profileData(result: FluxusResult) {
   return FLUXUS_DIMENSIONS.map(dimension => ({
     dimension: FLUXUS_DIMENSION_META[dimension].label,
     Natural: result.dimensions[dimension].natural,
-    Adaptado: result.dimensions[dimension].funcaoPercebida,
+    "Função percebida": result.dimensions[dimension].funcaoPercebida,
   }));
 }
 
@@ -93,7 +102,7 @@ function DimensionDescription({ dimension, score }: { dimension: FluxusDimension
           <div><p className="font-semibold">{meta.label}</p><p className="text-xs text-muted-foreground">{meta.definition}</p></div>
           <Badge variant={score >= 5 ? "default" : "secondary"}>{score.toFixed(1)} · {score >= 5 ? "Alta" : score <= 3 ? "Baixa" : "Moderada"}</Badge>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{score >= 4 ? meta.high : meta.low}</p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{score >= 5 ? meta.high : score <= 3 ? meta.low : `Pontuação moderada em ${meta.label.toLowerCase()}; confirme em quais contextos a tendência aumenta ou diminui.`}</p>
       </CardContent>
     </Card>
   );
@@ -121,7 +130,7 @@ function InstrumentReport({ result, kind }: { result: FluxusResult; kind: "compo
         <ChartCard title="Pontuação por eixo"><ScoreBar data={data} color={isBehavioral ? "#43a97b" : "#f6b44c"} name={label} /></ChartCard>
       </div>
       <div className="grid gap-4 md:grid-cols-2">{FLUXUS_DIMENSIONS.map(dimension => <DimensionDescription key={dimension} dimension={dimension} score={result.dimensions[dimension][kind]} />)}</div>
-      <Card className="border-border/60"><CardHeader><CardTitle className="text-base">Laudo descritivo</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{FLUXUS_DIMENSIONS.map(dimension => { const score = result.dimensions[dimension][kind]; const meta = FLUXUS_DIMENSION_META[dimension]; return <div key={dimension} className="rounded-xl bg-muted/40 p-4 text-sm leading-relaxed"><strong>{meta.label}:</strong> {score >= 4 ? meta.high : meta.low}</div>; })}</CardContent></Card>
+      <Card className="border-border/60"><CardHeader><CardTitle className="text-base">Síntese descritiva</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{FLUXUS_DIMENSIONS.map(dimension => { const score = result.dimensions[dimension][kind]; const meta = FLUXUS_DIMENSION_META[dimension]; return <div key={dimension} className="rounded-xl bg-muted/40 p-4 text-sm leading-relaxed"><strong>{meta.label}:</strong> {score >= 5 ? meta.high : score <= 3 ? meta.low : `Faixa moderada; investigue situações em que ${meta.label.toLowerCase()} aparece com maior ou menor intensidade.`}</div>; })}</CardContent></Card>
     </div>
   );
 }
@@ -135,9 +144,9 @@ function ProfileReport({ result }: { result: FluxusResult }) {
     { label: "Maior gap", value: result.maiorGap, band: result.sustentabilidade },
   ];
   return <div className="space-y-5">
-    <section className="rounded-3xl border border-border/60 bg-card p-6"><Badge variant="outline">Perfil Fluxus</Badge><h2 className="mt-3 text-2xl font-semibold">Natural × Adaptado</h2><p className="mt-2 text-sm text-muted-foreground">Consolidação do perfil natural com o que a função exige, preservando direção e magnitude da demanda de adaptação.</p></section>
-    <div className="grid gap-5 lg:grid-cols-2"><ChartCard title="Perfil Fluxus — Natural × Adaptado"><div className="mb-2 text-xs text-muted-foreground">Natural — tendência do perfil · Adaptado — exigência percebida da função</div><SvgRadar labels={data.map(item => item.dimension)} series={[{ name: "Natural", values: data.map(item => item.Natural), color: "#43a97b" }, { name: "Adaptado", values: data.map(item => item.Adaptado), color: "#4f82d1" }]} /></ChartCard><ChartCard title="Indicadores Complementares (0–7)"><ScoreBar data={indicators.map(item => ({ dimension: item.label, score: item.value }))} color="#4f82d1" name="Valor" /></ChartCard></div>
-    <Card className="border-border/60"><CardHeader><CardTitle className="text-base">Dimensões, demanda e sinal de adaptação</CardTitle></CardHeader><CardContent><div className="grid gap-3">{FLUXUS_DIMENSIONS.map(dimension => { const item = result.dimensions[dimension]; const meta = FLUXUS_DIMENSION_META[dimension]; return <div key={dimension} className="grid gap-2 rounded-xl border border-border/60 p-4 sm:grid-cols-[1.3fr_repeat(4,1fr)] sm:items-center"><strong>{meta.label}</strong><Metric label="Natural" value={item.natural} /><Metric label="Adaptado" value={item.funcaoPercebida} /><Metric label="Demanda" value={item.demanda} /><Badge variant={Math.abs(item.demanda) >= 1.5 ? "default" : "secondary"}>{Math.abs(item.demanda) >= 1.5 ? item.demanda > 0 ? "Intensificar" : "Modular" : "Alinhado"}</Badge></div>; })}</div></CardContent></Card>
+    <section className="rounded-3xl border border-border/60 bg-card p-6"><Badge variant="outline">Perfil Fluxus</Badge><h2 className="mt-3 text-2xl font-semibold">Natural × Função percebida</h2><p className="mt-2 text-sm text-muted-foreground">Consolidação do perfil natural com o que a pessoa percebe que a função exige, preservando direção e magnitude da demanda de adaptação.</p></section>
+    <div className="grid gap-5 lg:grid-cols-2"><ChartCard title="Perfil Fluxus — Natural × Função percebida"><div className="mb-2 text-xs text-muted-foreground">Natural — tendência do perfil · Função percebida — exigência relatada da função</div><SvgRadar labels={data.map(item => item.dimension)} series={[{ name: "Natural", values: data.map(item => item.Natural), color: "#43a97b" }, { name: "Função percebida", values: data.map(item => item["Função percebida"]), color: "#4f82d1" }]} /></ChartCard><ChartCard title="Indicadores Complementares (0–7)"><ScoreBar data={indicators.map(item => ({ dimension: item.label, score: item.value }))} color="#4f82d1" name="Valor" /></ChartCard></div>
+    <Card className="border-border/60"><CardHeader><CardTitle className="text-base">Dimensões, demanda e sinal de adaptação</CardTitle></CardHeader><CardContent><div className="grid gap-3">{FLUXUS_DIMENSIONS.map(dimension => { const item = result.dimensions[dimension]; const meta = FLUXUS_DIMENSION_META[dimension]; return <div key={dimension} className="grid gap-2 rounded-xl border border-border/60 p-4 sm:grid-cols-[1.3fr_repeat(4,1fr)] sm:items-center"><strong>{meta.label}</strong><Metric label="Natural" value={item.natural} /><Metric label="Função percebida" value={item.funcaoPercebida} /><Metric label="Demanda" value={item.demanda} /><Badge variant={Math.abs(item.demanda) >= 1.5 ? "default" : "secondary"}>{Math.abs(item.demanda) >= 1.5 ? item.demanda > 0 ? "Intensificar" : "Modular" : "Alinhado"}</Badge></div>; })}</div></CardContent></Card>
     <Card className="border-border/60"><CardHeader><CardTitle className="text-base">Indicadores complementares</CardTitle></CardHeader><CardContent className="grid gap-3 md:grid-cols-2">{indicators.map(item => <div key={item.label} className="rounded-xl bg-muted/40 p-4"><p className="text-sm font-medium">{item.label}</p><p className="mt-1 text-xl font-semibold">{item.value.toFixed(1)} · {item.band}</p></div>)}</CardContent></Card>
   </div>;
 }
@@ -151,8 +160,30 @@ function ComparisonReport({ result }: { result: FluxusResult }) {
 function Summary({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></div>; }
 function Metric({ label, value }: { label: string; value: number }) { return <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-semibold">{value.toFixed(1)}</p></div>; }
 
-export function FluxusReportTabs(props: { result: FluxusResult; personName?: string | null; companyName?: string | null; jobTitle?: string | null; department?: string | null }) {
-  return <Tabs defaultValue="consolidada" className="space-y-5">
+type FluxusLegacyReportProps = { result: FluxusResult; personName?: string | null; companyName?: string | null; jobTitle?: string | null; department?: string | null; audience?: "participant" | "manager" };
+export type FluxusReportProps = Omit<FluxusLegacyReportProps, "result"> & { result: FluxusStoredResult };
+
+function FluxusLegacyPrintableReport(props: FluxusLegacyReportProps) {
+  const completedDate = new Intl.DateTimeFormat("pt-BR").format(new Date(props.result.completedAt));
+  return <div className="hidden print:block print:text-black">
+    <section className="mb-8 rounded-3xl border border-slate-300 bg-white p-8 text-slate-950">
+      <div className="flex items-center justify-between gap-6"><p className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-700">InnoFlow · Fluxus Persona</p><FluxusPersonaLogo className="h-auto w-[190px] object-contain" /></div>
+      <h1 className="mt-3 text-3xl font-semibold">Relatório de desenvolvimento comportamental</h1>
+      <p className="mt-3 text-sm">{props.personName || "Participante"}{props.jobTitle ? ` · ${props.jobTitle}` : ""}{props.companyName ? ` · ${props.companyName}` : ""}</p>
+      <div className="mt-5 grid grid-cols-3 gap-3 text-xs"><div><strong>Conclusão</strong><br />{completedDate}</div><div><strong>Instrumento</strong><br />{props.result.instrumentVersion}</div><div><strong>Fórmula</strong><br />{props.result.formulaVersion}</div></div>
+      <p className="mt-6 border-t border-slate-200 pt-4 text-xs leading-relaxed text-slate-600">Documento confidencial. Este resultado apoia reflexão e desenvolvimento. Não é diagnóstico psicológico, prova de competência nem fundamento isolado para decisões de emprego.</p>
+    </section>
+    <section className="break-after-page"><InstrumentReport result={props.result} kind="comportamental" /></section>
+    <section className="break-after-page"><InstrumentReport result={props.result} kind="tendencias" /></section>
+    <section className="break-after-page"><ProfileReport result={props.result} /></section>
+    <section className="break-after-page"><ComparisonReport result={props.result} /></section>
+    {props.audience === "manager" ? <section className="break-after-page"><FluxusManagerGuidance result={props.result} /></section> : null}
+    <FluxusReport {...props} />
+  </div>;
+}
+
+function FluxusLegacyReportTabs(props: FluxusLegacyReportProps) {
+  return <><div className="print:hidden"><Tabs defaultValue="consolidada" className="space-y-5">
     <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5 print:hidden">
       <TabsTrigger value="comportamental">Comportamental</TabsTrigger><TabsTrigger value="tendencias">Tendências</TabsTrigger><TabsTrigger value="perfil">Perfil Fluxus</TabsTrigger><TabsTrigger value="comparativo">Comparativo</TabsTrigger><TabsTrigger value="consolidada">Análise Consolidada</TabsTrigger>
     </TabsList>
@@ -160,6 +191,18 @@ export function FluxusReportTabs(props: { result: FluxusResult; personName?: str
     <TabsContent value="tendencias"><InstrumentReport result={props.result} kind="tendencias" /></TabsContent>
     <TabsContent value="perfil"><ProfileReport result={props.result} /></TabsContent>
     <TabsContent value="comparativo"><ComparisonReport result={props.result} /></TabsContent>
-    <TabsContent value="consolidada"><div className="space-y-6"><FluxusManagerGuidance result={props.result} /><FluxusReport {...props} /></div></TabsContent>
-  </Tabs>;
+    <TabsContent value="consolidada"><div className="space-y-6">{props.audience === "manager" ? <FluxusManagerGuidance result={props.result} /> : null}<FluxusReport {...props} /></div></TabsContent>
+  </Tabs></div><FluxusLegacyPrintableReport {...props} /></>;
+}
+
+export function FluxusPrintableReport(props: FluxusReportProps) {
+  if (isFluxusV2Result(props.result))
+    return <FluxusBeta2PrintableReport {...props} result={props.result} />;
+  return <FluxusLegacyPrintableReport {...props} result={props.result} />;
+}
+
+export function FluxusReportTabs(props: FluxusReportProps) {
+  if (isFluxusV2Result(props.result))
+    return <FluxusBeta2ReportTabs {...props} result={props.result} />;
+  return <FluxusLegacyReportTabs {...props} result={props.result} />;
 }

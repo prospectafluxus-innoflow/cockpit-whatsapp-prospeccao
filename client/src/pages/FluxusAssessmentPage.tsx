@@ -5,11 +5,12 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
 import {
-  FLUXUS_SECTION_META,
-  getFluxusCompletion,
-  getFluxusItemsBySection,
-  type FluxusSection,
-} from "@shared/fluxus";
+  getFluxusCompletionForVersion,
+  getFluxusItemsForVersion,
+  getFluxusSectionMetaForVersion,
+  getFluxusSectionsForVersion,
+  isFluxusV2Version,
+} from "@shared/fluxusVersioning";
 import {
   AlertCircle,
   ArrowLeft,
@@ -22,13 +23,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
-const sections: FluxusSection[] = [
-  "comportamental",
-  "tendencias",
-  "funcao",
-  "energia",
-];
-
 export default function FluxusAssessmentPage() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
@@ -37,12 +31,20 @@ export default function FluxusAssessmentPage() {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
+  const instrumentVersion = data?.assessment.instrumentVersion;
+  const sections = useMemo(
+    () => getFluxusSectionsForVersion(instrumentVersion),
+    [instrumentVersion]
+  );
 
   useEffect(() => {
     if (data && !hydrated) {
       setAnswers(data.assessment.answers ?? {});
       const firstIncomplete = sections.findIndex(section =>
-        getFluxusItemsBySection(section).some(
+        getFluxusItemsForVersion(
+          data.assessment.instrumentVersion,
+          section
+        ).some(
           item => data.assessment.answers?.[item.id] === undefined
         )
       );
@@ -52,12 +54,18 @@ export default function FluxusAssessmentPage() {
   }, [data, hydrated]);
 
   const currentSection = sections[step]!;
-  const meta = FLUXUS_SECTION_META[currentSection];
-  const items = useMemo(
-    () => getFluxusItemsBySection(currentSection),
-    [currentSection]
+  const meta = getFluxusSectionMetaForVersion(
+    instrumentVersion,
+    currentSection
   );
-  const completion = useMemo(() => getFluxusCompletion(answers), [answers]);
+  const items = useMemo(
+    () => getFluxusItemsForVersion(instrumentVersion, currentSection),
+    [instrumentVersion, currentSection]
+  );
+  const completion = useMemo(
+    () => getFluxusCompletionForVersion(instrumentVersion, answers),
+    [instrumentVersion, answers]
+  );
   const sectionComplete = items.every(item => answers[item.id] !== undefined);
 
   const save = trpc.fluxus.saveDraft.useMutation({
@@ -125,7 +133,7 @@ export default function FluxusAssessmentPage() {
   const finish = async () => {
     if (completion.completed !== completion.total) {
       const missingSection = sections.findIndex(section =>
-        getFluxusItemsBySection(section).some(
+        getFluxusItemsForVersion(instrumentVersion, section).some(
           item => answers[item.id] === undefined
         )
       );
@@ -170,7 +178,10 @@ export default function FluxusAssessmentPage() {
         </div>
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-            <span>Progresso geral</span>
+            <span>
+              Progresso geral · {completion.total - completion.completed}{" "}
+              resposta(s) pendente(s)
+            </span>
             <strong className="text-foreground">
               {completion.percentage}%
             </strong>
@@ -179,9 +190,18 @@ export default function FluxusAssessmentPage() {
         </div>
         <div className="mt-5 grid grid-cols-4 gap-2">
           {sections.map((section, index) => {
-            const done = getFluxusItemsBySection(section).every(
+            const done = getFluxusItemsForVersion(
+              instrumentVersion,
+              section
+            ).every(
               item => answers[item.id] !== undefined
             );
+            const sectionLabel = getFluxusSectionMetaForVersion(
+              instrumentVersion,
+              section
+            ).title
+              .replace(/^Bloco\s+\d+[AB]?\s*·\s*/i, "")
+              .replace(/^Etapa\s+\d+\s*·\s*/i, "");
             return (
               <button
                 key={section}
@@ -189,13 +209,26 @@ export default function FluxusAssessmentPage() {
                 className={`flex h-9 items-center justify-center rounded-xl border text-xs font-medium transition-colors ${index === step ? "border-primary bg-primary text-primary-foreground" : done ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-border/60 bg-muted/30 text-muted-foreground"}`}
               >
                 {done ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
-                <span className="hidden sm:inline">Etapa </span>
-                {index + 1}
+                <span className="hidden sm:inline">{sectionLabel}</span>
+                <span className="sm:hidden">{index + 1}</span>
               </button>
             );
           })}
         </div>
       </section>
+
+      {isFluxusV2Version(instrumentVersion) &&
+      data.assessment.prefilledFromAssessmentId ? (
+        <Alert className="mb-6 border-emerald-500/30 bg-emerald-500/5">
+          <Check className="h-4 w-4 text-emerald-600" />
+          <AlertDescription className="leading-relaxed">
+            Reaproveitamos suas 20 respostas de perfil comportamental e 8
+            respostas sobre a função do ciclo anterior. Revise essas etapas se
+            algo mudou. As 33 respostas de Momento Atual e Índice Fluxus são
+            novas e devem refletir as últimas quatro semanas.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <div className="space-y-4">
         {items.map((item, index) => (

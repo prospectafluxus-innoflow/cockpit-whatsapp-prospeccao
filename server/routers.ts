@@ -185,7 +185,24 @@ export const appRouter = router({
   authOwn: authOwnRouter,
   fluxus: fluxusRouter,
   auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
+    me: publicProcedure.query(opts => {
+      const user = opts.ctx.user;
+      if (!user) return null;
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        accountType: user.accountType,
+        companyId: user.companyId,
+        fluxusRole: user.fluxusRole,
+        jobTitle: user.jobTitle,
+        department: user.department,
+        approvalStatus: user.approvalStatus,
+        createdAt: user.createdAt,
+        lastSignedIn: user.lastSignedIn,
+      };
+    }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

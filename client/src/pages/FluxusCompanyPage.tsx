@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
+import { FluxusGovernanceSettings } from "@/components/fluxus/FluxusGovernanceSettings";
 import { FLUXUS_DIMENSIONS, FLUXUS_DIMENSION_META } from "@shared/fluxus";
 import {
   ArrowLeft,
@@ -90,10 +91,11 @@ export default function FluxusCompanyPage({
 
   const chartData = FLUXUS_DIMENSIONS.map(dimension => ({
     dimension: FLUXUS_DIMENSION_META[dimension].label,
-    Natural: data.summary.averages[dimension].natural,
-    "Função percebida": data.summary.averages[dimension].funcao,
+    Natural: data.summary.averages?.[dimension].natural ?? 0,
+    "Função percebida": data.summary.averages?.[dimension].funcao ?? 0,
   }));
-  const canAggregate = data.summary.completed >= 3;
+  const canAggregate = data.summary.canAggregate;
+  const company = data.company!;
 
   return (
     <div className="min-h-full bg-muted/20 p-4 sm:p-6 lg:p-8">
@@ -112,13 +114,13 @@ export default function FluxusCompanyPage({
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">Empresa</Badge>
                 <Badge
-                  variant={data.company.active === 1 ? "default" : "secondary"}
+                  variant={company.active === 1 ? "default" : "secondary"}
                 >
-                  {data.company.active === 1 ? "Ativa" : "Inativa"}
+                  {company.active === 1 ? "Ativa" : "Inativa"}
                 </Badge>
               </div>
               <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-                {data.company.name}
+                {company.name}
               </h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 Acompanhamento das avaliações vinculadas pelo identificador
@@ -171,6 +173,8 @@ export default function FluxusCompanyPage({
             </Dialog>
           </div>
         </section>
+
+        <FluxusGovernanceSettings company={company} people={data.people} />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
@@ -272,7 +276,7 @@ export default function FluxusCompanyPage({
                           {FLUXUS_DIMENSION_META[dimension].label}
                         </span>
                         <span className="text-sm font-semibold">
-                          {data.summary.predominantCount[dimension]}
+                          {data.summary.predominantCount?.[dimension] ?? 0}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
@@ -361,7 +365,13 @@ export default function FluxusCompanyPage({
                         variant="outline"
                         disabled={
                           !person.assessmentId ||
-                          person.assessmentStatus !== "completed"
+                          person.assessmentStatus !== "completed" ||
+                          company.reportVisibility !== "participant_manager_hr"
+                        }
+                        title={
+                          company.reportVisibility !== "participant_manager_hr"
+                            ? "A política da empresa não autoriza acesso individual da administração."
+                            : "Abrir relatório individual"
                         }
                         onClick={() =>
                           navigate(

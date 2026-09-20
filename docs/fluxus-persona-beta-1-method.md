@@ -154,6 +154,39 @@ A versão Beta 1.0 não deve mudar silenciosamente. Alterações em itens geram 
 
 Uma versão pode avançar quando os itens críticos forem revisados, a coleta estiver estável, as dimensões apresentarem interpretação coerente e o relatório mantiver linguagem compatível com as evidências. A passagem para um uso mais sensível exige evidência adicional e revisão especializada independente.
 
+## 10. Contrato de cálculo da Beta 1.0
+
+Todas as respostas válidas são números inteiros de 1 a 7. Respostas desconhecidas, fora da escala ou não inteiras são descartadas durante a sanitização. O resultado só é calculado quando os 56 itens válidos estão presentes. Não há imputação de valores ausentes.
+
+As médias e diferenças são arredondadas para duas casas decimais com a regra padrão do JavaScript, `Math.round(valor × 100) ÷ 100`. Cada item possui o mesmo peso dentro do seu bloco. Os blocos Comportamental e Tendências também possuem peso igual no cálculo do Natural.
+
+Quando duas dimensões empatam no maior resultado, a Beta 1.0 usa a primeira dimensão na ordem técnica **Realizador, Comunicador, Planejador e Analista**. Essa escolha serve apenas para manter o cálculo determinístico. O relatório deve informar o empate quando ele for relevante, em vez de sugerir superioridade real da primeira dimensão.
+
+O campo `maiorDemanda` representa a dimensão com a **maior magnitude absoluta** da diferença entre Função percebida e Natural. Ele não significa necessariamente a maior demanda positiva. O sinal da diferença continua necessário para distinguir intensificação de modulação.
+
+O sinal de sustentabilidade utiliza distância média de adaptação, maior gap e autorregulação. Energia é exibida como indicador contextual, mas **não participa da regra de sustentabilidade** da Beta 1.0.
+
+## 11. Matriz de interpretação responsável
+
+| Resultado observado | Hipótese que pode ser formulada | Conclusão que não pode ser formulada |
+| --- | --- | --- |
+| Natural alto em uma dimensão | A pessoa relata maior disponibilidade relativa daquela tendência | A pessoa possui competência comprovada, potencial superior ou melhor desempenho |
+| Natural baixo em uma dimensão | A pessoa relata menor preferência relativa por aquela tendência | A pessoa possui deficiência, incapacidade ou inadequação para a função |
+| Demanda positiva | A pessoa percebe que a função pede intensificação daquela dimensão | A função objetivamente exige esse comportamento ou a pessoa está despreparada |
+| Demanda negativa | A pessoa percebe necessidade de modular ou conter a dimensão | O comportamento natural é excessivo, ruim ou deve ser eliminado |
+| Divergência Comportamental × Tendências | Contexto, momento ou interpretação dos itens merecem investigação | Há inconsistência, mentira ou instabilidade psicológica |
+| Autorregulação baixa | Cabe conversar sobre clareza sob pressão, apoio e recuperação percebida | Existe transtorno, adoecimento, burnout ou risco clínico |
+| Mudança entre ciclos | O autorrelato ou o contexto mudou entre as datas | Houve melhora, piora ou efeito causal de uma intervenção |
+| Média agregada da equipe | O grupo respondente apresenta uma tendência descritiva naquele ciclo | A cultura da empresa foi diagnosticada ou pessoas específicas podem ser inferidas |
+
+## 12. Governança da interpretação
+
+O relatório do participante deve usar linguagem de autodesenvolvimento. Orientações dirigidas ao gestor ficam em uma audiência separada. Métricas agregadas só podem ser liberadas pelo servidor quando o grupo atingir o limiar de privacidade configurado, nunca apenas por ocultação visual.
+
+Toda leitura individual por um administrador deve gerar registro de auditoria. A devolutiva deve registrar exemplos observáveis, hipóteses confirmadas ou descartadas, voz do participante, ações acordadas, apoio do gestor e data de acompanhamento. O registro deve evitar dados clínicos, íntimos ou opiniões sem evidência.
+
+Alterações de itens geram nova versão do instrumento. Alterações de pesos, fórmulas ou limites geram nova versão da fórmula. Resultados concluídos permanecem como snapshots do ciclo e não são recalculados silenciosamente. Comparações entre versões diferentes podem mostrar valores, mas não devem classificar evolução automaticamente.
+
 ## Referências
 
 [1]: https://www.discprofile.com/what-is-disc/research-reliability-and-validity "Science behind DiSC — reliability, validity, and model description"

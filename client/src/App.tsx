@@ -25,6 +25,12 @@ const FluxusRegisterPage = lazy(() => import("./pages/FluxusRegisterPage"));
 const FluxusHomePage = lazy(() => import("./pages/FluxusHomePage"));
 const FluxusAdminPage = lazy(() => import("./pages/FluxusAdminPage"));
 const FluxusCompanyPage = lazy(() => import("./pages/FluxusCompanyPage"));
+const FluxusHistoryPage = lazy(() => import("./pages/FluxusHistoryPage"));
+const FluxusTeamDashboardPage = lazy(
+  () => import("./pages/FluxusTeamDashboardPage")
+);
+const FluxusPrivacyPage = lazy(() => import("./pages/FluxusPrivacyPage"));
+const FluxusMethodPage = lazy(() => import("./pages/FluxusMethodPage"));
 const FluxusAdminReportPage = lazy(
   () => import("./pages/FluxusAdminReportPage")
 );
@@ -57,6 +63,25 @@ function Router() {
         <FluxusLayout>
           <FluxusAssessmentPage />
         </FluxusLayout>
+      </Route>
+      <Route path="/fluxus/historico">
+        <FluxusLayout><FluxusHistoryPage /></FluxusLayout>
+      </Route>
+      <Route path="/fluxus/equipe">
+        <FluxusLayout><FluxusTeamDashboardPage /></FluxusLayout>
+      </Route>
+      <Route path="/fluxus/relatorio/:id">
+        {params => (
+          <FluxusLayout>
+            <FluxusAdminReportPage params={params} />
+          </FluxusLayout>
+        )}
+      </Route>
+      <Route path="/fluxus/privacidade">
+        <FluxusLayout><FluxusPrivacyPage /></FluxusLayout>
+      </Route>
+      <Route path="/fluxus/metodologia">
+        <FluxusLayout><FluxusMethodPage /></FluxusLayout>
       </Route>
       <Route path="/fluxus">
         <FluxusLayout>

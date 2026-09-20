@@ -4,6 +4,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FluxusReportTabs } from "@/components/fluxus/FluxusReportTabs";
 import { trpc } from "@/lib/trpc";
+import { isFluxusV2Version } from "@shared/fluxusVersioning";
 import {
   ArrowRight,
   Building2,
@@ -11,13 +12,28 @@ import {
   ClipboardList,
   Clock3,
   Download,
+  History,
+  Loader2,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { useLocation } from "wouter";
+import { toast } from "sonner";
 
 export default function FluxusHomePage() {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data, isLoading, error } = trpc.fluxus.me.useQuery();
+  const startCycle = trpc.fluxus.startNewCycle.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.fluxus.me.invalidate(),
+        utils.fluxus.history.invalidate(),
+      ]);
+      navigate("/fluxus/avaliacao");
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
 
   if (isLoading) {
     return (
@@ -39,11 +55,33 @@ export default function FluxusHomePage() {
 
   const { user, company, assessment } = data;
   const completed = assessment.status === "completed" && assessment.result;
+  const isBeta2 = isFluxusV2Version(assessment.instrumentVersion);
 
   if (completed) {
     return (
       <div>
-        <div className="mb-5 flex items-center justify-end print:hidden">
+        <div className="mb-5 flex flex-wrap items-center justify-end gap-2 print:hidden">
+          {data.canStartNewCycle ? (
+            <Button
+              onClick={() => startCycle.mutate({ cycleLabel: "Beta 2" })}
+              disabled={startCycle.isPending}
+              className="gap-2"
+            >
+              {startCycle.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Iniciar novo ciclo Beta 2
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            onClick={() => navigate("/fluxus/historico")}
+            className="gap-2"
+          >
+            <History className="h-4 w-4" /> Histórico e evolução
+          </Button>
           <Button
             variant="outline"
             onClick={() => window.print()}
@@ -57,6 +95,8 @@ export default function FluxusHomePage() {
           personName={user.name}
           companyName={company?.name}
           jobTitle={user.jobTitle}
+          department={user.department}
+          audience="participant"
         />
       </div>
     );
@@ -68,15 +108,15 @@ export default function FluxusHomePage() {
         <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
-              Fluxus Persona Beta
+              Fluxus Persona {isBeta2 ? "Beta 2" : "Beta 1"}
             </p>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
               Olá, {user.name?.split(" ")[0] || "colaborador"}.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-emerald-50/70">
-              Sua avaliação conecta preferências naturais, tendências de atuação
-              e a exigência percebida da sua função. Responda com base no que
-              acontece com frequência, não no que parece ideal.
+              {isBeta2
+                ? "A avaliação separa seu perfil comportamental, seu momento atual e a sustentabilidade da relação com o trabalho. Responda com sinceridade e considere o período indicado em cada etapa."
+                : "Sua avaliação conecta preferências naturais, tendências de atuação e a exigência percebida da sua função. Responda com base no que acontece com frequência, não no que parece ideal."}
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] px-5 py-4">
@@ -109,7 +149,7 @@ export default function FluxusHomePage() {
                     </h2>
                     <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
                       São {assessment.completion.total} afirmações em quatro
-                      etapas. O preenchimento leva aproximadamente 12 a 18
+                      etapas. O preenchimento leva aproximadamente {isBeta2 ? "15 a 20" : "12 a 18"}
                       minutos.
                     </p>
                   </div>

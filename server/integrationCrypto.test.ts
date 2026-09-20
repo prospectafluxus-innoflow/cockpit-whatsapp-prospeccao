@@ -36,8 +36,12 @@ describe("cifragem das credenciais Trello", () => {
 
   it("deteta adulteração no conteúdo cifrado", () => {
     const encrypted = encryptTrelloCredentials(42, { apiKey: "abc123", token: "token456" });
-    const replacement = encrypted.endsWith("A") ? "B" : "A";
-    const tampered = `${encrypted.slice(0, -1)}${replacement}`;
+    const parts = encrypted.split(".");
+    const ciphertext = parts.at(-1)!;
+    const position = Math.floor(ciphertext.length / 2);
+    const replacement = ciphertext[position] === "A" ? "B" : "A";
+    parts[parts.length - 1] = `${ciphertext.slice(0, position)}${replacement}${ciphertext.slice(position + 1)}`;
+    const tampered = parts.join(".");
     expect(() => decryptTrelloCredentials(42, tampered)).toThrow(/Não foi possível decifrar/);
   });
 

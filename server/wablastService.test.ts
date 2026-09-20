@@ -87,7 +87,7 @@ const lead = {
   whatsappOptInStatus: "opted_in",
   whatsappOptInAt: new Date("2026-09-16T12:00:00Z"),
   whatsappOptInSource: "Formulário workshop #123",
-  whatsappLastInboundAt: new Date(),
+  whatsappLastInboundAt: new Date("2026-09-17T14:30:00Z"),
 } as any;
 
 const approvedTemplate = {
@@ -119,25 +119,29 @@ const reservation = {
 
 describe("serviço WaBlast seguro", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T15:30:00Z"));
     vi.clearAllMocks();
-    vi.mocked(wablastDb.getWaBlastSettings).mockResolvedValue(settings as any);
-    vi.mocked(coreDb.getLeadById).mockResolvedValue({ ...lead });
-    vi.mocked(provider.listWaBlastTemplates).mockResolvedValue([approvedTemplate]);
-    vi.mocked(wablastDb.reserveWaBlastOutbound).mockResolvedValue({
+    vi.mocked(wablastDb.getWaBlastSettings).mockReset().mockResolvedValue(settings as any);
+    vi.mocked(coreDb.getLeadById).mockReset().mockResolvedValue({ ...lead });
+    vi.mocked(provider.listWaBlastTemplates).mockReset().mockResolvedValue([approvedTemplate]);
+    vi.mocked(wablastDb.assertWaBlastOutboundPhoneUnambiguous).mockReset().mockResolvedValue(undefined);
+    vi.mocked(wablastDb.reserveWaBlastOutbound).mockReset().mockResolvedValue({
       message: reservation,
       created: true,
     });
-    vi.mocked(provider.sendWaBlastTemplate).mockResolvedValue({
+    vi.mocked(provider.sendWaBlastTemplate).mockReset().mockResolvedValue({
       id: "msg_1",
       meta_message_id: "wamid.1",
       to: "+5511999990000",
       status: "sent",
     });
-    vi.mocked(wablastDb.updateWaBlastMessage).mockResolvedValue({ ...reservation, status: "sent" });
-    vi.mocked(wablastDb.upsertWaBlastSettings).mockResolvedValue(settings as any);
+    vi.mocked(wablastDb.updateWaBlastMessage).mockReset().mockResolvedValue({ ...reservation, status: "sent" });
+    vi.mocked(wablastDb.upsertWaBlastSettings).mockReset().mockResolvedValue(settings as any);
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 

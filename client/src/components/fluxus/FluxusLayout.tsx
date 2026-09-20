@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ClipboardCheck, Home, LogOut, UserRound } from "lucide-react";
+import { BookOpenCheck, ClipboardCheck, History, Home, LogOut, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { useLocation } from "wouter";
 import { FluxusPersonaLogo } from "./FluxusBrand";
 
@@ -46,6 +46,12 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { path: "/fluxus", label: "Início", icon: Home },
     { path: "/fluxus/avaliacao", label: "Avaliação", icon: ClipboardCheck },
+    { path: "/fluxus/historico", label: "Histórico", icon: History },
+    ...(user.fluxusRole === "manager" || user.fluxusRole === "hr"
+      ? [{ path: "/fluxus/equipe", label: "Equipe", icon: UsersRound }]
+      : []),
+    { path: "/fluxus/metodologia", label: "Método", icon: BookOpenCheck },
+    { path: "/fluxus/privacidade", label: "Privacidade", icon: ShieldCheck },
   ];
 
   return (

@@ -36,8 +36,10 @@ export type FluxusBeta2ReportProps = {
 type ScorePoint = {
   label: string;
   shortLabel?: string;
+  code?: string;
   value: number;
   note?: string;
+  color?: string;
 };
 
 type ChartSeries = {
@@ -50,6 +52,18 @@ const PROFILE_COLOR = "#43a97b";
 const MOMENT_COLOR = "#f6b44c";
 const FUNCTION_COLOR = "#4f82d1";
 const FLUXUS_COLOR = "#a76bd8";
+const DISC_COLORS: Record<FluxusDimension, string> = {
+  realizador: "#dc2626",
+  comunicador: "#facc15",
+  planejador: "#16a34a",
+  analista: "#2563eb",
+};
+const DISC_CODES: Record<FluxusDimension, string> = {
+  realizador: "D",
+  comunicador: "I",
+  planejador: "S",
+  analista: "C",
+};
 
 const momentShortLabels: Record<FluxusMomentDimension, string> = {
   engajamento: "Engajamento",
@@ -246,9 +260,20 @@ function SvgBars({
   const slot = usableWidth / points.length;
   const barWidth = Math.min(58, slot * 0.58);
   const series = [{ name, color, values: points.map(point => point.value) }];
+  const hasIndividualColors = points.some(point => point.color);
 
   return (
     <div>
+      {hasIndividualColors ? (
+        <div className="mb-3 flex flex-wrap gap-3 rounded-xl border border-border/60 bg-muted/30 px-4 py-3 text-xs font-semibold">
+          {points.map(point => (
+            <span key={point.label} className="inline-flex items-center gap-2">
+              <i className="h-3 w-3 rounded-full" style={{ backgroundColor: point.color }} />
+              {point.code ? `${point.code} — ` : ""}{point.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <ChartDataTable labels={points.map(point => point.label)} series={series} />
       <svg
         viewBox={`0 0 ${width} 320`}
@@ -273,7 +298,7 @@ function SvgBars({
           const x = chartLeft + index * slot + (slot - barWidth) / 2;
           const height = (Math.max(0, Math.min(7, item.value)) / 7) * (chartBottom - chartTop);
           const risk = riskKeys.includes(item.label);
-          const fill = neutral ? color : scoreTone(item.value, risk);
+          const fill = item.color ?? (neutral ? color : scoreTone(item.value, risk));
           return (
             <g key={item.label}>
               <rect x={x} y={chartBottom - height} width={barWidth} height={height} rx="7" fill={fill} />
@@ -383,8 +408,10 @@ function ProfileReport({ result }: { result: FluxusV2Result }) {
   const points = FLUXUS_DIMENSIONS.map(dimension => ({
     label: FLUXUS_DIMENSION_META[dimension].label,
     shortLabel: FLUXUS_DIMENSION_META[dimension].shortLabel,
+    code: DISC_CODES[dimension],
     value: result.dimensions[dimension].natural,
     note: FLUXUS_DIMENSION_META[dimension].definition,
+    color: DISC_COLORS[dimension],
   }));
   const principal = FLUXUS_DIMENSION_META[result.predominante].label;
 

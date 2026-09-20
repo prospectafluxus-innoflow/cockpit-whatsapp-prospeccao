@@ -57,7 +57,10 @@ try {
         "updatedAt" timestamp DEFAULT now() NOT NULL
       );
 
-      ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "reportVisibility" varchar(24) DEFAULT 'participant_manager_hr' NOT NULL;
+      ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "reportVisibility" varchar(24) DEFAULT 'participant_only' NOT NULL;
+      ALTER TABLE "fluxus_companies" ALTER COLUMN "reportVisibility" SET DEFAULT 'participant_only';
+      ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "beta2OrganizationAccessApprovedAt" timestamp;
+      ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "beta2OrganizationAccessPurpose" text;
       ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "minimumAggregateSize" integer DEFAULT 5 NOT NULL;
       UPDATE "fluxus_companies" SET "minimumAggregateSize" = 5 WHERE "minimumAggregateSize" < 5;
       ALTER TABLE "fluxus_companies" ADD COLUMN IF NOT EXISTS "retentionMonths" integer DEFAULT 60 NOT NULL;
@@ -77,6 +80,7 @@ try {
         "status" "fluxus_assessment_status" DEFAULT 'draft' NOT NULL,
         "cycleNumber" integer DEFAULT 1 NOT NULL,
         "cycleLabel" varchar(120),
+        "prefilledFromAssessmentId" integer,
         "revision" integer DEFAULT 0 NOT NULL,
         "instrumentVersion" varchar(40) NOT NULL,
         "formulaVersion" varchar(40) NOT NULL,
@@ -90,16 +94,32 @@ try {
 
       ALTER TABLE "fluxus_assessments" ADD COLUMN IF NOT EXISTS "cycleNumber" integer DEFAULT 1 NOT NULL;
       ALTER TABLE "fluxus_assessments" ADD COLUMN IF NOT EXISTS "cycleLabel" varchar(120);
+      ALTER TABLE "fluxus_assessments" ADD COLUMN IF NOT EXISTS "prefilledFromAssessmentId" integer;
       ALTER TABLE "fluxus_assessments" ADD COLUMN IF NOT EXISTS "revision" integer DEFAULT 0 NOT NULL;
 
-      WITH numbered AS (
-        SELECT "id", row_number() OVER (PARTITION BY "userId" ORDER BY "createdAt", "id") AS cycle
-        FROM "fluxus_assessments"
-      )
-      UPDATE "fluxus_assessments" AS assessment
-      SET "cycleNumber" = numbered.cycle
-      FROM numbered
-      WHERE assessment."id" = numbered."id";
+      CREATE TABLE IF NOT EXISTS "fluxus_migration_markers" (
+        "name" varchar(120) PRIMARY KEY NOT NULL,
+        "appliedAt" timestamp DEFAULT now() NOT NULL
+      );
+
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM "fluxus_migration_markers"
+          WHERE "name" = '2026-09-cycle-number-backfill-v1'
+        ) THEN
+          WITH numbered AS (
+            SELECT "id", row_number() OVER (PARTITION BY "userId", "companyId" ORDER BY "createdAt", "id") AS cycle
+            FROM "fluxus_assessments"
+          )
+          UPDATE "fluxus_assessments" AS assessment
+          SET "cycleNumber" = numbered.cycle
+          FROM numbered
+          WHERE assessment."id" = numbered."id";
+
+          INSERT INTO "fluxus_migration_markers" ("name")
+          VALUES ('2026-09-cycle-number-backfill-v1');
+        END IF;
+      END $$;
 
       CREATE TABLE IF NOT EXISTS "fluxus_consents" (
         "id" serial PRIMARY KEY NOT NULL,
@@ -165,8 +185,9 @@ try {
         ON "fluxus_assessments" USING btree ("userId", "createdAt");
       CREATE INDEX IF NOT EXISTS "fluxus_assessments_company_idx"
         ON "fluxus_assessments" USING btree ("companyId", "status", "createdAt");
-      CREATE UNIQUE INDEX IF NOT EXISTS "fluxus_assessments_user_cycle_idx"
-        ON "fluxus_assessments" USING btree ("userId", "cycleNumber");
+      DROP INDEX IF EXISTS "fluxus_assessments_user_cycle_idx";
+      CREATE UNIQUE INDEX IF NOT EXISTS "fluxus_assessments_user_company_cycle_idx"
+        ON "fluxus_assessments" USING btree ("userId", "companyId", "cycleNumber");
       CREATE INDEX IF NOT EXISTS "fluxus_consents_user_idx" ON "fluxus_consents" USING btree ("userId", "acceptedAt");
       CREATE INDEX IF NOT EXISTS "fluxus_privacy_requests_user_idx" ON "fluxus_privacy_requests" USING btree ("userId", "createdAt");
       CREATE INDEX IF NOT EXISTS "fluxus_privacy_requests_company_idx" ON "fluxus_privacy_requests" USING btree ("companyId", "status", "createdAt");

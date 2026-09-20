@@ -7,10 +7,18 @@ import {
   type FluxusDimension,
   type FluxusResult,
 } from "@shared/fluxus";
+import {
+  isFluxusV2Result,
+  type FluxusStoredResult,
+} from "@shared/fluxusVersioning";
 
 import { FluxusReport } from "./FluxusReport";
 import { FluxusManagerGuidance } from "./FluxusManagerGuidance";
 import { FluxusPersonaLogo } from "./FluxusBrand";
+import {
+  FluxusBeta2PrintableReport,
+  FluxusBeta2ReportTabs,
+} from "./FluxusBeta2Report";
 
 
 function scoreData(result: FluxusResult, key: "comportamental" | "tendencias") {
@@ -152,9 +160,10 @@ function ComparisonReport({ result }: { result: FluxusResult }) {
 function Summary({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-muted/50 p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 font-semibold">{value}</p></div>; }
 function Metric({ label, value }: { label: string; value: number }) { return <div><p className="text-xs text-muted-foreground">{label}</p><p className="font-semibold">{value.toFixed(1)}</p></div>; }
 
-type FluxusReportProps = { result: FluxusResult; personName?: string | null; companyName?: string | null; jobTitle?: string | null; department?: string | null; audience?: "participant" | "manager" };
+type FluxusLegacyReportProps = { result: FluxusResult; personName?: string | null; companyName?: string | null; jobTitle?: string | null; department?: string | null; audience?: "participant" | "manager" };
+export type FluxusReportProps = Omit<FluxusLegacyReportProps, "result"> & { result: FluxusStoredResult };
 
-export function FluxusPrintableReport(props: FluxusReportProps) {
+function FluxusLegacyPrintableReport(props: FluxusLegacyReportProps) {
   const completedDate = new Intl.DateTimeFormat("pt-BR").format(new Date(props.result.completedAt));
   return <div className="hidden print:block print:text-black">
     <section className="mb-8 rounded-3xl border border-slate-300 bg-white p-8 text-slate-950">
@@ -173,7 +182,7 @@ export function FluxusPrintableReport(props: FluxusReportProps) {
   </div>;
 }
 
-export function FluxusReportTabs(props: FluxusReportProps) {
+function FluxusLegacyReportTabs(props: FluxusLegacyReportProps) {
   return <><div className="print:hidden"><Tabs defaultValue="consolidada" className="space-y-5">
     <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5 print:hidden">
       <TabsTrigger value="comportamental">Comportamental</TabsTrigger><TabsTrigger value="tendencias">Tendências</TabsTrigger><TabsTrigger value="perfil">Perfil Fluxus</TabsTrigger><TabsTrigger value="comparativo">Comparativo</TabsTrigger><TabsTrigger value="consolidada">Análise Consolidada</TabsTrigger>
@@ -183,5 +192,17 @@ export function FluxusReportTabs(props: FluxusReportProps) {
     <TabsContent value="perfil"><ProfileReport result={props.result} /></TabsContent>
     <TabsContent value="comparativo"><ComparisonReport result={props.result} /></TabsContent>
     <TabsContent value="consolidada"><div className="space-y-6">{props.audience === "manager" ? <FluxusManagerGuidance result={props.result} /> : null}<FluxusReport {...props} /></div></TabsContent>
-  </Tabs></div><FluxusPrintableReport {...props} /></>;
+  </Tabs></div><FluxusLegacyPrintableReport {...props} /></>;
+}
+
+export function FluxusPrintableReport(props: FluxusReportProps) {
+  if (isFluxusV2Result(props.result))
+    return <FluxusBeta2PrintableReport {...props} result={props.result} />;
+  return <FluxusLegacyPrintableReport {...props} result={props.result} />;
+}
+
+export function FluxusReportTabs(props: FluxusReportProps) {
+  if (isFluxusV2Result(props.result))
+    return <FluxusBeta2ReportTabs {...props} result={props.result} />;
+  return <FluxusLegacyReportTabs {...props} result={props.result} />;
 }

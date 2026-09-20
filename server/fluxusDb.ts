@@ -14,11 +14,15 @@ import {
 } from "../drizzle/schema";
 import {
   FLUXUS_DIMENSIONS,
-  FLUXUS_FORMULA_VERSION,
-  FLUXUS_INSTRUMENT_VERSION,
   type FluxusDimension,
-  type FluxusResult,
 } from "../shared/fluxus";
+import {
+  CURRENT_FLUXUS_FORMULA_VERSION,
+  CURRENT_FLUXUS_INSTRUMENT_VERSION,
+  isFluxusV2Result,
+  prefillFluxusV2StableAnswers,
+  type FluxusStoredResult,
+} from "../shared/fluxusVersioning";
 import { db } from "./db";
 
 export function normalizeCompanyName(value: string): string {
@@ -78,22 +82,36 @@ export async function updateFluxusCompanyCode(
 }
 
 export async function getCurrentFluxusAssessment(
-  userId: number
+  userId: number,
+  companyId: number
 ): Promise<FluxusAssessment | null> {
   const rows = await db
     .select()
     .from(fluxusAssessments)
-    .where(eq(fluxusAssessments.userId, userId))
+    .where(
+      and(
+        eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.companyId, companyId)
+      )
+    )
     .orderBy(desc(fluxusAssessments.createdAt))
     .limit(1);
   return rows[0] ?? null;
 }
 
-export async function listFluxusAssessmentsForUser(userId: number) {
+export async function listFluxusAssessmentsForUser(
+  userId: number,
+  companyId: number
+) {
   return db
     .select()
     .from(fluxusAssessments)
-    .where(eq(fluxusAssessments.userId, userId))
+    .where(
+      and(
+        eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.companyId, companyId)
+      )
+    )
     .orderBy(desc(fluxusAssessments.createdAt));
 }
 
@@ -102,23 +120,39 @@ export async function startNewFluxusAssessment(
   companyId: number,
   cycleLabel?: string
 ) {
-  const current = await getCurrentFluxusAssessment(userId);
+  const current = await getCurrentFluxusAssessment(userId, companyId);
   if (current?.status === "draft") return current;
-  const history = await listFluxusAssessmentsForUser(userId);
+  const history = await listFluxusAssessmentsForUser(userId, companyId);
   const cycleNumber = history.reduce(
     (highest, assessment) => Math.max(highest, assessment.cycleNumber),
     0
   ) + 1;
-  return createFluxusAssessment({
-    userId,
-    companyId,
-    status: "draft",
-    cycleNumber,
-    cycleLabel: cycleLabel || null,
-    instrumentVersion: FLUXUS_INSTRUMENT_VERSION,
-    formulaVersion: FLUXUS_FORMULA_VERSION,
-    answers: {},
-  });
+  const prefilledAnswers = current
+    ? prefillFluxusV2StableAnswers(
+        current.instrumentVersion,
+        current.answers
+      )
+    : {};
+  try {
+    return await createFluxusAssessment({
+      userId,
+      companyId,
+      status: "draft",
+      cycleNumber,
+      cycleLabel: cycleLabel || null,
+      prefilledFromAssessmentId: Object.keys(prefilledAnswers).length
+        ? current?.id ?? null
+        : null,
+      instrumentVersion: CURRENT_FLUXUS_INSTRUMENT_VERSION,
+      formulaVersion: CURRENT_FLUXUS_FORMULA_VERSION,
+      answers: prefilledAnswers,
+    });
+  } catch (error) {
+    if ((error as { code?: string }).code !== "23505") throw error;
+    const concurrentDraft = await getCurrentFluxusAssessment(userId, companyId);
+    if (concurrentDraft?.status === "draft") return concurrentDraft;
+    throw error;
+  }
 }
 
 export async function createFluxusAssessment(
@@ -132,14 +166,14 @@ export async function getOrCreateFluxusAssessment(
   userId: number,
   companyId: number
 ) {
-  const current = await getCurrentFluxusAssessment(userId);
+  const current = await getCurrentFluxusAssessment(userId, companyId);
   if (current) return current;
   return createFluxusAssessment({
     userId,
     companyId,
     status: "draft",
-    instrumentVersion: FLUXUS_INSTRUMENT_VERSION,
-    formulaVersion: FLUXUS_FORMULA_VERSION,
+    instrumentVersion: CURRENT_FLUXUS_INSTRUMENT_VERSION,
+    formulaVersion: CURRENT_FLUXUS_FORMULA_VERSION,
     answers: {},
   });
 }
@@ -147,6 +181,7 @@ export async function getOrCreateFluxusAssessment(
 export async function saveFluxusAnswers(
   assessmentId: number,
   userId: number,
+  companyId: number,
   answers: Record<string, number>
 ) {
   const rows = await db
@@ -160,6 +195,7 @@ export async function saveFluxusAnswers(
       and(
         eq(fluxusAssessments.id, assessmentId),
         eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.companyId, companyId),
         eq(fluxusAssessments.status, "draft")
       )
     )
@@ -170,8 +206,9 @@ export async function saveFluxusAnswers(
 export async function completeFluxusAssessment(
   assessmentId: number,
   userId: number,
+  companyId: number,
   answers: Record<string, number>,
-  result: FluxusResult
+  result: FluxusStoredResult
 ) {
   const completedAt = new Date(result.completedAt);
   const rows = await db
@@ -187,6 +224,7 @@ export async function completeFluxusAssessment(
       and(
         eq(fluxusAssessments.id, assessmentId),
         eq(fluxusAssessments.userId, userId),
+        eq(fluxusAssessments.companyId, companyId),
         eq(fluxusAssessments.status, "draft")
       )
     )
@@ -214,7 +252,16 @@ export async function updateFluxusCompanyGovernance(
 ) {
   const rows = await db
     .update(fluxusCompanies)
-    .set({ ...values, updatedAt: new Date() })
+    .set({
+      ...values,
+      beta2OrganizationAccessApprovedAt:
+        values.reportVisibility === "participant_only" ? null : new Date(),
+      beta2OrganizationAccessPurpose:
+        values.reportVisibility === "participant_only"
+          ? null
+          : values.processingPurpose,
+      updatedAt: new Date(),
+    })
     .where(eq(fluxusCompanies.id, id))
     .returning();
   return rows[0] ?? null;
@@ -335,19 +382,27 @@ export async function listFluxusCompanySummaries(): Promise<
       .where(eq(users.accountType, "fluxus")),
     db
       .select({
+        id: fluxusAssessments.id,
         userId: fluxusAssessments.userId,
         companyId: fluxusAssessments.companyId,
         status: fluxusAssessments.status,
+        createdAt: fluxusAssessments.createdAt,
       })
-      .from(fluxusAssessments),
+      .from(fluxusAssessments)
+      .orderBy(
+        desc(fluxusAssessments.createdAt),
+        desc(fluxusAssessments.id)
+      ),
   ]);
 
   const latestByUser = new Map<
     number,
     { companyId: number; status: "draft" | "completed" }
   >();
-  for (const assessment of assessments)
-    latestByUser.set(assessment.userId, assessment);
+  for (const assessment of assessments) {
+    if (!latestByUser.has(assessment.userId))
+      latestByUser.set(assessment.userId, assessment);
+  }
 
   return companies.map(company => {
     const companyCollaborators = collaborators.filter(
@@ -410,28 +465,51 @@ export async function getFluxusCompanyDashboard(companyId: number) {
   ]);
 
   const latestByUser = new Map<number, FluxusAssessment>();
+  const latestCompletedByUser = new Map<number, FluxusAssessment>();
   for (const assessment of assessments) {
     if (!latestByUser.has(assessment.userId))
       latestByUser.set(assessment.userId, assessment);
+    if (
+      assessment.status === "completed" &&
+      !latestCompletedByUser.has(assessment.userId)
+    )
+      latestCompletedByUser.set(assessment.userId, assessment);
   }
 
   const peopleWithResults = collaborators.map(collaborator => {
     const assessment = latestByUser.get(collaborator.id) ?? null;
+    const completedAssessment =
+      latestCompletedByUser.get(collaborator.id) ?? null;
     return {
       ...collaborator,
-      assessmentId: assessment?.id ?? null,
+      assessmentId: completedAssessment?.id ?? null,
+      instrumentVersion: completedAssessment?.instrumentVersion ?? null,
+      formulaVersion: completedAssessment?.formulaVersion ?? null,
       assessmentStatus: (assessment?.status ?? "not_started") as
         | "draft"
         | "completed"
         | "not_started",
-      completedAt: assessment?.completedAt ?? null,
-      result: assessment?.result ?? null,
+      completedAt: completedAssessment?.completedAt ?? null,
+      result: completedAssessment?.result ?? null,
     };
   });
 
-  const completedResults = peopleWithResults
+  const allCompletedResults = peopleWithResults
     .map(person => person.result)
-    .filter((result): result is FluxusResult => Boolean(result));
+    .filter((result): result is FluxusStoredResult => Boolean(result));
+  const completedResults = peopleWithResults
+    .filter(
+      person =>
+        person.instrumentVersion === CURRENT_FLUXUS_INSTRUMENT_VERSION &&
+        person.formulaVersion === CURRENT_FLUXUS_FORMULA_VERSION &&
+        Boolean(person.result) &&
+        isFluxusV2Result(person.result!) &&
+        person.result!.instrumentVersion ===
+          CURRENT_FLUXUS_INSTRUMENT_VERSION &&
+        person.result!.formulaVersion === CURRENT_FLUXUS_FORMULA_VERSION
+    )
+    .map(person => person.result)
+    .filter((result): result is FluxusStoredResult => Boolean(result));
   const totals = emptyDimensionTotals();
   const predominantCount = Object.fromEntries(
     FLUXUS_DIMENSIONS.map(dimension => [dimension, 0])
@@ -467,15 +545,21 @@ export async function getFluxusCompanyDashboard(companyId: number) {
     people,
     summary: {
       collaborators: collaborators.length,
-      completed: completedResults.length,
+      completed: allCompletedResults.length,
+      currentVersionCompleted: completedResults.length,
       inProgress: peopleWithResults.filter(person => person.assessmentStatus === "draft")
         .length,
       notStarted: peopleWithResults.filter(
         person => person.assessmentStatus === "not_started"
       ).length,
       completionRate: collaborators.length
+        ? Math.round((allCompletedResults.length / collaborators.length) * 100)
+        : 0,
+      currentVersionCompletionRate: collaborators.length
         ? Math.round((completedResults.length / collaborators.length) * 100)
         : 0,
+      aggregateInstrumentVersion: CURRENT_FLUXUS_INSTRUMENT_VERSION,
+      aggregateFormulaVersion: CURRENT_FLUXUS_FORMULA_VERSION,
       averages,
       predominantCount,
       canAggregate: completedResults.length >= Math.max(5, company.minimumAggregateSize),

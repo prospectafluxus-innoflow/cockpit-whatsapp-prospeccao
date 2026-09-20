@@ -79,14 +79,17 @@ export default function FluxusTeamDashboardPage() {
             />
             <Metric
               icon={UsersRound}
-              label="Avaliações consideradas"
+              label="Avaliações Beta 2 consideradas"
               value={data.summary.completedBand}
             />
           </div>
           <Card className="border-border/60">
             <CardHeader>
-              <CardTitle>Médias do grupo — escala de 1 a 7</CardTitle>
+              <CardTitle>Médias do grupo — Beta 2, escala de 1 a 7</CardTitle>
             </CardHeader>
+            <p className="px-6 text-xs text-muted-foreground">
+              Instrumento {data.summary.aggregateInstrumentVersion} · fórmula {data.summary.aggregateFormulaVersion}. Resultados Beta 1 permanecem no histórico individual e não entram nestas médias.
+            </p>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {FLUXUS_DIMENSIONS.map(dimension => {
                 const item = data.summary!.averages[dimension];
@@ -100,7 +103,7 @@ export default function FluxusTeamDashboardPage() {
                     </h3>
                     <div className="mt-4 space-y-3">
                       <Bar
-                        label="Tendência natural média"
+                        label="Perfil comportamental médio"
                         value={item.natural}
                         color="#43a97b"
                       />

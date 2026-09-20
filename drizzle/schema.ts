@@ -14,7 +14,7 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { FluxusResult } from "../shared/fluxus";
+import type { FluxusStoredResult } from "../shared/fluxusVersioning";
 
 // ─── Enums ────────────────────────────────────────────────────────────────────
 export const roleEnum = pgEnum("role", ["user", "admin"]);
@@ -97,7 +97,11 @@ export const fluxusCompanies = pgTable(
     active: integer("active").notNull().default(1),
     reportVisibility: varchar("reportVisibility", { length: 24 })
       .notNull()
-      .default("participant_manager_hr"),
+      .default("participant_only"),
+    beta2OrganizationAccessApprovedAt: timestamp(
+      "beta2OrganizationAccessApprovedAt"
+    ),
+    beta2OrganizationAccessPurpose: text("beta2OrganizationAccessPurpose"),
     minimumAggregateSize: integer("minimumAggregateSize").notNull().default(5),
     retentionMonths: integer("retentionMonths").notNull().default(60),
     processingPurpose: text("processingPurpose")
@@ -168,6 +172,7 @@ export const fluxusAssessments = pgTable(
     status: fluxusAssessmentStatusEnum("status").notNull().default("draft"),
     cycleNumber: integer("cycleNumber").notNull().default(1),
     cycleLabel: varchar("cycleLabel", { length: 120 }),
+    prefilledFromAssessmentId: integer("prefilledFromAssessmentId"),
     revision: integer("revision").notNull().default(0),
     instrumentVersion: varchar("instrumentVersion", { length: 40 }).notNull(),
     formulaVersion: varchar("formulaVersion", { length: 40 }).notNull(),
@@ -175,15 +180,16 @@ export const fluxusAssessments = pgTable(
       .$type<Record<string, number>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
-    result: jsonb("result").$type<FluxusResult>(),
+    result: jsonb("result").$type<FluxusStoredResult>(),
     startedAt: timestamp("startedAt").defaultNow().notNull(),
     completedAt: timestamp("completedAt"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   table => [
-    uniqueIndex("fluxus_assessments_user_cycle_idx").on(
+    uniqueIndex("fluxus_assessments_user_company_cycle_idx").on(
       table.userId,
+      table.companyId,
       table.cycleNumber
     ),
     index("fluxus_assessments_user_idx").on(table.userId, table.createdAt),

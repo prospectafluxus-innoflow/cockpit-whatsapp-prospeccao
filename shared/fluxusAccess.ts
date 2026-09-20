@@ -13,8 +13,10 @@ export type FluxusReportViewer = {
 export function canAccessFluxusIndividualReport(
   viewer: FluxusReportViewer,
   policy: string,
-  companyId: number
+  companyId: number,
+  options: { beta2Context?: boolean; beta2Approved?: boolean } = {}
 ) {
+  if (options.beta2Context && !options.beta2Approved) return false;
   if (viewer.role === "admin") {
     return policy === "participant_manager_hr";
   }

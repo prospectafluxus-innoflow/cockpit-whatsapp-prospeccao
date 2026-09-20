@@ -30,4 +30,44 @@ describe("política de visibilidade individual Fluxus", () => {
     expect(canAccessFluxusIndividualReport(hr, "participant_only", 10)).toBe(false);
     expect(canAccessFluxusIndividualReport(admin, "participant_only", 10)).toBe(false);
   });
+
+  it("bloqueia relatórios Beta 2 sem aprovação organizacional explícita", () => {
+    const beta2Pending = { beta2Context: true, beta2Approved: false };
+    expect(
+      canAccessFluxusIndividualReport(
+        manager,
+        "participant_manager_hr",
+        10,
+        beta2Pending
+      )
+    ).toBe(false);
+    expect(
+      canAccessFluxusIndividualReport(
+        admin,
+        "participant_manager_hr",
+        10,
+        beta2Pending
+      )
+    ).toBe(false);
+  });
+
+  it("mantém a política de papel e empresa após aprovação Beta 2", () => {
+    const beta2Approved = { beta2Context: true, beta2Approved: true };
+    expect(
+      canAccessFluxusIndividualReport(
+        manager,
+        "participant_manager_hr",
+        10,
+        beta2Approved
+      )
+    ).toBe(true);
+    expect(
+      canAccessFluxusIndividualReport(
+        { ...manager, companyId: 99 },
+        "participant_manager_hr",
+        10,
+        beta2Approved
+      )
+    ).toBe(false);
+  });
 });

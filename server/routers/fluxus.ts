@@ -4,12 +4,16 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   FLUXUS_DIMENSIONS,
-  FLUXUS_FORMULA_VERSION,
-  FLUXUS_INSTRUMENT_VERSION,
-  calculateFluxusResult,
-  getFluxusCompletion,
-  sanitizeFluxusAnswers,
 } from "../../shared/fluxus";
+import {
+  CURRENT_FLUXUS_FORMULA_VERSION,
+  CURRENT_FLUXUS_INSTRUMENT_VERSION,
+  calculateFluxusResultForVersion,
+  getFluxusCompletionForVersion,
+  isFluxusV2Version,
+  isSupportedFluxusVersion,
+  sanitizeFluxusAnswersForVersion,
+} from "../../shared/fluxusVersioning";
 import { canAccessFluxusIndividualReport } from "../../shared/fluxusAccess";
 import { createUser, getUserByEmail, getUserById, updateUser } from "../db";
 import {
@@ -66,6 +70,9 @@ function safeCompany(company: Awaited<ReturnType<typeof getFluxusCompanyById>>) 
     name: company.name,
     active: company.active,
     reportVisibility: company.reportVisibility,
+    beta2OrganizationAccessEnabled: Boolean(
+      company.beta2OrganizationAccessApprovedAt
+    ),
     minimumAggregateSize: company.minimumAggregateSize,
     retentionMonths: company.retentionMonths,
     processingPurpose: company.processingPurpose,
@@ -93,7 +100,8 @@ async function requireIndividualReportAccess(
     companyId?: number | null;
     fluxusRole?: string | null;
   },
-  companyId: number
+  companyId: number,
+  beta2Context = false
 ) {
   const company = await getFluxusCompanyById(companyId);
   if (!company)
@@ -103,7 +111,11 @@ async function requireIndividualReportAccess(
     !canAccessFluxusIndividualReport(
       user,
       company.reportVisibility,
-      companyId
+      companyId,
+      {
+        beta2Context,
+        beta2Approved: Boolean(company.beta2OrganizationAccessApprovedAt),
+      }
     )
   ) {
     throw new TRPCError({
@@ -127,13 +139,17 @@ function cycleSummary(assessment: Awaited<ReturnType<typeof getFluxusAssessmentB
     id: assessment.id,
     cycleNumber: assessment.cycleNumber,
     cycleLabel: assessment.cycleLabel,
+    prefilledFromAssessmentId: assessment.prefilledFromAssessmentId,
     status: assessment.status,
     startedAt: assessment.startedAt,
     completedAt: assessment.completedAt,
     instrumentVersion: assessment.instrumentVersion,
     formulaVersion: assessment.formulaVersion,
     revision: assessment.revision,
-    completion: getFluxusCompletion(assessment.answers),
+    completion: getFluxusCompletionForVersion(
+      assessment.instrumentVersion,
+      assessment.answers
+    ),
     predominant: assessment.result?.predominante ?? null,
   };
 }
@@ -243,7 +259,7 @@ export const fluxusRouter = router({
     );
     const [company, history] = await Promise.all([
       getFluxusCompanyById(ctx.user.companyId!),
-      listFluxusAssessmentsForUser(ctx.user.id),
+      listFluxusAssessmentsForUser(ctx.user.id, ctx.user.companyId!),
     ]);
     return {
       user: {
@@ -259,13 +275,17 @@ export const fluxusRouter = router({
         id: assessment.id,
         cycleNumber: assessment.cycleNumber,
         cycleLabel: assessment.cycleLabel,
+        prefilledFromAssessmentId: assessment.prefilledFromAssessmentId,
         revision: assessment.revision,
         status: assessment.status,
         answers: assessment.answers,
         result: assessment.result,
         instrumentVersion: assessment.instrumentVersion,
         formulaVersion: assessment.formulaVersion,
-        completion: getFluxusCompletion(assessment.answers),
+        completion: getFluxusCompletionForVersion(
+          assessment.instrumentVersion,
+          assessment.answers
+        ),
       },
       history: history.map(cycleSummary),
       canStartNewCycle: assessment.status === "completed",
@@ -299,10 +319,14 @@ export const fluxusRouter = router({
         });
       }
 
-      const answers = sanitizeFluxusAnswers(input.answers);
+      const answers = sanitizeFluxusAnswersForVersion(
+        current.instrumentVersion,
+        input.answers
+      );
       const assessment = await saveFluxusAnswers(
         current.id,
         ctx.user.id,
+        ctx.user.companyId!,
         answers
       );
       if (!assessment)
@@ -310,7 +334,14 @@ export const fluxusRouter = router({
           code: "NOT_FOUND",
           message: "Avaliação não encontrada.",
         });
-      return { success: true, revision: assessment.revision, completion: getFluxusCompletion(answers) };
+      return {
+        success: true,
+        revision: assessment.revision,
+        completion: getFluxusCompletionForVersion(
+          current.instrumentVersion,
+          answers
+        ),
+      };
     }),
 
   complete: protectedProcedure
@@ -335,8 +366,14 @@ export const fluxusRouter = router({
       if (current.status === "completed" && current.result)
         return { success: true, result: current.result };
 
-      const answers = sanitizeFluxusAnswers(input.answers);
-      const completion = getFluxusCompletion(answers);
+      const answers = sanitizeFluxusAnswersForVersion(
+        current.instrumentVersion,
+        input.answers
+      );
+      const completion = getFluxusCompletionForVersion(
+        current.instrumentVersion,
+        answers
+      );
       if (completion.completed !== completion.total) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -344,10 +381,14 @@ export const fluxusRouter = router({
         });
       }
 
-      const result = calculateFluxusResult(answers);
+      const result = calculateFluxusResultForVersion(
+        current.instrumentVersion,
+        answers
+      );
       const assessment = await completeFluxusAssessment(
         current.id,
         ctx.user.id,
+        ctx.user.companyId!,
         answers,
         result
       );
@@ -368,13 +409,16 @@ export const fluxusRouter = router({
         ctx.user.companyId!,
         input.cycleLabel
       );
-      await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: ctx.user.id, companyId: ctx.user.companyId!, assessmentId: assessment.id, action: "assessment.cycle_start", resourceType: "assessment" });
+      await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: ctx.user.id, companyId: ctx.user.companyId!, assessmentId: assessment.id, action: "assessment.cycle_start", resourceType: "assessment", metadata: { instrumentVersion: assessment.instrumentVersion, prefilledAnswers: Object.keys(assessment.answers).length, sourceAssessmentId: assessment.prefilledFromAssessmentId } });
       return { assessment: cycleSummary(assessment), answers: assessment.answers };
     }),
 
   history: protectedProcedure.query(async ({ ctx }) => {
     requireFluxusAccount(ctx.user);
-    const history = await listFluxusAssessmentsForUser(ctx.user.id);
+    const history = await listFluxusAssessmentsForUser(
+      ctx.user.id,
+      ctx.user.companyId!
+    );
     return history.map(cycleSummary);
   }),
 
@@ -404,24 +448,32 @@ export const fluxusRouter = router({
           code: "NOT_FOUND",
           message: "Ciclos concluídos não encontrados.",
         });
+      const metadataMatches =
+        baseline.instrumentVersion === baseline.result.instrumentVersion &&
+        baseline.formulaVersion === baseline.result.formulaVersion &&
+        current.instrumentVersion === current.result.instrumentVersion &&
+        current.formulaVersion === current.result.formulaVersion;
       const comparable =
+        metadataMatches &&
         baseline.instrumentVersion === current.instrumentVersion &&
         baseline.formulaVersion === current.formulaVersion;
       return {
         comparable,
         baseline: cycleSummary(baseline),
         current: cycleSummary(current),
-        dimensions: FLUXUS_DIMENSIONS.map(dimension => ({
-          dimension,
-          baseline: baseline.result!.dimensions[dimension].natural,
-          current: current.result!.dimensions[dimension].natural,
-          delta:
-            Math.round(
-              (current.result!.dimensions[dimension].natural -
-                baseline.result!.dimensions[dimension].natural) *
-                100
-            ) / 100,
-        })),
+        dimensions: comparable
+          ? FLUXUS_DIMENSIONS.map(dimension => ({
+              dimension,
+              baseline: baseline.result!.dimensions[dimension].natural,
+              current: current.result!.dimensions[dimension].natural,
+              delta:
+                Math.round(
+                  (current.result!.dimensions[dimension].natural -
+                    baseline.result!.dimensions[dimension].natural) *
+                    100
+                ) / 100,
+            }))
+          : [],
       };
     }),
 
@@ -441,7 +493,7 @@ export const fluxusRouter = router({
       getFluxusCompanyById(ctx.user.companyId!),
       listFluxusConsents(ctx.user.id),
       listFluxusPrivacyRequests(ctx.user.id),
-      listFluxusAssessmentsForUser(ctx.user.id),
+      listFluxusAssessmentsForUser(ctx.user.id, ctx.user.companyId!),
     ]);
     return {
       noticeVersion: FLUXUS_PRIVACY_NOTICE_VERSION,
@@ -500,7 +552,7 @@ export const fluxusRouter = router({
       getFluxusCompanyById(ctx.user.companyId!),
       listFluxusConsents(ctx.user.id),
       listFluxusPrivacyRequests(ctx.user.id),
-      listFluxusAssessmentsForUser(ctx.user.id),
+      listFluxusAssessmentsForUser(ctx.user.id, ctx.user.companyId!),
     ]);
     await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: ctx.user.id, companyId: ctx.user.companyId!, action: "privacy.export", resourceType: "data_package", ipHash: hashRequestIp(ctx.req) });
     return {
@@ -522,18 +574,27 @@ export const fluxusRouter = router({
       company: safeCompany(dashboard.company),
       viewerRole: ctx.user.fluxusRole,
       privacy: { released: dashboard.summary.canAggregate, minimumRespondents: Math.max(5, dashboard.company.minimumAggregateSize), explanation: dashboard.summary.canAggregate ? "Métricas agregadas liberadas." : "Dados insuficientes para exibição agregada." },
-      summary: dashboard.summary.canAggregate ? { completedBand: groupSizeBand(dashboard.summary.completed), completionRate: Math.round(dashboard.summary.completionRate / 5) * 5, averages: dashboard.summary.averages } : null,
+      summary: dashboard.summary.canAggregate ? { completedBand: groupSizeBand(dashboard.summary.currentVersionCompleted), completionRate: Math.round(dashboard.summary.currentVersionCompletionRate / 5) * 5, aggregateInstrumentVersion: dashboard.summary.aggregateInstrumentVersion, aggregateFormulaVersion: dashboard.summary.aggregateFormulaVersion, averages: dashboard.summary.averages } : null,
     };
   }),
 
   individualReportDirectory: protectedProcedure.query(async ({ ctx }) => {
     requireFluxusOrganizationAccess(ctx.user);
-    await requireIndividualReportAccess(ctx.user, ctx.user.companyId!);
+    const company = await requireIndividualReportAccess(
+      ctx.user,
+      ctx.user.companyId!
+    );
     const dashboard = await getFluxusCompanyDashboard(ctx.user.companyId!);
     if (!dashboard)
       throw new TRPCError({ code: "NOT_FOUND", message: "Empresa não encontrada." });
     return dashboard.people
-      .filter(person => person.assessmentStatus === "completed" && person.assessmentId)
+      .filter(
+        person =>
+          person.assessmentId &&
+          isSupportedFluxusVersion(person.instrumentVersion) &&
+          (!isFluxusV2Version(person.instrumentVersion) ||
+            Boolean(company.beta2OrganizationAccessApprovedAt))
+      )
       .map(person => ({
         id: person.id,
         name: person.name,
@@ -587,11 +648,21 @@ export const fluxusRouter = router({
           message: "Relatório não encontrado.",
         });
       }
+      if (!isSupportedFluxusVersion(assessment.instrumentVersion)) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Versão de relatório não suportada.",
+        });
+      }
       const [person, company] = await Promise.all([
         getUserById(assessment.userId),
         getFluxusCompanyById(assessment.companyId),
       ]);
-      await requireIndividualReportAccess(ctx.user, assessment.companyId);
+      await requireIndividualReportAccess(
+        ctx.user,
+        assessment.companyId,
+        isFluxusV2Version(assessment.instrumentVersion)
+      );
       await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: assessment.userId, companyId: assessment.companyId, assessmentId: assessment.id, action: "assessment.read_admin", resourceType: "assessment", ipHash: hashRequestIp(ctx.req) });
       return {
         assessment: { ...cycleSummary(assessment), companyId: assessment.companyId, result: assessment.result },
@@ -606,19 +677,34 @@ export const fluxusRouter = router({
     .mutation(async ({ ctx, input }) => {
       const assessment = await getFluxusAssessmentById(input.assessmentId);
       if (!assessment || !assessment.result) throw new TRPCError({ code: "NOT_FOUND", message: "Relatório não encontrado." });
-      await requireIndividualReportAccess(ctx.user, assessment.companyId);
+      if (!isSupportedFluxusVersion(assessment.instrumentVersion)) throw new TRPCError({ code: "NOT_FOUND", message: "Versão de relatório não suportada." });
+      await requireIndividualReportAccess(
+        ctx.user,
+        assessment.companyId,
+        isFluxusV2Version(assessment.instrumentVersion)
+      );
       const debrief = await upsertFluxusDebrief({ ...input, participantUserId: assessment.userId, facilitatorUserId: ctx.user.id, evidenceExamples: input.evidenceExamples || null, hypothesesTested: input.hypothesesTested || null, agreedActions: input.agreedActions || null, managerSupport: input.managerSupport || null, followUpDate: input.followUpDate || null, participantNotes: input.participantNotes || null });
       await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: assessment.userId, companyId: assessment.companyId, assessmentId: assessment.id, action: "debrief.save", resourceType: "debrief", metadata: { status: input.status } });
       return { success: true, debrief };
     }),
 
   updateCompanyGovernance: adminProcedure
-    .input(z.object({ companyId: z.number().int().positive(), reportVisibility: z.enum(["participant_only", "participant_manager_hr", "participant_hr"]), minimumAggregateSize: z.number().int().min(5).max(25), retentionMonths: z.number().int().min(6).max(120), processingPurpose: z.string().trim().min(20).max(1000) }))
+    .input(z.object({ companyId: z.number().int().positive(), reportVisibility: z.enum(["participant_only", "participant_manager_hr", "participant_hr"]), beta2OrganizationAccessConfirmed: z.boolean(), minimumAggregateSize: z.number().int().min(5).max(25), retentionMonths: z.number().int().min(6).max(120), processingPurpose: z.string().trim().min(20).max(1000) }))
     .mutation(async ({ ctx, input }) => {
-      const { companyId, ...values } = input;
+      if (
+        input.reportVisibility !== "participant_only" &&
+        !input.beta2OrganizationAccessConfirmed
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Confirme a finalidade e o acesso organizacional aos dados contextuais da Beta 2.",
+        });
+      }
+      const { companyId, beta2OrganizationAccessConfirmed, ...values } = input;
       const company = await updateFluxusCompanyGovernance(companyId, values);
       if (!company) throw new TRPCError({ code: "NOT_FOUND", message: "Empresa não encontrada." });
-      await recordFluxusAudit({ actorUserId: ctx.user.id, companyId, action: "governance.update", resourceType: "company_policy", metadata: { reportVisibility: input.reportVisibility, minimumAggregateSize: input.minimumAggregateSize, retentionMonths: input.retentionMonths } });
+      await recordFluxusAudit({ actorUserId: ctx.user.id, companyId, action: "governance.update", resourceType: "company_policy", metadata: { reportVisibility: input.reportVisibility, beta2OrganizationAccessApproved: input.reportVisibility !== "participant_only" && beta2OrganizationAccessConfirmed, minimumAggregateSize: input.minimumAggregateSize, retentionMonths: input.retentionMonths } });
       return { success: true, company: safeCompany(company) };
     }),
 
@@ -706,6 +792,6 @@ export const fluxusRouter = router({
 });
 
 export const fluxusVersions = {
-  instrumentVersion: FLUXUS_INSTRUMENT_VERSION,
-  formulaVersion: FLUXUS_FORMULA_VERSION,
+  instrumentVersion: CURRENT_FLUXUS_INSTRUMENT_VERSION,
+  formulaVersion: CURRENT_FLUXUS_FORMULA_VERSION,
 };

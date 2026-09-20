@@ -19,7 +19,11 @@ A plataforma deve observar finalidade, adequação, necessidade, transparência,
 | RH | Dashboard agregado da própria empresa e administração de pessoas autorizada | Não recebe segredos, respostas brutas ou indicadores clínicos; todo acesso individual deve ser justificado |
 | Administrador da plataforma | Gestão operacional de empresas, papéis e suporte | Acesso individual é excepcional, minimizado e auditado; hashes e tokens nunca são serializados |
 
+O padrão seguro de uma nova empresa é **somente participante**. Para liberar uma versão individual a gestor ou RH, um administrador deve selecionar a política aplicável, declarar a finalidade e confirmar explicitamente o acesso aos dados contextuais da Beta 2. A aprovação, a finalidade e a data são persistidas e auditadas; políticas antigas sem essa aprovação não liberam relatórios Beta 2.
+
 O servidor aplica o limiar mínimo antes de serializar médias. Grupos abaixo do limiar recebem apenas o estado “dados insuficientes”. Gestores e RH não recebem listas de resultados individuais no endpoint agregado. Contagens liberadas ao dashboard são apresentadas em faixas.
+
+Médias agregadas incluem apenas avaliações concluídas na mesma versão vigente do instrumento e da fórmula. Resultados Beta 1 permanecem disponíveis no histórico autorizado, mas não são misturados às médias Beta 2.
 
 ## Finalidade e consentimento
 
@@ -55,9 +59,11 @@ Energia e autorregulação são autorrelatos contextuais. Não devem ser tratado
 
 ## Relatórios e PDF
 
-O PDF do participante contém todas as seções de autodesenvolvimento, identidade InnoFlow, datas, versões e aviso de confidencialidade. O PDF do gestor acrescenta preparação de conversa e permanece sujeito à política de visibilidade. Nenhum PDF deve conter senha, token, hash, resposta bruta, identificador interno ou dado desnecessário.
+O PDF do participante contém as seções de autodesenvolvimento, fatores protetivos, pontos para conversar, identidade InnoFlow, datas, versões e aviso de confidencialidade. O PDF do gestor acrescenta pontos de atenção, condições organizacionais a revisar, hipóteses de desenvolvimento, checklist responsável para discussão de promoção e preparação da devolutiva. Ele permanece sujeito à política de visibilidade. Nenhum PDF deve conter senha, token, hash, resposta bruta, identificador interno ou dado desnecessário.
 
 A emissão usa a função de impressão do navegador com layout A4 e todas as seções renderizadas em uma versão específica para impressão. O arquivo permanece no dispositivo escolhido pelo usuário; a plataforma não cria URL pública permanente.
+
+Na migração para a Beta 2, somente respostas comportamentais e de exigência percebida da função são reaproveitadas. As respostas contextuais são coletadas novamente. A avaliação registra o ciclo de origem e o log guarda apenas a quantidade reaproveitada e o identificador da origem, nunca o conteúdo das respostas.
 
 ## Segurança e incidentes
 

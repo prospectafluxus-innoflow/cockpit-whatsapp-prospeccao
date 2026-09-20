@@ -183,7 +183,7 @@ function FluxusLegacyPrintableReport(props: FluxusLegacyReportProps) {
 }
 
 function FluxusLegacyReportTabs(props: FluxusLegacyReportProps) {
-  return <><div className="print:hidden"><Tabs defaultValue="consolidada" className="space-y-5">
+  return <><div className="print:hidden"><Tabs defaultValue="comportamental" className="space-y-5">
     <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5 print:hidden">
       <TabsTrigger value="comportamental">Comportamental</TabsTrigger><TabsTrigger value="tendencias">Tendências</TabsTrigger><TabsTrigger value="perfil">Perfil Fluxus</TabsTrigger><TabsTrigger value="comparativo">Comparativo</TabsTrigger><TabsTrigger value="consolidada">Análise Consolidada</TabsTrigger>
     </TabsList>

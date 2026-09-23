@@ -15,8 +15,15 @@ export default function FluxusLoginPage() {
 
   const login = trpc.authOwn.login.useMutation({
     onSuccess: data => {
+      if (data.role === "admin" && data.accountType !== "fluxus") {
+        toast.success("Acesso administrativo reconhecido.");
+        window.location.href = "/fluxus/admin";
+        return;
+      }
       if (data.accountType !== "fluxus") {
-        toast.error("Use o acesso de colaborador vinculado à Fluxus Persona.");
+        toast.error(
+          "Esta conta pertence ao Portal InnoFlow. Use uma conta de colaborador da Fluxus Persona."
+        );
         return;
       }
       toast.success("Bem-vindo(a) à Fluxus Persona.");

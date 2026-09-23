@@ -17,6 +17,12 @@ import {
 import { canAccessFluxusIndividualReport } from "../../shared/fluxusAccess";
 import { createUser, getUserByEmail, getUserById, updateUser } from "../db";
 import {
+  decodeFluxusCompanyCodeStorage,
+  decryptFluxusCompanyCode,
+  encodeFluxusCompanyCodeStorage,
+  encryptFluxusCompanyCode,
+} from "../fluxusCodeCrypto";
+import {
   completeFluxusAssessment,
   createFluxusCompany,
   createFluxusPrivacyRequest,
@@ -210,7 +216,7 @@ export const fluxusRouter = router({
 
       const validCompanyCode = await bcrypt.compare(
         input.companyCode.trim(),
-        company.accessCodeHash
+        decodeFluxusCompanyCodeStorage(company.accessCodeHash).passwordHash
       );
       if (!validCompanyCode) {
         throw new TRPCError({
@@ -635,7 +641,24 @@ export const fluxusRouter = router({
           code: "NOT_FOUND",
           message: "Empresa não encontrada.",
         });
-      return { ...dashboard, company: safeCompany(dashboard.company)!, summary: dashboard.summary.canAggregate ? dashboard.summary : { ...dashboard.summary, averages: null, predominantCount: null } };
+      return {
+        ...dashboard,
+        company: {
+          ...safeCompany(dashboard.company)!,
+          accessCodeHint: dashboard.company.accessCodeHint,
+          hasRecoverableAccessCode: Boolean(
+            decodeFluxusCompanyCodeStorage(dashboard.company.accessCodeHash)
+              .encryptedCode
+          ),
+        },
+        summary: dashboard.summary.canAggregate
+          ? dashboard.summary
+          : {
+              ...dashboard.summary,
+              averages: null,
+              predominantCount: null,
+            },
+      };
     }),
 
   adminAssessment: protectedProcedure
@@ -740,15 +763,62 @@ export const fluxusRouter = router({
           message: "Esta empresa já está cadastrada.",
         });
       }
-      const accessCodeHash = await bcrypt.hash(input.accessCode, 12);
+      const passwordHash = await bcrypt.hash(input.accessCode, 12);
+      const encryptedCode = encryptFluxusCompanyCode(
+        normalizedName,
+        input.accessCode
+      );
       const company = await createFluxusCompany({
         name: input.name.trim(),
         normalizedName,
-        accessCodeHash,
+        accessCodeHash: encodeFluxusCompanyCodeStorage(
+          passwordHash,
+          encryptedCode
+        ),
         accessCodeHint: makeAccessCodeHint(input.accessCode),
         createdBy: ctx.user.id,
       });
       return { success: true, company };
+    }),
+
+  revealCompanyCode: adminProcedure
+    .input(z.object({ companyId: z.number().int().positive() }))
+    .mutation(async ({ ctx, input }) => {
+      const company = await getFluxusCompanyById(input.companyId);
+      if (!company) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Empresa não encontrada.",
+        });
+      }
+
+      const storedCode = decodeFluxusCompanyCodeStorage(
+        company.accessCodeHash
+      );
+      if (!storedCode.encryptedCode) {
+        return {
+          available: false as const,
+          accessCode: null,
+          hint: company.accessCodeHint,
+        };
+      }
+
+      const accessCode = decryptFluxusCompanyCode(
+        company.normalizedName,
+        storedCode.encryptedCode
+      );
+      await recordFluxusAudit({
+        actorUserId: ctx.user.id,
+        companyId: company.id,
+        action: "company.access_code.read",
+        resourceType: "company_access_code",
+        ipHash: hashRequestIp(ctx.req),
+      });
+      return {
+        available: true as const,
+        accessCode,
+        hint: company.accessCodeHint,
+      };
     }),
 
   resetCompanyCode: adminProcedure
@@ -758,11 +828,22 @@ export const fluxusRouter = router({
         accessCode: z.string().trim().min(8).max(64),
       })
     )
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      const existingCompany = await getFluxusCompanyById(input.companyId);
+      if (!existingCompany)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Empresa não encontrada.",
+        });
+
       const accessCodeHash = await bcrypt.hash(input.accessCode, 12);
+      const encryptedCode = encryptFluxusCompanyCode(
+        existingCompany.normalizedName,
+        input.accessCode
+      );
       const company = await updateFluxusCompanyCode(
         input.companyId,
-        accessCodeHash,
+        encodeFluxusCompanyCodeStorage(accessCodeHash, encryptedCode),
         makeAccessCodeHint(input.accessCode)
       );
       if (!company)
@@ -770,6 +851,13 @@ export const fluxusRouter = router({
           code: "NOT_FOUND",
           message: "Empresa não encontrada.",
         });
+      await recordFluxusAudit({
+        actorUserId: ctx.user.id,
+        companyId: company.id,
+        action: "company.access_code.reset",
+        resourceType: "company_access_code",
+        ipHash: hashRequestIp(ctx.req),
+      });
       return { success: true };
     }),
 

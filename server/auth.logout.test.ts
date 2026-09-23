@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { COOKIE_NAME } from "../shared/const";
 import type { TrpcContext } from "./_core/context";
+import { getSessionCookieOptions } from "./_core/cookies";
 import type { appRouter as AppRouter } from "./routers";
 
 type CookieCall = {
@@ -61,9 +62,35 @@ describe("auth.logout", () => {
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });
+  });
+});
+
+describe("session cookie", () => {
+  it("uses a first-party Lax cookie over HTTPS", () => {
+    const options = getSessionCookieOptions({
+      protocol: "https",
+      headers: {},
+    } as TrpcContext["req"]);
+
+    expect(options).toMatchObject({
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      secure: true,
+    });
+  });
+
+  it("recognizes HTTPS forwarded by Railway", () => {
+    const options = getSessionCookieOptions({
+      protocol: "http",
+      headers: { "x-forwarded-proto": "https" },
+    } as TrpcContext["req"]);
+
+    expect(options.secure).toBe(true);
+    expect(options.sameSite).toBe("lax");
   });
 });

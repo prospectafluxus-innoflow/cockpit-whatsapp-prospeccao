@@ -16,10 +16,10 @@ export function canAccessFluxusIndividualReport(
   companyId: number,
   options: { beta2Context?: boolean; beta2Approved?: boolean } = {}
 ) {
-  if (options.beta2Context && !options.beta2Approved) return false;
   if (viewer.role === "admin") {
-    return policy === "participant_manager_hr";
+    return true;
   }
+  if (options.beta2Context && !options.beta2Approved) return false;
 
   const sameCompany =
     viewer.accountType === "fluxus" && viewer.companyId === companyId;

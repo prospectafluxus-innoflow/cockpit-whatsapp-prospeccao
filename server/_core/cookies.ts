@@ -46,7 +46,9 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: secure ? "none" : "lax",
+    // O login próprio e as APIs usam o mesmo domínio. `Lax` evita que
+    // navegadores com bloqueio de cookies de terceiros descartem a sessão.
+    sameSite: "lax",
     secure,
   };
 }

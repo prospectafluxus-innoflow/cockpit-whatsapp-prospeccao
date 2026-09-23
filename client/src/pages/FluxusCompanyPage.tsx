@@ -29,6 +29,7 @@ import {
   ArrowLeft,
   BarChart3,
   CheckCircle2,
+  Copy,
   Eye,
   KeyRound,
   Loader2,
@@ -63,14 +64,32 @@ export default function FluxusCompanyPage({
   );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newCode, setNewCode] = useState("");
+  const [revealedCode, setRevealedCode] = useState<string | null>(null);
+  const revealCode = trpc.fluxus.revealCompanyCode.useMutation({
+    onSuccess: result => {
+      if (!result.available || !result.accessCode) {
+        toast.info(
+          "Este código foi criado antes da visualização segura. Redefina-o uma única vez para mantê-lo consultável."
+        );
+        setDialogOpen(true);
+        return;
+      }
+      setRevealedCode(result.accessCode);
+    },
+    onError: mutationError => toast.error(mutationError.message),
+  });
   const resetCode = trpc.fluxus.resetCompanyCode.useMutation({
     onSuccess: async () => {
       toast.success(
         "Código atualizado. Compartilhe o novo código por canal seguro."
       );
+      setRevealedCode(newCode.trim());
       setNewCode("");
       setDialogOpen(false);
-      await utils.fluxus.adminOverview.invalidate();
+      await Promise.all([
+        utils.fluxus.adminOverview.invalidate(),
+        utils.fluxus.adminCompany.invalidate({ companyId }),
+      ]);
     },
     onError: mutationError => toast.error(mutationError.message),
   });
@@ -127,50 +146,109 @@ export default function FluxusCompanyPage({
                 interno da empresa.
               </p>
             </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <KeyRound className="h-4 w-4" /> Redefinir código
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Novo código da empresa</DialogTitle>
-                  <DialogDescription>
-                    O código anterior deixará de funcionar para novos cadastros.
-                    Colaboradores já vinculados não serão afetados.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-2 py-3">
-                  <Label htmlFor="new-code">Novo código</Label>
-                  <Input
-                    id="new-code"
-                    value={newCode}
-                    onChange={event => setNewCode(event.target.value)}
-                    placeholder="Mínimo 8 caracteres"
-                  />
-                </div>
-                <DialogFooter>
+            <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+              <div className="min-w-72 rounded-2xl border border-border/60 bg-muted/30 p-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Código de acesso
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <code className="min-w-32 flex-1 rounded-lg bg-background px-3 py-2 text-sm font-semibold">
+                    {revealedCode || company.accessCodeHint || "Protegido"}
+                  </code>
                   <Button
+                    size="sm"
                     variant="outline"
-                    onClick={() => setDialogOpen(false)}
+                    disabled={revealCode.isPending}
+                    onClick={() => {
+                      if (revealedCode) {
+                        setRevealedCode(null);
+                      } else if (company.hasRecoverableAccessCode) {
+                        revealCode.mutate({ companyId });
+                      } else {
+                        setDialogOpen(true);
+                      }
+                    }}
                   >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={() =>
-                      resetCode.mutate({ companyId, accessCode: newCode })
-                    }
-                    disabled={newCode.length < 8 || resetCode.isPending}
-                  >
-                    {resetCode.isPending ? (
+                    {revealCode.isPending ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : null}
-                    Atualizar código
+                    ) : (
+                      <Eye className="mr-2 h-4 w-4" />
+                    )}
+                    {revealedCode
+                      ? "Ocultar"
+                      : company.hasRecoverableAccessCode
+                        ? "Mostrar"
+                        : "Definir"}
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  {revealedCode ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(revealedCode);
+                        toast.success("Código copiado.");
+                      }}
+                    >
+                      <Copy className="mr-2 h-4 w-4" /> Copiar
+                    </Button>
+                  ) : null}
+                </div>
+                {!company.hasRecoverableAccessCode ? (
+                  <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                    Código antigo: defina-o uma vez para habilitar a consulta.
+                  </p>
+                ) : null}
+              </div>
+
+              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <KeyRound className="h-4 w-4" />
+                    {company.hasRecoverableAccessCode
+                      ? "Redefinir código"
+                      : "Definir código visível"}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Novo código da empresa</DialogTitle>
+                    <DialogDescription>
+                      O código anterior deixará de funcionar para novos cadastros.
+                      Colaboradores já vinculados não serão afetados. O novo código
+                      permanecerá disponível para consulta administrativa.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2 py-3">
+                    <Label htmlFor="new-code">Novo código</Label>
+                    <Input
+                      id="new-code"
+                      value={newCode}
+                      onChange={event => setNewCode(event.target.value)}
+                      placeholder="Mínimo 8 caracteres"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setDialogOpen(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        resetCode.mutate({ companyId, accessCode: newCode })
+                      }
+                      disabled={newCode.length < 8 || resetCode.isPending}
+                    >
+                      {resetCode.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Atualizar código
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </section>
 
@@ -365,12 +443,11 @@ export default function FluxusCompanyPage({
                         variant="outline"
                         disabled={
                           !person.assessmentId ||
-                          person.assessmentStatus !== "completed" ||
-                          company.reportVisibility !== "participant_manager_hr"
+                          person.assessmentStatus !== "completed"
                         }
                         title={
-                          company.reportVisibility !== "participant_manager_hr"
-                            ? "A política da empresa não autoriza acesso individual da administração."
+                          person.assessmentStatus !== "completed"
+                            ? "O relatório ficará disponível após a conclusão."
                             : "Abrir relatório individual"
                         }
                         onClick={() =>

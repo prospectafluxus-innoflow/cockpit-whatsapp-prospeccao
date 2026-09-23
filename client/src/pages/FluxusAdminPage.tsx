@@ -106,8 +106,8 @@ export default function FluxusAdminPage() {
                 <DialogHeader>
                   <DialogTitle>Cadastrar empresa</DialogTitle>
                   <DialogDescription>
-                    O código vincula o colaborador à empresa correta e não
-                    ficará visível após o cadastro.
+                    O código vincula o colaborador à empresa correta e continuará
+                    disponível para consulta administrativa.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-2">
@@ -134,7 +134,7 @@ export default function FluxusAdminPage() {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Envie o código aos colaboradores por canal seguro. O banco
-                      guarda somente o hash.
+                      guarda o código com criptografia e mantém o hash para validação.
                     </p>
                   </div>
                 </div>

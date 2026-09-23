@@ -18,17 +18,17 @@ describe("política de visibilidade individual Fluxus", () => {
     expect(canAccessFluxusIndividualReport(admin, "participant_manager_hr", 10)).toBe(true);
   });
 
-  it("permite apenas RH organizacional na política participante e RH", () => {
+  it("permite RH organizacional e a administração na política participante e RH", () => {
     expect(canAccessFluxusIndividualReport(hr, "participant_hr", 10)).toBe(true);
     expect(canAccessFluxusIndividualReport(manager, "participant_hr", 10)).toBe(false);
-    expect(canAccessFluxusIndividualReport(admin, "participant_hr", 10)).toBe(false);
+    expect(canAccessFluxusIndividualReport(admin, "participant_hr", 10)).toBe(true);
   });
 
-  it("nega terceiros, colaboradores e qualquer leitura na política participante", () => {
+  it("nega terceiros e colaboradores, mas preserva a administração da plataforma", () => {
     expect(canAccessFluxusIndividualReport(collaborator, "participant_manager_hr", 10)).toBe(false);
     expect(canAccessFluxusIndividualReport({ ...manager, companyId: 99 }, "participant_manager_hr", 10)).toBe(false);
     expect(canAccessFluxusIndividualReport(hr, "participant_only", 10)).toBe(false);
-    expect(canAccessFluxusIndividualReport(admin, "participant_only", 10)).toBe(false);
+    expect(canAccessFluxusIndividualReport(admin, "participant_only", 10)).toBe(true);
   });
 
   it("bloqueia relatórios Beta 2 sem aprovação organizacional explícita", () => {
@@ -48,7 +48,7 @@ describe("política de visibilidade individual Fluxus", () => {
         10,
         beta2Pending
       )
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("mantém a política de papel e empresa após aprovação Beta 2", () => {

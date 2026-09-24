@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import {
+  AlertCircle,
   ArrowRight,
   Building2,
   CheckCircle2,
@@ -32,16 +33,22 @@ import {
   KeyRound,
   Loader2,
   Plus,
+  RefreshCw,
   UsersRound,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 export default function FluxusAdminPage() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.fluxus.adminOverview.useQuery();
+  const { data, isLoading, isFetching, error, refetch } =
+    trpc.fluxus.adminOverview.useQuery(undefined, {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    });
+  const [loadingSlow, setLoadingSlow] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [name, setName] = useState("");
   const [accessCode, setAccessCode] = useState("");
@@ -63,11 +70,72 @@ export default function FluxusAdminPage() {
     onError: error => toast.error(error.message),
   });
 
-  if (isLoading || !data)
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingSlow(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setLoadingSlow(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [isLoading]);
+
+  if (isLoading)
     return (
       <div className="space-y-5 p-6">
         <Skeleton className="h-36 rounded-3xl" />
         <Skeleton className="h-96 rounded-3xl" />
+        {loadingSlow ? (
+          <Card className="border-amber-500/30">
+            <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+              <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
+              <div>
+                <p className="font-medium">O painel está demorando para responder</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Você pode tentar novamente sem perder nenhuma informação.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => refetch()}
+                disabled={isFetching}
+              >
+                <RefreshCw className="h-4 w-4" /> Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+    );
+
+  if (error || !data)
+    return (
+      <div className="p-6">
+        <Card className="mx-auto max-w-xl border-destructive/30">
+          <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive" />
+            <div>
+              <h1 className="text-lg font-semibold">
+                Não foi possível carregar o painel
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {error?.message || "A consulta não retornou dados."}
+              </p>
+            </div>
+            <Button
+              className="gap-2"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
 

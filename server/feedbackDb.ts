@@ -247,6 +247,57 @@ async function lock(
   );
 }
 
+async function verifyCommittedWrite(
+  kind: "department" | "assignment" | "cycle",
+  expected: { id: number; companyId: number }
+) {
+  const table =
+    kind === "department"
+      ? feedbackDepartments
+      : kind === "assignment"
+        ? feedbackAssignments
+        : developmentCycles;
+  let stored: unknown;
+  try {
+    [stored] = await db
+      .select()
+      .from(table)
+      .where(
+        and(eq(table.id, expected.id), eq(table.companyId, expected.companyId))
+      )
+      .limit(1);
+  } catch {
+    fail(
+      "PRECONDITION_FAILED",
+      "A gravação foi enviada, mas a consulta de confirmação falhou. Ela pode já estar salva; atualize e confira a lista antes de repetir a operação."
+    );
+  }
+  const fields =
+    kind === "department"
+      ? ["name", "parentId", "active"]
+      : kind === "assignment"
+        ? ["userId", "departmentId", "managerUserId", "jobTitle"]
+        : ["name", "startsOn", "endsOn", "status"];
+  const expectedMetadata = expected as unknown as Record<string, unknown>;
+  const storedMetadata = stored as unknown as
+    | Record<string, unknown>
+    | undefined;
+  if (
+    !storedMetadata ||
+    fields.some(key => storedMetadata[key] !== expectedMetadata[key])
+  ) {
+    console.error("[Feedback] Persistência não confirmada", {
+      kind,
+      id: expected.id,
+      companyId: expected.companyId,
+    });
+    fail(
+      "PRECONDITION_FAILED",
+      "Não foi possível confirmar a gravação no banco. Atualize a lista antes de repetir a operação."
+    );
+  }
+}
+
 async function insertAudit(
   tx: Tx,
   values: {
@@ -376,6 +427,8 @@ async function getLiveUserTx(tx: Tx, userId: number, companyId?: number) {
       id: users.id,
       companyId: users.companyId,
       accountType: users.accountType,
+      fluxusRole: users.fluxusRole,
+      jobTitle: users.jobTitle,
       approvalStatus: users.approvalStatus,
       privacyDeletedAt: users.privacyDeletedAt,
     })
@@ -522,7 +575,7 @@ async function requireConfig(actor: Actor, companyId: number) {
 }
 
 async function getCurrentAssignments(companyId: number, now = nowDate()) {
-  return db
+  const rows = await db
     .select()
     .from(feedbackAssignments)
     .where(
@@ -534,7 +587,12 @@ async function getCurrentAssignments(companyId: number, now = nowDate()) {
           gt(feedbackAssignments.endsAt, now)
         )
       )
-    );
+    )
+    .orderBy(desc(feedbackAssignments.startsAt), desc(feedbackAssignments.id));
+  const latest = new Map<number, FeedbackAssignment>();
+  for (const row of rows)
+    if (!latest.has(row.userId)) latest.set(row.userId, row);
+  return Array.from(latest.values());
 }
 
 async function getCurrentAssignmentsTx(
@@ -542,7 +600,7 @@ async function getCurrentAssignmentsTx(
   companyId: number,
   now = nowDate()
 ) {
-  return tx
+  const rows = await tx
     .select()
     .from(feedbackAssignments)
     .where(
@@ -554,7 +612,12 @@ async function getCurrentAssignmentsTx(
           gt(feedbackAssignments.endsAt, now)
         )
       )
-    );
+    )
+    .orderBy(desc(feedbackAssignments.startsAt), desc(feedbackAssignments.id));
+  const latest = new Map<number, FeedbackAssignment>();
+  for (const row of rows)
+    if (!latest.has(row.userId)) latest.set(row.userId, row);
+  return Array.from(latest.values());
 }
 
 async function getCurrentDepartments(companyId: number) {
@@ -914,6 +977,7 @@ async function getDirectory(companyId: number) {
         name: users.name,
         jobTitle: users.jobTitle,
         department: users.department,
+        fluxusRole: users.fluxusRole,
       })
       .from(users)
       .where(
@@ -950,6 +1014,13 @@ async function getDirectory(companyId: number) {
         personaAssessmentId: eligibility.assessment?.id ?? null,
         eligibilityReason: eligibility.reason,
         isCompanyAdmin: membership?.role === "company_admin",
+        managerEligible: Boolean(
+          ["manager", "hr"].includes(person.fluxusRole ?? "") ||
+            (membership &&
+              ["manager", "supermanager", "company_admin", "hr"].includes(
+                membership.role
+              ))
+        ),
         evaluatorEligible: Boolean(
           membership?.canReadFeedback &&
             CONTENT_READER_ROLES.includes(membership.role)
@@ -979,11 +1050,16 @@ export async function companyAdministratorDirectory(
   if (!live) fail("FORBIDDEN", "Esta conta não está ativa.");
   // Keep the same primary-table access guards even with the module disabled,
   // while still avoiding any dependency on unmigrated feedback tables.
-  if (!isFeedbackEnabled()) return { enabled: false, companyId, people: [] };
+  if (!isFeedbackEnabled())
+    return { enabled: false, companyId, people: [], departments: [] };
   const now = nowDate();
-  const [directory, memberships] = await Promise.all([
+  const [directory, memberships, assignments, departments] = await Promise.all([
     db
-      .select({ id: users.id })
+      .select({
+        id: users.id,
+        fluxusRole: users.fluxusRole,
+        jobTitle: users.jobTitle,
+      })
       .from(users)
       .where(
         and(
@@ -1014,6 +1090,8 @@ export async function companyAdministratorDirectory(
         desc(feedbackMemberships.startsAt),
         desc(feedbackMemberships.id)
       ),
+    getCurrentAssignments(companyId),
+    getCurrentDepartments(companyId),
   ]);
   // Match getCurrentMembership exactly, including overlapping legacy rows:
   // the most recent currently effective membership wins, not any old admin role.
@@ -1022,13 +1100,34 @@ export async function companyAdministratorDirectory(
     if (!currentRoles.has(membership.userId))
       currentRoles.set(membership.userId, membership.role);
   }
+  const assignmentByUser = new Map(
+    assignments.map(item => [item.userId, item])
+  );
   return {
     enabled: true,
     companyId,
-    people: directory.map(person => ({
-      id: person.id,
-      isCompanyAdmin: currentRoles.get(person.id) === "company_admin",
+    departments: departments.map(item => ({
+      id: item.id,
+      name: item.name,
+      active: item.active,
     })),
+    people: directory.map(person => {
+      const assignment = assignmentByUser.get(person.id);
+      const role = currentRoles.get(person.id);
+      return {
+        id: person.id,
+        isCompanyAdmin: role === "company_admin",
+        managerEligible:
+          ["manager", "hr"].includes(person.fluxusRole ?? "") ||
+          ["manager", "supermanager", "company_admin", "hr"].includes(
+            role ?? ""
+          ),
+        managerUserId: assignment?.managerUserId ?? null,
+        departmentId: assignment?.departmentId ?? null,
+        assignmentId: assignment?.id ?? null,
+        jobTitle: assignment ? assignment.jobTitle : person.jobTitle,
+      };
+    }),
   };
 }
 
@@ -1389,7 +1488,7 @@ export async function createDepartment(
   const name = input.name.trim();
   if (name.length < 1 || name.length > 180)
     fail("BAD_REQUEST", "Nome de departamento inválido.");
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     await lock(tx, "company", input.companyId);
     await requireConfigTx(tx, actor, input.companyId);
     if (input.parentId !== undefined && input.parentId !== null) {
@@ -1432,6 +1531,8 @@ export async function createDepartment(
     });
     return { success: true, department };
   });
+  await verifyCommittedWrite("department", result.department);
+  return result;
 }
 
 export async function updateDepartment(
@@ -1450,7 +1551,7 @@ export async function updateDepartment(
   const name = input.name.trim();
   if (name.length < 1 || name.length > 180)
     fail("BAD_REQUEST", "Nome de departamento inválido.");
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     await lock(tx, "company", current.companyId);
     await requireConfigTx(tx, actor, current.companyId);
     const lockedCurrent = (
@@ -1500,6 +1601,8 @@ export async function updateDepartment(
     });
     return { success: true, department };
   });
+  await verifyCommittedWrite("department", result.department);
+  return result;
 }
 
 async function assertManagerNoLoop(
@@ -1531,11 +1634,12 @@ export async function assignEmployee(
     departmentId: number | null;
     managerUserId: number | null;
     jobTitle?: string;
+    expectedAssignmentId?: number | null;
   }
 ) {
   requireFeedbackEnabled();
   assertPositiveId(input.userId, "Usuário");
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     await lock(tx, "company", input.companyId);
     await requireConfigTx(tx, actor, input.companyId);
     const target = await getLiveUserTx(tx, input.userId, input.companyId);
@@ -1573,12 +1677,18 @@ export async function assignEmployee(
         input.companyId
       );
       if (
-        !managerMembership ||
-        !["manager", "supermanager", "company_admin", "hr"].includes(
-          managerMembership.role
+        !["manager", "hr"].includes(manager.fluxusRole ?? "") &&
+        !(
+          managerMembership &&
+          ["manager", "supermanager", "company_admin", "hr"].includes(
+            managerMembership.role
+          )
         )
       )
-        fail("BAD_REQUEST", "O gestor não possui papel autorizado.");
+        fail(
+          "BAD_REQUEST",
+          "Escolha uma pessoa com perfil Gestor/RH no Persona ou papel de liderança autorizado no Feedback. O vínculo não concede leitura de Feedback automaticamente."
+        );
       await assertManagerNoLoop(
         input.companyId,
         input.userId,
@@ -1588,6 +1698,27 @@ export async function assignEmployee(
     }
     const now = new Date();
     const previous = assignments.find(item => item.userId === input.userId);
+    if (
+      input.expectedAssignmentId !== undefined &&
+      input.expectedAssignmentId !== (previous?.id ?? null)
+    )
+      fail(
+        "CONFLICT",
+        "O vínculo foi alterado por outra pessoa. Atualize a lista antes de salvar novamente."
+      );
+    const jobTitle =
+      input.jobTitle === undefined
+        ? previous
+          ? previous.jobTitle
+          : target.jobTitle
+        : input.jobTitle.trim() || null;
+    if (
+      previous &&
+      previous.departmentId === input.departmentId &&
+      previous.managerUserId === input.managerUserId &&
+      previous.jobTitle === jobTitle
+    )
+      return { success: true, changed: false, assignment: previous };
     if (previous)
       await tx
         .update(feedbackAssignments)
@@ -1600,7 +1731,7 @@ export async function assignEmployee(
         userId: input.userId,
         departmentId: input.departmentId,
         managerUserId: input.managerUserId,
-        jobTitle: input.jobTitle?.trim() || null,
+        jobTitle,
         startsAt: now,
         endsAt: null,
         createdBy: actor.id,
@@ -1620,8 +1751,10 @@ export async function assignEmployee(
         previousAssignmentId: previous?.id ?? null,
       },
     });
-    return { success: true, assignment };
+    return { success: true, changed: true, assignment };
   });
+  await verifyCommittedWrite("assignment", result.assignment);
+  return result;
 }
 
 export async function setManagementScope(
@@ -1800,7 +1933,7 @@ export async function createCycle(
   if (name.length < 1 || name.length > 120)
     fail("BAD_REQUEST", "Nome de ciclo inválido.");
   assertDateRange(input.startsOn, input.endsOn);
-  return db.transaction(async tx => {
+  const result = await db.transaction(async tx => {
     await lock(tx, "company", input.companyId);
     await requireConfigTx(tx, actor, input.companyId);
     const configured = await tx
@@ -1841,6 +1974,8 @@ export async function createCycle(
     });
     return { success: true, cycle };
   });
+  await verifyCommittedWrite("cycle", result.cycle);
+  return result;
 }
 
 async function assertParticipantAndEvaluator(
@@ -2395,6 +2530,7 @@ export async function workspace(
         ? ("company_missing" as const)
         : ("membership_required" as const),
     companyId,
+    companyName: null as string | null,
     membership: null,
     canConfigure: false,
     canReadContent: false,
@@ -2447,6 +2583,7 @@ export async function workspace(
       moduleEnabled: true,
       unavailableReason: null,
       companyId,
+      companyName: access.company.name,
       membership: null,
       canConfigure: false,
       canReadContent: false,
@@ -2510,10 +2647,8 @@ export async function workspace(
     allowedAssignments = directory.assignments.filter(assignment =>
       visibleIds.has(assignment.userId)
     );
-    allowedEvaluations = allEvaluations.filter(
-      evaluation =>
-        visibleIds.has(evaluation.participantUserId) ||
-        evaluation.evaluatorUserId === actor.id
+    allowedEvaluations = allEvaluations.filter(evaluation =>
+      visibleIds.has(evaluation.participantUserId)
     );
   }
   const cycleIds = new Set(
@@ -2560,6 +2695,7 @@ export async function workspace(
     moduleEnabled: true,
     unavailableReason: null,
     companyId,
+    companyName: access.company.name,
     membership: access.membership,
     canConfigure: access.canConfigure,
     canReadContent: access.canReadContent,

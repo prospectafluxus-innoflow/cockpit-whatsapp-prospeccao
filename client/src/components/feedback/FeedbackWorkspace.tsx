@@ -9,6 +9,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,6 +29,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { feedbackApi, type FeedbackWorkspace } from "@/lib/feedbackApi";
 import { feedbackAvailabilityMessage } from "@/lib/feedbackAvailability";
+import {
+  assignmentForUser,
+  refreshAfterMutation,
+  returnedRecordName,
+} from "@/lib/feedbackScope";
 import {
   CYCLE_STATUS_LABELS,
   FEEDBACK_PURPOSE,
@@ -147,12 +160,18 @@ export default function FeedbackWorkspacePage() {
       {section === "cycles" ? (
         <WorkspaceCycles
           workspace={data}
-          onRefresh={() => void query.refetch()}
+          onRefresh={async () => {
+            const result = await query.refetch();
+            if (result.error) throw result.error;
+          }}
         />
       ) : (
         <FeedbackOrganization
           workspace={data}
-          onRefresh={() => void query.refetch()}
+          onRefresh={async () => {
+            const result = await query.refetch();
+            if (result.error) throw result.error;
+          }}
         />
       )}{" "}
     </div>
@@ -191,7 +210,7 @@ function WorkspaceCycles({
   onRefresh,
 }: {
   workspace: FeedbackWorkspace;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
 }) {
   const [showCreate, setShowCreate] = useState(false);
   const [name, setName] = useState("Feedback trimestral");
@@ -199,6 +218,7 @@ function WorkspaceCycles({
   const [endsOn, setEndsOn] = useState(addMonths(nextQuarterStart(), 3));
   const createCycle = feedbackApi.createCycle.useMutation();
   const updateSettings = feedbackApi.updateSettings.useMutation();
+  const [operationError, setOperationError] = useState<string | null>(null);
   const [selectedCompetencies, setSelectedCompetencies] = useState<string[]>(
     workspace.settings?.competencyIds ?? workspace.catalog.map(item => item.id)
   );
@@ -214,21 +234,36 @@ function WorkspaceCycles({
   const submitCycle = async () => {
     if (!workspace.companyId || !name.trim() || !startsOn || !endsOn) return;
     if (endsOn < startsOn) {
+      setOperationError(
+        "A data final deve ser igual ou posterior à data inicial."
+      );
       toast.error("A data final deve ser igual ou posterior à data inicial.");
       return;
     }
+    setOperationError(null);
     try {
-      await createCycle.mutateAsync({
+      const result = await createCycle.mutateAsync({
         companyId: workspace.companyId,
         name: name.trim(),
         startsOn,
         endsOn,
       });
-      toast.success("Ciclo criado com sucesso.");
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const cycleName = returnedRecordName(result.cycle, "Ciclo");
+      toast.success(
+        refreshed
+          ? `Ciclo “${cycleName}” criado com sucesso.`
+          : `Ciclo “${cycleName}” gravado; não foi possível atualizar a lista.`
+      );
+      if (!refreshed)
+        setOperationError(
+          `Ciclo “${cycleName}” gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir.`
+        );
       setShowCreate(false);
-      onRefresh();
     } catch (error) {
-      toast.error(errorMessage(error, "Não foi possível criar o ciclo."));
+      const message = errorMessage(error, "Não foi possível criar o ciclo.");
+      setOperationError(message);
+      toast.error(message);
     }
   };
   const saveSettings = async () => {
@@ -238,15 +273,31 @@ function WorkspaceCycles({
       selectedCompetencies.length > 10
     )
       return;
+    setOperationError(null);
     try {
-      await updateSettings.mutateAsync({
+      const result = await updateSettings.mutateAsync({
         companyId: workspace.companyId,
         competencyIds: selectedCompetencies,
       });
-      toast.success("Template atualizado para os próximos ciclos.");
-      onRefresh();
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const version =
+        result.settings?.version ?? workspace.settings?.version ?? 1;
+      toast.success(
+        refreshed
+          ? `Template da versão ${version} atualizado para os próximos ciclos.`
+          : `Template da versão ${version} gravado; não foi possível atualizar a lista.`
+      );
+      if (!refreshed)
+        setOperationError(
+          `Template da versão ${version} gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir.`
+        );
     } catch (error) {
-      toast.error(errorMessage(error, "Não foi possível salvar o template."));
+      const message = errorMessage(
+        error,
+        "Não foi possível salvar o template."
+      );
+      setOperationError(message);
+      toast.error(message);
     }
   };
   return (
@@ -409,6 +460,12 @@ function WorkspaceCycles({
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {operationError ? (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Status da operação</AlertTitle>
+              <AlertDescription>{operationError}</AlertDescription>
+            </Alert>
+          ) : null}
           {workspace.cycles.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
@@ -468,7 +525,7 @@ export function FeedbackOrganization({
   onRefresh,
 }: {
   workspace: FeedbackWorkspace;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
 }) {
   if (!workspace.companyId) return null;
   return (
@@ -523,21 +580,38 @@ function DepartmentManager({
   const [editingName, setEditingName] = useState("");
   const create = feedbackApi.createDepartment.useMutation();
   const update = feedbackApi.updateDepartment.useMutation();
+  const [operationError, setOperationError] = useState<string | null>(null);
   const submitCreate = async () => {
     if (!workspace.companyId || !name.trim()) return;
+    setOperationError(null);
     try {
-      await create.mutateAsync({
+      const result = await create.mutateAsync({
         companyId: workspace.companyId,
         name: name.trim(),
         parentId: parentId === "none" ? null : Number(parentId),
       });
-      toast.success("Departamento criado.");
-      setName("");
-      onRefresh();
-    } catch (error) {
-      toast.error(
-        errorMessage(error, "Não foi possível criar o departamento.")
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const departmentName = returnedRecordName(
+        result.department,
+        "Departamento"
       );
+      toast.success(
+        refreshed
+          ? `Departamento “${departmentName}” criado.`
+          : `Departamento “${departmentName}” gravado; não foi possível atualizar a lista.`
+      );
+      if (!refreshed)
+        setOperationError(
+          `Departamento “${departmentName}” gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir.`
+        );
+      setName("");
+    } catch (error) {
+      const message = errorMessage(
+        error,
+        "Não foi possível criar o departamento."
+      );
+      setOperationError(message);
+      toast.error(message);
     }
   };
   const submitUpdate = async (
@@ -546,20 +620,36 @@ function DepartmentManager({
     currentParentId: number | null
   ) => {
     if (!editingName.trim()) return;
+    setOperationError(null);
     try {
-      await update.mutateAsync({
+      const result = await update.mutateAsync({
         id: departmentId,
         name: editingName.trim(),
         parentId: currentParentId,
         active,
       });
-      toast.success("Departamento atualizado.");
-      setEditingId(null);
-      onRefresh();
-    } catch (error) {
-      toast.error(
-        errorMessage(error, "Não foi possível atualizar o departamento.")
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const departmentName = returnedRecordName(
+        result.department,
+        "Departamento"
       );
+      toast.success(
+        refreshed
+          ? `Departamento “${departmentName}” atualizado.`
+          : `Departamento “${departmentName}” gravado; não foi possível atualizar a lista.`
+      );
+      if (!refreshed)
+        setOperationError(
+          `Departamento “${departmentName}” gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir.`
+        );
+      setEditingId(null);
+    } catch (error) {
+      const message = errorMessage(
+        error,
+        "Não foi possível atualizar o departamento."
+      );
+      setOperationError(message);
+      toast.error(message);
     }
   };
   return (
@@ -573,6 +663,12 @@ function DepartmentManager({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {operationError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Status da operação</AlertTitle>
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
           <div className="space-y-2">
             <Label htmlFor="new-department">Novo departamento</Label>
@@ -695,140 +791,318 @@ function AssignmentManager({
   onRefresh,
 }: {
   workspace: FeedbackWorkspace;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
 }) {
   const [userId, setUserId] = useState<string>("");
   const [departmentId, setDepartmentId] = useState("none");
   const [managerUserId, setManagerUserId] = useState("none");
   const [jobTitle, setJobTitle] = useState("");
+  const [operationError, setOperationError] = useState<string | null>(null);
+  const [pendingAssignment, setPendingAssignment] = useState<{
+    companyId: number;
+    userId: number;
+    personName: string;
+    managerName: string;
+    managerUserId: number | null;
+    departmentId: number | null;
+    jobTitle: string;
+    expectedAssignmentId: number | null;
+  } | null>(null);
   const assign = feedbackApi.assignEmployee.useMutation();
-  const submit = async () => {
+  const selectPerson = (nextUserId: string) => {
+    setUserId(nextUserId);
+    const current = assignmentForUser(
+      workspace.assignments,
+      Number(nextUserId)
+    );
+    setDepartmentId(
+      current?.departmentId === null || current?.departmentId === undefined
+        ? "none"
+        : String(current.departmentId)
+    );
+    setManagerUserId(
+      current?.managerUserId === null || current?.managerUserId === undefined
+        ? "none"
+        : String(current.managerUserId)
+    );
+    setJobTitle(
+      current
+        ? (current.jobTitle ?? "")
+        : (workspace.people.find(person => person.id === Number(nextUserId))
+            ?.jobTitle ?? "")
+    );
+    setOperationError(null);
+  };
+  const submit = () => {
     if (!workspace.companyId || !userId) return;
+    const person = workspace.people.find(item => item.id === Number(userId));
+    if (!person) return;
+    const current = assignmentForUser(workspace.assignments, Number(userId));
+    const managerId = managerUserId === "none" ? null : Number(managerUserId);
+    const manager = managerId
+      ? workspace.people.find(item => item.id === managerId)
+      : undefined;
+    setOperationError(null);
+    setPendingAssignment({
+      companyId: workspace.companyId,
+      userId: person.id,
+      personName: person.name || `Usuário #${person.id}`,
+      managerName:
+        manager?.name ||
+        (managerId ? `Usuário #${managerId}` : "Sem gestor direto"),
+      managerUserId: managerId,
+      departmentId: departmentId === "none" ? null : Number(departmentId),
+      jobTitle: jobTitle.trim(),
+      expectedAssignmentId: current?.id ?? null,
+    });
+  };
+  const confirmAssignment = async () => {
+    if (!workspace.companyId || !userId || !pendingAssignment) return;
+    if (
+      pendingAssignment.companyId !== workspace.companyId ||
+      pendingAssignment.userId !== Number(userId)
+    ) {
+      setOperationError(
+        "A pessoa ou empresa mudou. Revise a atribuição antes de confirmar."
+      );
+      return;
+    }
+    setOperationError(null);
     try {
-      await assign.mutateAsync({
-        companyId: workspace.companyId,
-        userId: Number(userId),
-        departmentId: departmentId === "none" ? null : Number(departmentId),
-        managerUserId: managerUserId === "none" ? null : Number(managerUserId),
-        jobTitle: jobTitle.trim() || undefined,
-      });
-      toast.success("Atribuição atualizada.");
-      onRefresh();
+      type AssignmentMutationInput = Parameters<
+        typeof assign.mutateAsync
+      >[0] & {
+        expectedAssignmentId?: number | null;
+      };
+      const input = {
+        companyId: pendingAssignment.companyId,
+        userId: pendingAssignment.userId,
+        departmentId: pendingAssignment.departmentId,
+        managerUserId: pendingAssignment.managerUserId,
+        jobTitle: pendingAssignment.jobTitle,
+        expectedAssignmentId: pendingAssignment.expectedAssignmentId,
+      } satisfies AssignmentMutationInput;
+      const result = await assign.mutateAsync(input);
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const recordName = returnedRecordName(result.assignment, "Atribuição");
+      toast.success(
+        refreshed
+          ? `Atribuição de “${pendingAssignment.personName}” salva (${recordName}).`
+          : `Atribuição de “${pendingAssignment.personName}” gravada; não foi possível atualizar a lista.`
+      );
+      if (!refreshed)
+        setOperationError(
+          `Atribuição de “${pendingAssignment.personName}” gravada; não foi possível atualizar a lista. Tente atualizar a página antes de repetir.`
+        );
+      setPendingAssignment(null);
     } catch (error) {
-      toast.error(errorMessage(error, "Não foi possível atribuir a pessoa."));
+      const message = errorMessage(
+        error,
+        "Não foi possível salvar a atribuição."
+      );
+      setOperationError(message);
+      toast.error(message);
     }
   };
+  const selectedUserId = Number(userId);
+  const managerCandidates = workspace.people.filter(person => {
+    if (person.id === selectedUserId) return false;
+    const candidate = person as typeof person & { managerEligible?: boolean };
+    return candidate.managerEligible === true;
+  });
+  const personNameById = new Map(
+    workspace.people.map(person => [
+      person.id,
+      person.name || `Usuário #${person.id}`,
+    ])
+  );
+  const departmentNameById = new Map(
+    workspace.departments.map(department => [department.id, department.name])
+  );
   return (
-    <Card className="border-border/60">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <UsersRound className="h-5 w-5 text-primary" /> Atribuições
-        </CardTitle>
-        <CardDescription>
-          Defina área, cargo e gestor atual. O backend impede autoatribuição e
-          ciclos de liderança.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2 sm:col-span-2">
-            <Label>Pessoa</Label>
-            <Select value={userId} onValueChange={setUserId}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecione uma pessoa" />
-              </SelectTrigger>
-              <SelectContent>
-                {workspace.people.map(person => (
-                  <SelectItem key={person.id} value={String(person.id)}>
-                    {person.name || `Usuário #${person.id}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Departamento</Label>
-            <Select value={departmentId} onValueChange={setDepartmentId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem departamento</SelectItem>
-                {workspace.departments
-                  .filter(item => item.active)
-                  .map(item => (
-                    <SelectItem key={item.id} value={String(item.id)}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Gestor</Label>
-            <Select value={managerUserId} onValueChange={setManagerUserId}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem gestor</SelectItem>
-                {workspace.people
-                  .filter(person => String(person.id) !== userId)
-                  .map(person => (
+    <>
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <UsersRound className="h-5 w-5 text-primary" /> Atribuições
+          </CardTitle>
+          <CardDescription>
+            Defina departamento, cargo e gestor direto. O vínculo é
+            compartilhado entre as fases 1 e 2; ele não concede papel ou leitura
+            de Feedback.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {operationError ? (
+            <Alert variant="destructive">
+              <AlertTitle>Status da atribuição</AlertTitle>
+              <AlertDescription>{operationError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Pessoa</Label>
+              <Select value={userId} onValueChange={selectPerson}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione uma pessoa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workspace.people.map(person => (
                     <SelectItem key={person.id} value={String(person.id)}>
                       {person.name || `Usuário #${person.id}`}
                     </SelectItem>
                   ))}
-              </SelectContent>
-            </Select>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Departamento</Label>
+              <Select value={departmentId} onValueChange={setDepartmentId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem departamento</SelectItem>
+                  {workspace.departments
+                    .filter(item => item.active)
+                    .map(item => (
+                      <SelectItem key={item.id} value={String(item.id)}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Gestor direto</Label>
+              <Select value={managerUserId} onValueChange={setManagerUserId}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem gestor direto</SelectItem>
+                  {managerCandidates.map(person => (
+                    <SelectItem key={person.id} value={String(person.id)}>
+                      {person.name || `Usuário #${person.id}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="job-title">Cargo (opcional)</Label>
+              <Input
+                id="job-title"
+                value={jobTitle}
+                onChange={event => setJobTitle(event.target.value)}
+                maxLength={180}
+              />
+            </div>
           </div>
-          <div className="space-y-2 sm:col-span-2">
-            <Label htmlFor="job-title">Cargo (opcional)</Label>
-            <Input
-              id="job-title"
-              value={jobTitle}
-              onChange={event => setJobTitle(event.target.value)}
-              maxLength={180}
-            />
+          <Button
+            onClick={submit}
+            disabled={assign.isPending || pendingAssignment !== null || !userId}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" /> Salvar atribuição
+          </Button>
+          <div className="space-y-2 border-t border-border/60 pt-4">
+            {workspace.assignments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhuma atribuição atual disponível.
+              </p>
+            ) : (
+              workspace.assignments.map(assignment => (
+                <div
+                  key={assignment.id}
+                  className="rounded-xl border border-border/60 p-3 text-sm"
+                >
+                  <p className="font-medium">
+                    {personNameById.get(assignment.userId) ||
+                      `Usuário #${assignment.userId}`}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Departamento:{" "}
+                    {assignment.departmentId
+                      ? departmentNameById.get(assignment.departmentId) ||
+                        `Departamento #${assignment.departmentId}`
+                      : "Sem departamento"}
+                    {" · "}Gestor:{" "}
+                    {assignment.managerUserId
+                      ? personNameById.get(assignment.managerUserId) ||
+                        `Usuário #${assignment.managerUserId}`
+                      : "Sem gestor direto"}
+                    {" · "}Cargo: {assignment.jobTitle || "Não informado"}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
-        </div>
-        <Button
-          onClick={() => void submit()}
-          disabled={assign.isPending || !userId}
-          className="gap-2"
-        >
-          <Save className="h-4 w-4" />{" "}
-          {assign.isPending ? "Salvando…" : "Salvar atribuição"}
-        </Button>
-        <div className="space-y-2 border-t border-border/60 pt-4">
-          {workspace.assignments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhuma atribuição atual disponível.
-            </p>
-          ) : (
-            workspace.assignments.map(assignment => (
-              <div
-                key={assignment.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 p-3 text-sm"
-              >
-                <span>
-                  Usuário #{assignment.userId} ·{" "}
-                  {assignment.jobTitle || "Cargo não informado"}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {assignment.departmentId
-                    ? `Dept. #${assignment.departmentId}`
+        </CardContent>
+      </Card>
+      <Dialog
+        open={pendingAssignment !== null}
+        onOpenChange={open => {
+          if (!open && !assign.isPending) setPendingAssignment(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar vínculo organizacional</DialogTitle>
+            <DialogDescription>
+              Esta mudança altera a hierarquia usada nas fases 1 e 2. Confira os
+              dados antes de salvar.
+            </DialogDescription>
+          </DialogHeader>
+          {pendingAssignment ? (
+            <div className="space-y-2 rounded-lg border p-3 text-sm">
+              <p>
+                Pessoa: <strong>{pendingAssignment.personName}</strong>
+              </p>
+              <p>
+                Gestor direto: <strong>{pendingAssignment.managerName}</strong>
+              </p>
+              <p>
+                Empresa:{" "}
+                <strong>
+                  {workspace.companyName || `Empresa #${workspace.companyId}`}
+                </strong>
+              </p>
+              <p>
+                Departamento:{" "}
+                <strong>
+                  {pendingAssignment.departmentId
+                    ? workspace.departments.find(
+                        item => item.id === pendingAssignment.departmentId
+                      )?.name ||
+                      `Departamento #${pendingAssignment.departmentId}`
                     : "Sem departamento"}
-                  {assignment.managerUserId
-                    ? ` · Gestor #${assignment.managerUserId}`
-                    : ""}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
+                </strong>
+              </p>
+              <p>
+                Cargo:{" "}
+                <strong>{pendingAssignment.jobTitle || "Não informado"}</strong>
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={assign.isPending}
+              onClick={() => setPendingAssignment(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={assign.isPending}
+              onClick={() => void confirmAssignment()}
+            >
+              {assign.isPending ? "Salvando…" : "Confirmar e salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 function MembershipManager({
@@ -836,29 +1110,43 @@ function MembershipManager({
   onRefresh,
 }: {
   workspace: FeedbackWorkspace;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
 }) {
   const [userId, setUserId] = useState("");
   const [role, setRole] = useState<FeedbackRole>("collaborator");
   const [canRead, setCanRead] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const mutation = feedbackApi.setMembership.useMutation();
   const submit = async () => {
     if (!workspace.companyId || !userId || !confirmed) return;
+    setOperationError(null);
     try {
-      await mutation.mutateAsync({
+      const result = await mutation.mutateAsync({
         companyId: workspace.companyId,
         userId: Number(userId),
         role,
         canReadFeedback: canRead,
       });
-      toast.success("Membership atualizado com trilha de auditoria.");
-      setConfirmed(false);
-      onRefresh();
-    } catch (error) {
-      toast.error(
-        errorMessage(error, "Não foi possível atualizar o membership.")
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const recordId = result.membership?.id;
+      toast.success(
+        refreshed
+          ? `Papel de acesso salvo${recordId ? ` (registro #${recordId})` : ""}.`
+          : "Papel de acesso gravado; não foi possível atualizar a lista."
       );
+      if (!refreshed)
+        setOperationError(
+          "Papel de acesso gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir."
+        );
+      setConfirmed(false);
+    } catch (error) {
+      const message = errorMessage(
+        error,
+        "Não foi possível atualizar o papel de acesso."
+      );
+      setOperationError(message);
+      toast.error(message);
     }
   };
   return (
@@ -874,6 +1162,12 @@ function MembershipManager({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {operationError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Status do papel de acesso</AlertTitle>
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Pessoa</Label>
@@ -954,27 +1248,40 @@ function ScopeManager({
   onRefresh,
 }: {
   workspace: FeedbackWorkspace;
-  onRefresh: () => void;
+  onRefresh: () => void | Promise<unknown>;
 }) {
   const [userId, setUserId] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [includeDescendants, setIncludeDescendants] = useState(true);
   const [active, setActive] = useState(true);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const mutation = feedbackApi.setManagementScope.useMutation();
   const submit = async () => {
     if (!workspace.companyId || !userId || !departmentId) return;
+    setOperationError(null);
     try {
-      await mutation.mutateAsync({
+      const result = await mutation.mutateAsync({
         companyId: workspace.companyId,
         userId: Number(userId),
         departmentId: Number(departmentId),
         includeDescendants,
         active,
       });
-      toast.success("Escopo gerencial salvo.");
-      onRefresh();
+      const refreshed = await refreshAfterMutation(onRefresh);
+      const recordId = result.scope?.id;
+      toast.success(
+        refreshed
+          ? `Escopo de gestão salvo${recordId ? ` (registro #${recordId})` : ""}.`
+          : "Escopo de gestão gravado; não foi possível atualizar a lista."
+      );
+      if (!refreshed)
+        setOperationError(
+          "Escopo de gestão gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir."
+        );
     } catch (error) {
-      toast.error(errorMessage(error, "Não foi possível salvar o escopo."));
+      const message = errorMessage(error, "Não foi possível salvar o escopo.");
+      setOperationError(message);
+      toast.error(message);
     }
   };
   return (
@@ -990,6 +1297,12 @@ function ScopeManager({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {operationError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Status do escopo</AlertTitle>
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             <Label>Gestor</Label>

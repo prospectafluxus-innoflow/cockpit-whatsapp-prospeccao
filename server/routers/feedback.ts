@@ -127,6 +127,7 @@ export const feedbackRouter = router({
         departmentId: id.nullable(),
         managerUserId: id.nullable(),
         jobTitle: z.string().trim().max(180).optional(),
+        expectedAssignmentId: id.nullable().optional(),
       })
     )
     .mutation(({ ctx, input }) => assignEmployee(ctx.user, input)),

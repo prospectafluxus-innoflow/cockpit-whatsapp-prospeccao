@@ -12,6 +12,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   change: vi.fn(),
+  assignment: vi.fn(),
   query: {
     data: {
       enabled: true,
@@ -42,6 +43,9 @@ vi.mock("@/lib/trpc", () => ({
       companyAdministratorDirectory: { useQuery: () => mocks.query },
       setCompanyAdministrator: {
         useMutation: () => ({ mutateAsync: mocks.change, isPending: false }),
+      },
+      assignEmployee: {
+        useMutation: () => ({ mutateAsync: mocks.assignment, isPending: false }),
       },
     },
     fluxus: {
@@ -87,6 +91,7 @@ beforeAll(() => vi.stubGlobal("React", React));
 afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => {
   mocks.change.mockClear();
+  mocks.assignment.mockClear();
   mocks.query.data = {
     enabled: true,
     companyId: 7,

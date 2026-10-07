@@ -55,6 +55,11 @@ async function startServer() {
     createExpressMiddleware({
       router: appRouter,
       createContext,
+      onError({ path, type, error }) {
+        if (path?.startsWith("feedback.")) {
+          console.error("[Feedback API] Falha", { path, type, code: error.code });
+        }
+      },
     })
   );
   // development mode uses Vite, production mode uses static files

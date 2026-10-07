@@ -137,16 +137,19 @@ try {
   assert.equal(result.companyId, company.id);
   assert.deepEqual(Object.keys(result).sort(), [
     "companyId",
+    "departments",
     "enabled",
     "people",
   ]);
   assert(
     result.people.every(
-      p => Object.keys(p).sort().join(",") === "id,isCompanyAdmin"
+      p =>
+        Object.keys(p).sort().join(",") ===
+        "assignmentId,departmentId,id,isCompanyAdmin,jobTitle,managerEligible,managerUserId"
     )
   );
   pass(
-    "retorna somente empresa, habilitação e IDs/estado, sem conteúdo ou análises"
+    "retorna apenas metadados de empresa, administração e vínculos, sem conteúdo ou análises"
   );
   assert.equal(
     result.people.find(p => p.id === regular.id)?.isCompanyAdmin,

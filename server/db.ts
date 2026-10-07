@@ -45,6 +45,9 @@ if (!isTestEnvironment) {
 const client = postgres(connectionString, {
   ssl: { rejectUnauthorized: false },
   max: 5,
+  // Supabase transaction pooling cannot retain named prepared statements.
+  // Also works with direct PostgreSQL; never changes credentials or roles.
+  prepare: false,
   onnotice: notice => console.log("[DB] Notice:", notice.message),
   debug: (connection, query, params) => {
     // only log errors

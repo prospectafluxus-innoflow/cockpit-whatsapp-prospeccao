@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -13,6 +14,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { canConfirmCompanyAdministrator } from "@/lib/companyAdministrator";
+import {
+  hasHierarchySnapshot,
+  managerCandidates,
+  refreshAfterMutation,
+  sameAssignmentSnapshot,
+  type FeedbackHierarchyPerson,
+} from "@/lib/feedbackScope";
 import {
   administratorQueryRetryDelay,
   shouldRetryAdministratorQuery,
@@ -36,12 +44,26 @@ type Person = {
   email?: string | null;
   fluxusRole: "collaborator" | "manager" | "hr";
 };
+type DirectoryPerson = FeedbackHierarchyPerson & {
+  isCompanyAdmin: boolean;
+};
+type DirectoryDepartment = { id: number; name: string; active: boolean };
 type AdminChange = {
   person: Person;
   companyId: number;
   companyName: string;
   isAdmin: boolean;
   expectedIsAdmin: boolean;
+};
+type ManagerChange = {
+  person: Person;
+  companyId: number;
+  companyName: string;
+  previousManagerUserId: number | null;
+  nextManagerUserId: number | null;
+  expectedAssignmentId: number | null;
+  departmentId: number | null;
+  jobTitle: string | null;
 };
 
 export function FluxusGovernanceSettings({
@@ -65,6 +87,11 @@ export function FluxusGovernanceSettings({
     company.beta2OrganizationAccessEnabled
   );
   const [adminChange, setAdminChange] = useState<AdminChange | null>(null);
+  const [managerChange, setManagerChange] = useState<ManagerChange | null>(
+    null
+  );
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [managerError, setManagerError] = useState<string | null>(null);
   const feedback = trpc.feedback.companyAdministratorDirectory.useQuery(
     { companyId: company.id },
     {
@@ -75,10 +102,14 @@ export function FluxusGovernanceSettings({
     }
   );
   const designation = trpc.feedback.setCompanyAdministrator.useMutation();
+  const assignment = trpc.feedback.assignEmployee.useMutation();
   const organizationAccess = form.reportVisibility !== "participant_only";
 
   useEffect(() => {
     setAdminChange(null);
+    setManagerChange(null);
+    setAdminError(null);
+    setManagerError(null);
   }, [company.id]);
 
   const save = trpc.fluxus.updateCompanyGovernance.useMutation({
@@ -92,6 +123,9 @@ export function FluxusGovernanceSettings({
     onSuccess: async () => {
       toast.success("Papel de acesso atualizado.");
       await utils.fluxus.adminCompany.invalidate({ companyId: company.id });
+      await utils.feedback.companyAdministratorDirectory.invalidate({
+        companyId: company.id,
+      });
     },
     onError: error => toast.error(error.message),
   });
@@ -105,8 +139,50 @@ export function FluxusGovernanceSettings({
     isPending: designation.isPending,
   });
 
+  const directoryPeople =
+    (feedback.data?.people as unknown as
+      | readonly DirectoryPerson[]
+      | undefined) ?? [];
+  const directoryDepartments =
+    (
+      feedback.data as unknown as
+        | { departments?: DirectoryDepartment[] }
+        | undefined
+    )?.departments ?? [];
+  const directoryPersonById = new Map(
+    people.map(person => [person.id, person])
+  );
+  const refreshRelevantQueries = async () => {
+    await Promise.all([
+      utils.feedback.companyAdministratorDirectory.invalidate({
+        companyId: company.id,
+      }),
+      utils.feedback.workspace.invalidate({ companyId: company.id }),
+      utils.fluxus.adminCompany.invalidate({ companyId: company.id }),
+    ]);
+    await feedback.refetch({ throwOnError: true });
+  };
+  const managerSnapshot = managerChange
+    ? directoryPeople.find(person => person.id === managerChange.person.id)
+    : undefined;
+  const canConfirmManager = Boolean(
+    managerChange &&
+      managerChange.companyId === company.id &&
+      feedback.data?.enabled &&
+      feedback.data.companyId === company.id &&
+      !feedback.error &&
+      !feedback.isFetching &&
+      !assignment.isPending &&
+      sameAssignmentSnapshot(
+        managerSnapshot,
+        managerChange.expectedAssignmentId,
+        managerChange.previousManagerUserId
+      )
+  );
+
   const confirmAdministrator = async () => {
     if (!adminChange || !canConfirm) return;
+    setAdminError(null);
     try {
       await designation.mutateAsync({
         companyId: adminChange.companyId,
@@ -114,27 +190,66 @@ export function FluxusGovernanceSettings({
         isAdmin: adminChange.isAdmin,
         expectedIsAdmin: adminChange.expectedIsAdmin,
       });
+      const refreshed = await refreshAfterMutation(refreshRelevantQueries);
       toast.success(
-        adminChange.isAdmin
-          ? "Administrador da empresa definido."
-          : "Administração da empresa removida. O colaborador mantém seu acesso pessoal ao Feedback."
+        refreshed
+          ? adminChange.isAdmin
+            ? "Administrador da empresa definido."
+            : "Administração da empresa removida. O colaborador mantém seu acesso pessoal ao Feedback."
+          : "Alteração de administrador gravada; não foi possível atualizar a lista."
       );
       setAdminChange(null);
-      await Promise.all([
-        utils.feedback.companyAdministratorDirectory.invalidate({
-          companyId: company.id,
-        }),
-        utils.feedback.workspace.invalidate({ companyId: company.id }),
-        utils.fluxus.adminCompany.invalidate({ companyId: company.id }),
-      ]);
+      if (!refreshed)
+        setAdminError(
+          "Alteração de administrador gravada; não foi possível atualizar a lista. Tente atualizar a página antes de repetir."
+        );
     } catch (error) {
-      toast.error(
+      const message =
         error instanceof Error
           ? error.message
-          : "Não foi possível atualizar o administrador."
+          : "Não foi possível atualizar o administrador.";
+      setAdminError(message);
+      toast.error(message);
+    }
+  };
+
+  const confirmManager = async () => {
+    if (!managerChange || !managerSnapshot || !canConfirmManager) return;
+    setManagerError(null);
+    try {
+      type AssignmentMutationInput = Parameters<
+        typeof assignment.mutateAsync
+      >[0] & {
+        expectedAssignmentId?: number | null;
+      };
+      const input = {
+        companyId: managerChange.companyId,
+        userId: managerChange.person.id,
+        departmentId: managerChange.departmentId,
+        managerUserId: managerChange.nextManagerUserId,
+        jobTitle: managerChange.jobTitle ?? undefined,
+        expectedAssignmentId: managerChange.expectedAssignmentId,
+      } satisfies AssignmentMutationInput;
+      const result = await assignment.mutateAsync(input);
+      const refreshed = await refreshAfterMutation(refreshRelevantQueries);
+      const recordId = result.assignment?.id;
+      toast.success(
+        refreshed
+          ? `Gestor direto de “${managerChange.person.name || "Pessoa"}” atualizado${recordId ? ` (registro #${recordId})` : ""}.`
+          : `Gestor direto de “${managerChange.person.name || "Pessoa"}” gravado; não foi possível atualizar a lista.`
       );
-      setAdminChange(null);
-      await feedback.refetch();
+      if (!refreshed)
+        setManagerError(
+          "Gestor direto gravado; não foi possível atualizar a lista. Tente atualizar a página antes de repetir."
+        );
+      setManagerChange(null);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar o gestor direto.";
+      setManagerError(message);
+      toast.error(message);
     }
   };
 
@@ -293,9 +408,10 @@ export function FluxusGovernanceSettings({
               a leitura de feedbacks.
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              No Persona, gestor e RH recebem acesso ao dashboard agregado da
-              própria empresa. Relatórios individuais continuam sujeitos à
-              política, ao aceite explícito para a Beta 2 e à auditoria.
+              No Persona, gestores acessam somente a equipe vinculada a eles; RH
+              mantém o escopo autorizado da empresa. Relatórios individuais
+              continuam sujeitos à política, ao aceite explícito para a Beta 2 e
+              à auditoria.
             </p>
             {feedback.error ? (
               <div
@@ -328,9 +444,21 @@ export function FluxusGovernanceSettings({
                 não pode ser alterada.
               </p>
             ) : null}
+            {adminError ? (
+              <Alert variant="destructive" className="mt-3">
+                <AlertTitle>Status do administrador</AlertTitle>
+                <AlertDescription>{adminError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {managerError ? (
+              <Alert variant="destructive" className="mt-3">
+                <AlertTitle>Status do gestor direto</AlertTitle>
+                <AlertDescription>{managerError}</AlertDescription>
+              </Alert>
+            ) : null}
             <div className="mt-4 grid gap-2">
               {people.map(person => {
-                const candidate = feedback.data?.people.find(
+                const candidate = directoryPeople.find(
                   item => item.id === person.id
                 );
                 const known = Boolean(
@@ -341,6 +469,17 @@ export function FluxusGovernanceSettings({
                     !feedback.error
                 );
                 const isAdmin = Boolean(candidate?.isCompanyAdmin);
+                const hierarchyKnown = Boolean(
+                  feedback.data?.enabled &&
+                    feedback.data.companyId === company.id &&
+                    !feedback.error &&
+                    hasHierarchySnapshot(candidate)
+                );
+                const departmentName = candidate?.departmentId
+                  ? directoryDepartments.find(
+                      department => department.id === candidate.departmentId
+                    )?.name || `Departamento #${candidate.departmentId}`
+                  : "Sem departamento";
                 return (
                   <div
                     key={person.id}
@@ -373,6 +512,85 @@ export function FluxusGovernanceSettings({
                           <option value="hr">RH</option>
                         </select>
                       </label>
+                      <label className="space-y-1">
+                        <span className="block text-xs text-muted-foreground">
+                          Gestor direto
+                        </span>
+                        <select
+                          aria-label={`Gestor direto de ${person.name || "colaborador"}`}
+                          value={
+                            hierarchyKnown
+                              ? candidate?.managerUserId === null
+                                ? "none"
+                                : String(candidate?.managerUserId)
+                              : "unknown"
+                          }
+                          disabled={
+                            !hierarchyKnown ||
+                            feedback.isFetching ||
+                            assignment.isPending
+                          }
+                          onChange={event => {
+                            if (
+                              !hierarchyKnown ||
+                              !candidate ||
+                              feedback.isFetching ||
+                              assignment.isPending
+                            )
+                              return;
+                            const value = event.target.value;
+                            if (value === "unknown") return;
+                            const nextManagerUserId =
+                              value === "none" ? null : Number(value);
+                            if (nextManagerUserId === candidate.managerUserId)
+                              return;
+                            setManagerError(null);
+                            setManagerChange({
+                              person,
+                              companyId: company.id,
+                              companyName: company.name,
+                              previousManagerUserId: candidate.managerUserId,
+                              nextManagerUserId,
+                              expectedAssignmentId: candidate.assignmentId,
+                              departmentId: candidate.departmentId,
+                              jobTitle: candidate.jobTitle,
+                            });
+                          }}
+                          className="h-9 min-w-44 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground disabled:opacity-60"
+                        >
+                          {!hierarchyKnown ? (
+                            <option value="unknown">
+                              {feedback.isLoading
+                                ? "Carregando…"
+                                : "Indisponível"}
+                            </option>
+                          ) : null}
+                          <option value="none">Sem gestor direto</option>
+                          {managerCandidates(directoryPeople, person.id).map(
+                            manager => (
+                              <option
+                                key={manager.id}
+                                value={String(manager.id)}
+                              >
+                                {directoryPersonById.get(manager.id)?.name ||
+                                  `Usuário #${manager.id}`}
+                              </option>
+                            )
+                          )}
+                        </select>
+                      </label>
+                      <div className="min-w-44 text-xs text-muted-foreground">
+                        <span className="block">
+                          Departamento:{" "}
+                          {hierarchyKnown ? departmentName : "Indisponível"}
+                        </span>
+                        <span className="block">
+                          Cargo:{" "}
+                          {hierarchyKnown
+                            ? candidate?.jobTitle || "Não informado"
+                            : "Indisponível"}
+                        </span>
+                      </div>
                       <label
                         htmlFor={`company-admin-${person.id}`}
                         className="space-y-1"
@@ -501,6 +719,72 @@ export function FluxusGovernanceSettings({
               {adminChange?.isAdmin
                 ? "Confirmar administrador"
                 : "Confirmar remoção"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={managerChange !== null}
+        onOpenChange={open => {
+          if (!open && !assignment.isPending) setManagerChange(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar gestor direto</DialogTitle>
+            <DialogDescription>
+              Esta alteração atualiza o vínculo histórico usado pela fase 1 e
+              pela fase 2. Ela não concede papel nem leitura de Feedback.
+            </DialogDescription>
+          </DialogHeader>
+          {managerChange ? (
+            <div className="space-y-2 rounded-lg border p-3 text-sm">
+              <p>
+                Pessoa:{" "}
+                <strong>{managerChange.person.name || "Sem nome"}</strong>
+              </p>
+              <p>
+                Gestor direto:{" "}
+                <strong>
+                  {managerChange.nextManagerUserId
+                    ? directoryPersonById.get(managerChange.nextManagerUserId)
+                        ?.name || `Usuário #${managerChange.nextManagerUserId}`
+                    : "Sem gestor direto"}
+                </strong>
+              </p>
+              <p>
+                Empresa: <strong>{managerChange.companyName}</strong>
+              </p>
+              <p>
+                Departamento atual preservado:{" "}
+                <strong>
+                  {managerChange.departmentId
+                    ? directoryDepartments.find(
+                        department =>
+                          department.id === managerChange.departmentId
+                      )?.name || `Departamento #${managerChange.departmentId}`
+                    : "Sem departamento"}
+                </strong>
+              </p>
+              <p>
+                Cargo atual preservado:{" "}
+                <strong>{managerChange.jobTitle || "Não informado"}</strong>
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={assignment.isPending}
+              onClick={() => setManagerChange(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              disabled={!canConfirmManager}
+              onClick={() => void confirmManager()}
+            >
+              {assignment.isPending ? "Salvando…" : "Confirmar e salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>

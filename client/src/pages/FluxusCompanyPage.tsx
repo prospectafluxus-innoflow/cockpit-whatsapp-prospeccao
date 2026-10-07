@@ -34,6 +34,7 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
+  Settings2,
   UsersRound,
 } from "lucide-react";
 import { useState } from "react";
@@ -132,9 +133,7 @@ export default function FluxusCompanyPage({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline">Empresa</Badge>
-                <Badge
-                  variant={company.active === 1 ? "default" : "secondary"}
-                >
+                <Badge variant={company.active === 1 ? "default" : "secondary"}>
                   {company.active === 1 ? "Ativa" : "Inativa"}
                 </Badge>
               </div>
@@ -213,9 +212,10 @@ export default function FluxusCompanyPage({
                   <DialogHeader>
                     <DialogTitle>Novo código da empresa</DialogTitle>
                     <DialogDescription>
-                      O código anterior deixará de funcionar para novos cadastros.
-                      Colaboradores já vinculados não serão afetados. O novo código
-                      permanecerá disponível para consulta administrativa.
+                      O código anterior deixará de funcionar para novos
+                      cadastros. Colaboradores já vinculados não serão afetados.
+                      O novo código permanecerá disponível para consulta
+                      administrativa.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-2 py-3">
@@ -250,6 +250,26 @@ export default function FluxusCompanyPage({
               </Dialog>
             </div>
           </div>
+        </section>
+
+        <section className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold">Feedback de desenvolvimento</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Configure memberships, departamentos, escopos, template EEC e
+              ciclos sem conceder leitura automática de conteúdo.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="shrink-0 gap-2"
+            onClick={() =>
+              navigate(`/fluxus/admin/feedback/empresa/${companyId}`)
+            }
+          >
+            <Settings2 className="h-4 w-4" />
+            Administração operacional
+          </Button>
         </section>
 
         <FluxusGovernanceSettings company={company} people={data.people} />

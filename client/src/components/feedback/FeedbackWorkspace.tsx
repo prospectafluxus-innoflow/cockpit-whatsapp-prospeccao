@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { feedbackApi, type FeedbackWorkspace } from "@/lib/feedbackApi";
+import { feedbackAvailabilityMessage } from "@/lib/feedbackAvailability";
 import {
   CYCLE_STATUS_LABELS,
   FEEDBACK_PURPOSE,
@@ -158,12 +159,13 @@ export default function FeedbackWorkspacePage() {
   );
 }
 function FeedbackOnboarding({ workspace }: { workspace: FeedbackWorkspace }) {
+  const message = feedbackAvailabilityMessage(workspace);
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Fluxus Feedback · EEC"
-        title="Feedback ainda não habilitado"
-        description="A organização precisa habilitar o módulo por meio de memberships explícitos. O acesso não é inferido pelo papel legado da conta."
+        title={message.title}
+        description={message.description}
       />
       <Card className="border-emerald-700/20 bg-emerald-500/5">
         <CardContent className="flex gap-4 p-6 sm:p-8">
@@ -171,9 +173,7 @@ function FeedbackOnboarding({ workspace }: { workspace: FeedbackWorkspace }) {
           <div>
             <h2 className="font-semibold">Próximo passo</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Peça a um administrador da empresa para atribuir seu membership no
-              Feedback. Até lá, nenhuma pessoa, nota ou conteúdo organizacional
-              é carregado neste workspace.
+              {message.nextStep}
             </p>
             {workspace.companyId ? (
               <p className="mt-3 text-xs text-muted-foreground">

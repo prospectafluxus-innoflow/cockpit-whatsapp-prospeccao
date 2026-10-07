@@ -2385,8 +2385,15 @@ export async function workspace(
   requestedCompanyId?: number | null
 ) {
   const companyId = requestedCompanyId ?? actor.companyId ?? null;
+  const moduleEnabled = isFeedbackEnabled();
   const disabled = {
     enabled: false,
+    moduleEnabled,
+    unavailableReason: !moduleEnabled
+      ? ("module_disabled" as const)
+      : !companyId
+        ? ("company_missing" as const)
+        : ("membership_required" as const),
     companyId,
     membership: null,
     canConfigure: false,
@@ -2402,7 +2409,7 @@ export async function workspace(
     pendingCorrections: 0,
   };
   // Deliberately return before any feedback table query during rollout.
-  if (!isFeedbackEnabled()) return disabled;
+  if (!moduleEnabled) return disabled;
   if (!companyId) return disabled;
   const access = await requireAccess(actor, companyId, {
     allowUnconfigured: true,
@@ -2437,6 +2444,8 @@ export async function workspace(
   if (access.platformAdmin) {
     return {
       enabled: true,
+      moduleEnabled: true,
+      unavailableReason: null,
       companyId,
       membership: null,
       canConfigure: false,
@@ -2548,6 +2557,8 @@ export async function workspace(
   ).size;
   return {
     enabled: true,
+    moduleEnabled: true,
+    unavailableReason: null,
     companyId,
     membership: access.membership,
     canConfigure: access.canConfigure,

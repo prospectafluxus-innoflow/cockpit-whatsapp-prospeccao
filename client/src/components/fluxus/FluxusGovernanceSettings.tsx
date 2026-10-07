@@ -304,6 +304,11 @@ export function FluxusGovernanceSettings({
               >
                 Não foi possível carregar a opção de administrador. Os controles
                 estão bloqueados até a consulta funcionar.
+                <span className="text-xs">
+                  {feedback.error.data?.code
+                    ? `Código da consulta: ${feedback.error.data.code}.`
+                    : "Falha de conexão com o serviço."}
+                </span>
                 <Button
                   variant="outline"
                   size="sm"

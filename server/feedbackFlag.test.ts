@@ -34,6 +34,8 @@ describe("feedback rollout flag", () => {
       .workspace({ companyId: 7 });
     expect(result).toEqual({
       enabled: false,
+      moduleEnabled: false,
+      unavailableReason: "module_disabled",
       companyId: 7,
       membership: null,
       canConfigure: false,
@@ -47,6 +49,21 @@ describe("feedback rollout flag", () => {
       cycles: [],
       feedbacks: [],
       pendingCorrections: 0,
+    });
+  });
+
+  it("distingue empresa ausente de módulo desligado sem acessar banco", async () => {
+    setFeedbackEnabledResolverForTests(() => true);
+    const result = await feedbackRouter
+      .createCaller(context({ companyId: null }))
+      .workspace();
+    expect(result).toMatchObject({
+      enabled: false,
+      moduleEnabled: true,
+      unavailableReason: "company_missing",
+      companyId: null,
+      people: [],
+      feedbacks: [],
     });
   });
 

@@ -97,3 +97,17 @@ export function sameAssignmentSnapshot(
       person.managerUserId === expectedManagerUserId
   );
 }
+
+export function fullAssignmentSnapshotMatches(
+  expected: FeedbackAssignmentSnapshot | null,
+  current: FeedbackAssignmentSnapshot | undefined
+): boolean {
+  if (!expected || !current) return expected === null && current === undefined;
+  return (
+    expected.id === current.id &&
+    expected.userId === current.userId &&
+    expected.departmentId === current.departmentId &&
+    expected.managerUserId === current.managerUserId &&
+    expected.jobTitle === current.jobTitle
+  );
+}

@@ -969,8 +969,72 @@ async function getAssessmentEligibilityTx(
   return { eligible: true, assessment, reason: null };
 }
 
+function currentMembershipMap(rows: FeedbackMembership[]) {
+  const current = new Map<number, FeedbackMembership>();
+  for (const row of rows)
+    if (!current.has(row.userId)) current.set(row.userId, row);
+  return current;
+}
+
+function departmentCoverageMap(
+  departments: FeedbackDepartment[],
+  scopes: FeedbackManagementScope[]
+) {
+  const coveredByScope = scopes.map(scope => ({
+    scope,
+    departmentIds: departmentDescendants(
+      departments,
+      scope.departmentId,
+      scope.includeDescendants
+    ),
+  }));
+  const evaluatorIdsByDepartment = new Map<number, Set<number>>();
+  for (const { scope, departmentIds } of coveredByScope) {
+    for (const departmentId of Array.from(departmentIds)) {
+      const ids =
+        evaluatorIdsByDepartment.get(departmentId) ?? new Set<number>();
+      ids.add(scope.userId);
+      evaluatorIdsByDepartment.set(departmentId, ids);
+    }
+  }
+  return evaluatorIdsByDepartment;
+}
+
+function evaluatorReason(
+  userId: number,
+  membership: FeedbackMembership | undefined,
+  assignments: FeedbackAssignment[],
+  scopes: FeedbackManagementScope[]
+) {
+  if (!membership)
+    return "Esta pessoa ainda não possui papel de Feedback e não pode avaliar.";
+  if (!membership.canReadFeedback)
+    return "A leitura de Feedback está desativada para esta pessoa.";
+  if (membership.role === "collaborator")
+    return "O papel Colaborador permite apenas consultar as próprias devolutivas; não pode avaliar.";
+  if (membership.role === "manager") {
+    if (!assignments.some(item => item.managerUserId === userId))
+      return "Este Gestor não possui equipe direta vigente para avaliar.";
+    return null;
+  }
+  if (membership.role === "supermanager") {
+    if (!scopes.some(scope => scope.userId === userId))
+      return "Este Supergestor não possui escopo de gestão vigente.";
+    return null;
+  }
+  return null;
+}
+
 async function getDirectory(companyId: number) {
-  const [directory, assignments, departments] = await Promise.all([
+  const now = nowDate();
+  const [
+    directory,
+    assignments,
+    departments,
+    memberships,
+    scopes,
+    assessments,
+  ] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -989,8 +1053,58 @@ async function getDirectory(companyId: number) {
         )
       )
       .orderBy(asc(users.name), asc(users.id)),
-    getCurrentAssignments(companyId),
+    getCurrentAssignments(companyId, now),
     getCurrentDepartments(companyId),
+    db
+      .select()
+      .from(feedbackMemberships)
+      .where(
+        and(
+          eq(feedbackMemberships.companyId, companyId),
+          lte(feedbackMemberships.startsAt, now),
+          or(
+            isNull(feedbackMemberships.endsAt),
+            gt(feedbackMemberships.endsAt, now)
+          )
+        )
+      )
+      .orderBy(
+        desc(feedbackMemberships.startsAt),
+        desc(feedbackMemberships.id)
+      ),
+    db
+      .select()
+      .from(feedbackManagementScopes)
+      .where(
+        and(
+          eq(feedbackManagementScopes.companyId, companyId),
+          lte(feedbackManagementScopes.startsAt, now),
+          or(
+            isNull(feedbackManagementScopes.endsAt),
+            gt(feedbackManagementScopes.endsAt, now)
+          )
+        )
+      ),
+    db
+      .select({
+        id: fluxusAssessments.id,
+        userId: fluxusAssessments.userId,
+        companyId: fluxusAssessments.companyId,
+        status: fluxusAssessments.status,
+        instrumentVersion: fluxusAssessments.instrumentVersion,
+        formulaVersion: fluxusAssessments.formulaVersion,
+        answers: fluxusAssessments.answers,
+        result: fluxusAssessments.result,
+        completedAt: fluxusAssessments.completedAt,
+      })
+      .from(fluxusAssessments)
+      .where(
+        and(
+          eq(fluxusAssessments.companyId, companyId),
+          eq(fluxusAssessments.status, "completed")
+        )
+      )
+      .orderBy(desc(fluxusAssessments.completedAt), desc(fluxusAssessments.id)),
   ]);
   const departmentById = new Map(
     departments.map(department => [department.id, department.name])
@@ -998,37 +1112,121 @@ async function getDirectory(companyId: number) {
   const assignmentByUser = new Map(
     assignments.map(assignment => [assignment.userId, assignment])
   );
-  const people = await Promise.all(
-    directory.map(async person => {
-      const eligibility = await getAssessmentEligibility(person.id, companyId);
-      const membership = await getCurrentMembership(person.id, companyId);
-      const assignment = assignmentByUser.get(person.id);
-      return {
-        id: person.id,
-        name: person.name,
-        jobTitle: assignment?.jobTitle ?? person.jobTitle,
-        department: assignment?.departmentId
-          ? (departmentById.get(assignment.departmentId) ?? person.department)
-          : person.department,
-        eligible: eligibility.eligible,
-        personaAssessmentId: eligibility.assessment?.id ?? null,
-        eligibilityReason: eligibility.reason,
-        isCompanyAdmin: membership?.role === "company_admin",
-        managerEligible: Boolean(
-          ["manager", "hr"].includes(person.fluxusRole ?? "") ||
-            (membership &&
-              ["manager", "supermanager", "company_admin", "hr"].includes(
-                membership.role
-              ))
-        ),
-        evaluatorEligible: Boolean(
-          membership?.canReadFeedback &&
-            CONTENT_READER_ROLES.includes(membership.role)
-        ),
-      };
-    })
+  const membershipByUser = currentMembershipMap(memberships);
+  const assessmentByUser = new Map<number, (typeof assessments)[number]>();
+  for (const assessment of assessments)
+    if (!assessmentByUser.has(assessment.userId))
+      assessmentByUser.set(assessment.userId, assessment);
+
+  const evaluatorMemberships = directory
+    .map(person => ({ person, membership: membershipByUser.get(person.id) }))
+    .filter(item =>
+      Boolean(
+        item.membership?.canReadFeedback &&
+          CONTENT_READER_ROLES.includes(item.membership.role)
+      )
+    );
+  const globalEvaluatorIds = new Set(
+    evaluatorMemberships
+      .filter(item => ["hr", "company_admin"].includes(item.membership!.role))
+      .map(item => item.person.id)
   );
-  return { directory, assignments, departments, people };
+  const managerEvaluatorIds = new Set(
+    evaluatorMemberships
+      .filter(item => item.membership!.role === "manager")
+      .map(item => item.person.id)
+  );
+  const supermanagerEvaluatorIdsByDepartment = departmentCoverageMap(
+    departments,
+    scopes.filter(scope =>
+      evaluatorMemberships.some(
+        item =>
+          item.person.id === scope.userId &&
+          item.membership!.role === "supermanager"
+      )
+    )
+  );
+
+  const allowedEvaluatorIdsByParticipant = new Map<number, number[]>();
+  for (const person of directory) {
+    const assignment = assignmentByUser.get(person.id);
+    const allowed = new Set<number>(globalEvaluatorIds);
+    if (
+      assignment?.managerUserId &&
+      managerEvaluatorIds.has(assignment.managerUserId)
+    )
+      allowed.add(assignment.managerUserId);
+    if (
+      assignment?.departmentId !== null &&
+      assignment?.departmentId !== undefined
+    )
+      for (const evaluatorId of Array.from(
+        supermanagerEvaluatorIdsByDepartment.get(assignment.departmentId) ?? []
+      ))
+        allowed.add(evaluatorId);
+    allowed.delete(person.id);
+    allowedEvaluatorIdsByParticipant.set(
+      person.id,
+      Array.from(allowed).sort((a, b) => a - b)
+    );
+  }
+
+  const people = directory.map(person => {
+    const eligibilityAssessment = assessmentByUser.get(person.id);
+    const eligibility = eligibilityAssessment
+      ? assessmentResultIsValid(eligibilityAssessment)
+        ? { eligible: true, reason: null }
+        : {
+            eligible: false,
+            reason:
+              "O Persona concluído está incompleto ou tem metadata inconsistente.",
+          }
+      : { eligible: false, reason: "Nenhum Persona concluído foi encontrado." };
+    const membership = membershipByUser.get(person.id);
+    const assignment = assignmentByUser.get(person.id);
+    return {
+      id: person.id,
+      name: person.name,
+      jobTitle: assignment?.jobTitle ?? person.jobTitle,
+      department: assignment?.departmentId
+        ? (departmentById.get(assignment.departmentId) ?? person.department)
+        : person.department,
+      eligible: eligibility.eligible,
+      personaAssessmentId:
+        eligibility.eligible && eligibilityAssessment
+          ? eligibilityAssessment.id
+          : null,
+      eligibilityReason: eligibility.reason,
+      membershipRole: membership?.role ?? null,
+      feedbackCanRead: Boolean(membership?.canReadFeedback),
+      hasFeedbackAccess: Boolean(membership),
+      membershipId: membership?.id ?? null,
+      assignmentId: assignment?.id ?? null,
+      managerUserId: assignment?.managerUserId ?? null,
+      departmentId: assignment?.departmentId ?? null,
+      allowedEvaluatorIds:
+        allowedEvaluatorIdsByParticipant.get(person.id) ?? [],
+      evaluatorEligibilityReason: evaluatorReason(
+        person.id,
+        membership,
+        assignments,
+        scopes
+      ),
+      isCompanyAdmin: membership?.role === "company_admin",
+      managerEligible: Boolean(
+        ["manager", "hr"].includes(person.fluxusRole ?? "") ||
+          (membership &&
+            ["manager", "supermanager", "company_admin", "hr"].includes(
+              membership.role
+            ))
+      ),
+      evaluatorEligible: Boolean(
+        membership?.canReadFeedback &&
+          CONTENT_READER_ROLES.includes(membership.role)
+      ),
+    };
+  });
+  return { directory, assignments, departments, scopes, people };
 }
 
 export async function companyAdministratorDirectory(
@@ -1421,6 +1619,7 @@ export async function setMembership(
     userId: number;
     role: FeedbackRole;
     canReadFeedback: boolean;
+    expectedMembershipId?: number | null;
   }
 ) {
   requireFeedbackEnabled();
@@ -1446,6 +1645,14 @@ export async function setMembership(
       input.companyId,
       now
     );
+    if (
+      input.expectedMembershipId !== undefined &&
+      input.expectedMembershipId !== (current?.id ?? null)
+    )
+      fail(
+        "CONFLICT",
+        "O papel ou a permissão desta pessoa mudou. Atualize os dados e confirme novamente."
+      );
     if (current)
       await tx
         .update(feedbackMemberships)
@@ -1580,6 +1787,68 @@ export async function updateDepartment(
           fail("CONFLICT", "A hierarquia existente contém um ciclo.");
         seen.add(cursor);
         cursor = all.find(item => item.id === cursor)?.parentId ?? null;
+      }
+    }
+    if (lockedCurrent.active && !input.active) {
+      const activeChildren = all.filter(
+        item => item.parentId === lockedCurrent.id && item.active
+      );
+      if (activeChildren.length) {
+        fail(
+          "CONFLICT",
+          `Não é possível arquivar ${lockedCurrent.name}: arquive primeiro os departamentos filhos ativos (${activeChildren
+            .map(item => item.name)
+            .join(", ")}).`
+        );
+      }
+      const now = nowDate();
+      const [activeAssignments, activeScopes] = await Promise.all([
+        tx
+          .select({
+            id: feedbackAssignments.id,
+            userId: feedbackAssignments.userId,
+          })
+          .from(feedbackAssignments)
+          .where(
+            and(
+              eq(feedbackAssignments.companyId, lockedCurrent.companyId),
+              eq(feedbackAssignments.departmentId, lockedCurrent.id),
+              lte(feedbackAssignments.startsAt, now),
+              or(
+                isNull(feedbackAssignments.endsAt),
+                gt(feedbackAssignments.endsAt, now)
+              )
+            )
+          ),
+        tx
+          .select({
+            id: feedbackManagementScopes.id,
+            userId: feedbackManagementScopes.userId,
+          })
+          .from(feedbackManagementScopes)
+          .where(
+            and(
+              eq(feedbackManagementScopes.companyId, lockedCurrent.companyId),
+              eq(feedbackManagementScopes.departmentId, lockedCurrent.id),
+              lte(feedbackManagementScopes.startsAt, now),
+              or(
+                isNull(feedbackManagementScopes.endsAt),
+                gt(feedbackManagementScopes.endsAt, now)
+              )
+            )
+          ),
+      ]);
+      if (activeAssignments.length) {
+        fail(
+          "CONFLICT",
+          `Não é possível arquivar ${lockedCurrent.name}: existem ${activeAssignments.length} assignment(s) vigente(s). Remova ou encerre os vínculos antes de arquivar.`
+        );
+      }
+      if (activeScopes.length) {
+        fail(
+          "CONFLICT",
+          `Não é possível arquivar ${lockedCurrent.name}: existem ${activeScopes.length} escopo(s) de gestão vigente(s). Revogue os escopos antes de arquivar.`
+        );
       }
     }
     const rows = await tx
@@ -1982,25 +2251,20 @@ async function assertParticipantAndEvaluator(
   tx: Tx,
   companyId: number,
   participantUserId: number,
-  evaluatorUserId: number
+  evaluatorUserId: number | null,
+  expectedAssignmentId: number | null | undefined,
+  allowMissingMembership: boolean
 ) {
   const participant = await getLiveUserTx(tx, participantUserId, companyId);
-  const evaluator = await getLiveUserTx(tx, evaluatorUserId, companyId);
-  if (!participant || !evaluator)
-    fail("BAD_REQUEST", "Participante ou avaliador ativo não encontrado.");
-  if (
-    participant.accountType !== "fluxus" ||
-    evaluator.accountType !== "fluxus"
-  )
-    fail("BAD_REQUEST", "Participante e avaliador precisam ter conta Fluxus.");
-  if (participantUserId === evaluatorUserId)
-    fail("BAD_REQUEST", "O avaliador não pode ser o próprio participante.");
   const participantMembership = await getCurrentMembershipTx(
     tx,
     participantUserId,
     companyId
   );
-  if (!participantMembership)
+  if (!participant) fail("BAD_REQUEST", "Participante ativo não encontrado.");
+  if (participant.accountType !== "fluxus")
+    fail("BAD_REQUEST", "O participante precisa ter conta Fluxus.");
+  if (!participantMembership && !allowMissingMembership)
     fail("BAD_REQUEST", "O participante precisa de membership vigente.");
   const assignmentRows = await getCurrentAssignmentsTx(tx, companyId);
   const assignment = assignmentRows.find(
@@ -2008,6 +2272,27 @@ async function assertParticipantAndEvaluator(
   );
   if (!assignment)
     fail("BAD_REQUEST", "O participante precisa de assignment vigente.");
+  if (
+    expectedAssignmentId !== undefined &&
+    expectedAssignmentId !== assignment.id
+  )
+    fail(
+      "CONFLICT",
+      "O vínculo do participante mudou. Atualize a lista antes de escolher o avaliador."
+    );
+  const resolvedEvaluatorUserId = evaluatorUserId ?? assignment.managerUserId;
+  if (resolvedEvaluatorUserId === null)
+    fail(
+      "BAD_REQUEST",
+      "O participante não possui gestor direto vigente. Informe um avaliador autorizado explicitamente."
+    );
+  const evaluator = await getLiveUserTx(tx, resolvedEvaluatorUserId, companyId);
+  if (!evaluator)
+    fail("BAD_REQUEST", "Avaliador ativo da empresa não encontrado.");
+  if (evaluator.accountType !== "fluxus")
+    fail("BAD_REQUEST", "O avaliador precisa ter conta Fluxus.");
+  if (participantUserId === resolvedEvaluatorUserId)
+    fail("BAD_REQUEST", "O avaliador não pode ser o próprio participante.");
   const eligibility = await getAssessmentEligibilityTx(
     tx,
     participantUserId,
@@ -2020,24 +2305,34 @@ async function assertParticipantAndEvaluator(
     );
   const evaluatorAuthorized = await canEvaluateParticipantTx(
     tx,
-    evaluatorUserId,
+    resolvedEvaluatorUserId,
     companyId,
     participantUserId,
-    evaluatorUserId
+    resolvedEvaluatorUserId
   );
   if (!evaluatorAuthorized)
     fail(
       "FORBIDDEN",
       "O avaliador não possui permissão e escopo vigente para este participante."
     );
-  return { assignment, assessment: eligibility.assessment };
+  return {
+    assignment,
+    assessment: eligibility.assessment,
+    evaluatorUserId: resolvedEvaluatorUserId,
+    participantMembership,
+  };
 }
 
 export async function addParticipants(
   actor: Actor,
   input: {
     cycleId: number;
-    participants: Array<{ userId: number; evaluatorUserId: number }>;
+    participants: Array<{
+      userId: number;
+      evaluatorUserId?: number;
+      expectedAssignmentId?: number | null;
+    }>;
+    enrollParticipants?: boolean;
   }
 ) {
   requireFeedbackEnabled();
@@ -2062,6 +2357,13 @@ export async function addParticipants(
         "CONFLICT",
         "Participantes só podem ser adicionados a ciclo planejado."
       );
+    const actorAccess = await requireConfigTx(tx, actor, current.companyId);
+    const enrollParticipants = input.enrollParticipants === true;
+    if (enrollParticipants && actorAccess.membership?.role !== "company_admin")
+      fail(
+        "FORBIDDEN",
+        "Somente Administrador da empresa pode confirmar o acesso individual. Solicite ao administrador que cadastre o papel Colaborador."
+      );
     const uniqueUsers = new Set<number>();
     const prepared: Array<{
       userId: number;
@@ -2072,7 +2374,13 @@ export async function addParticipants(
     }> = [];
     for (const item of input.participants) {
       assertPositiveId(item.userId, "Participante");
-      assertPositiveId(item.evaluatorUserId, "Avaliador");
+      if (item.evaluatorUserId !== undefined)
+        assertPositiveId(item.evaluatorUserId, "Avaliador");
+      if (
+        item.expectedAssignmentId !== undefined &&
+        item.expectedAssignmentId !== null
+      )
+        assertPositiveId(item.expectedAssignmentId, "Assignment esperado");
       if (uniqueUsers.has(item.userId))
         fail("BAD_REQUEST", "Não repita participantes no lote.");
       uniqueUsers.add(item.userId);
@@ -2080,8 +2388,42 @@ export async function addParticipants(
         tx,
         current.companyId,
         item.userId,
-        item.evaluatorUserId
+        item.evaluatorUserId ?? null,
+        item.expectedAssignmentId,
+        enrollParticipants
       );
+      if (!result.participantMembership) {
+        if (!enrollParticipants)
+          fail(
+            "BAD_REQUEST",
+            "O participante não possui acesso a Feedback. Confirme enrollParticipants=true para criar somente o papel Colaborador sem leitura."
+          );
+        const membershipRows = await tx
+          .insert(feedbackMemberships)
+          .values({
+            companyId: current.companyId,
+            userId: item.userId,
+            role: "collaborator",
+            canReadFeedback: false,
+            startsAt: new Date(),
+            endsAt: null,
+            createdBy: actor.id,
+          })
+          .returning();
+        await insertAudit(tx, {
+          actorUserId: actor.id,
+          subjectUserId: item.userId,
+          companyId: current.companyId,
+          action: "feedback.membership.enroll_participant",
+          resourceType: "feedback_membership",
+          metadata: {
+            role: "collaborator",
+            canReadFeedback: false,
+            cycleId: current.id,
+            membershipId: membershipRows[0]?.id ?? null,
+          },
+        });
+      }
       const duplicate = await tx
         .select({ id: feedbackEvaluations.id })
         .from(feedbackEvaluations)
@@ -2096,7 +2438,7 @@ export async function addParticipants(
         fail("CONFLICT", "Um dos participantes já está no ciclo.");
       prepared.push({
         userId: item.userId,
-        evaluatorUserId: item.evaluatorUserId,
+        evaluatorUserId: result.evaluatorUserId,
         assignment: result.assignment,
         assessmentId: result.assessment.id,
         departmentId: result.assignment.departmentId,
@@ -2474,7 +2816,8 @@ async function visibleEvaluationList(
   actor: Actor,
   companyId: number,
   access: FeedbackAccess,
-  evaluations: FeedbackEvaluation[]
+  evaluations: FeedbackEvaluation[],
+  readableParticipantIds?: ReadonlySet<number>
 ) {
   const filtered: FeedbackEvaluation[] = [];
   for (const evaluation of evaluations) {
@@ -2485,12 +2828,13 @@ async function visibleEvaluationList(
     }
     if (
       access.canReadContent &&
-      (await canReadParticipant(
-        actor.id,
-        companyId,
-        evaluation.participantUserId,
-        evaluation.evaluatorUserId
-      ))
+      (readableParticipantIds?.has(evaluation.participantUserId) ??
+        (await canReadParticipant(
+          actor.id,
+          companyId,
+          evaluation.participantUserId,
+          evaluation.evaluatorUserId
+        )))
     )
       filtered.push(evaluation);
     else if (
@@ -2552,6 +2896,16 @@ export async function workspace(
   });
   if (!access.membership && !access.platformAdmin) return disabled;
   const directory = await getDirectory(companyId);
+  const departmentNameById = new Map(
+    directory.departments.map(department => [department.id, department.name])
+  );
+  const departmentDtos = directory.departments.map(department => ({
+    ...department,
+    parentName:
+      department.parentId === null
+        ? null
+        : (departmentNameById.get(department.parentId) ?? null),
+  }));
   const allEvaluations = await db
     .select()
     .from(feedbackEvaluations)
@@ -2562,21 +2916,6 @@ export async function workspace(
     .from(developmentCycles)
     .where(eq(developmentCycles.companyId, companyId))
     .orderBy(desc(developmentCycles.startsOn), desc(developmentCycles.id));
-  const now = nowDate();
-  const allScopes = await db
-    .select()
-    .from(feedbackManagementScopes)
-    .where(
-      and(
-        eq(feedbackManagementScopes.companyId, companyId),
-        lte(feedbackManagementScopes.startsAt, now),
-        or(
-          isNull(feedbackManagementScopes.endsAt),
-          gt(feedbackManagementScopes.endsAt, now)
-        )
-      )
-    );
-
   if (access.platformAdmin) {
     return {
       enabled: true,
@@ -2589,8 +2928,11 @@ export async function workspace(
       canReadContent: false,
       catalog: [...FEEDBACK_COMPETENCIES],
       settings: await getSettings(companyId),
-      departments: directory.departments,
-      people: directory.people,
+      departments: departmentDtos,
+      people: directory.people.map(person => ({
+        ...person,
+        allowedEvaluatorIds: [],
+      })),
       assignments: directory.assignments,
       scopes: [],
       cycles: [],
@@ -2603,8 +2945,8 @@ export async function workspace(
   let allowedPeople = directory.people;
   let allowedAssignments = directory.assignments;
   let allowedScopes = access.canConfigure
-    ? allScopes
-    : allScopes.filter(scope => scope.userId === actor.id);
+    ? directory.scopes
+    : directory.scopes.filter(scope => scope.userId === actor.id);
   let allowedEvaluations = allEvaluations;
   if (role === "collaborator") {
     allowedPeople = directory.people.filter(person => person.id === actor.id);
@@ -2633,14 +2975,15 @@ export async function workspace(
         isFeedbackVisibleToParticipant(evaluation.status)
     );
   } else if (!(role === "hr" || role === "company_admin")) {
-    const visibleIds = new Set<number>();
-    for (const person of directory.people) {
-      if (
-        person.id === actor.id ||
-        (await canReadParticipant(actor.id, companyId, person.id))
-      )
-        visibleIds.add(person.id);
-    }
+    const visibleIds = new Set<number>(
+      directory.people
+        .filter(
+          person =>
+            person.id === actor.id ||
+            person.allowedEvaluatorIds.includes(actor.id)
+        )
+        .map(person => person.id)
+    );
     allowedPeople = directory.people.filter(person =>
       visibleIds.has(person.id)
     );
@@ -2658,11 +3001,21 @@ export async function workspace(
     access.canConfigure || role === "hr" || role === "company_admin"
       ? allCycles
       : allCycles.filter(cycle => cycleIds.has(cycle.id));
+  const readableParticipantIds = new Set<number>(
+    directory.people
+      .filter(
+        person =>
+          person.id === actor.id ||
+          person.allowedEvaluatorIds.includes(actor.id)
+      )
+      .map(person => person.id)
+  );
   const feedbacks = await visibleEvaluationList(
     actor,
     companyId,
     access,
-    allowedEvaluations
+    allowedEvaluations,
+    readableParticipantIds
   );
   const revisionRows = await db
     .select({
@@ -2705,10 +3058,10 @@ export async function workspace(
         ? await getSettings(companyId)
         : null,
     departments:
-      access.canConfigure || role !== "collaborator"
-        ? directory.departments
-        : [],
-    people: allowedPeople,
+      access.canConfigure || role !== "collaborator" ? departmentDtos : [],
+    people: allowedPeople.map(person =>
+      access.canConfigure ? person : { ...person, allowedEvaluatorIds: [] }
+    ),
     assignments: allowedAssignments,
     scopes: allowedScopes,
     cycles,

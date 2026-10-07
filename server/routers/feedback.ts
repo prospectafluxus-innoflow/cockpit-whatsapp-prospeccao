@@ -92,6 +92,7 @@ export const feedbackRouter = router({
         userId: id,
         role: z.enum(FEEDBACK_ROLES),
         canReadFeedback: z.boolean(),
+        expectedMembershipId: id.nullable().optional(),
       })
     )
     .mutation(({ ctx, input }) => setMembership(ctx.user, input)),
@@ -164,9 +165,16 @@ export const feedbackRouter = router({
       z.object({
         cycleId: id,
         participants: z
-          .array(z.object({ userId: id, evaluatorUserId: id }))
+          .array(
+            z.object({
+              userId: id,
+              evaluatorUserId: id.optional(),
+              expectedAssignmentId: id.nullable().optional(),
+            })
+          )
           .min(1)
           .max(500),
+        enrollParticipants: z.boolean().default(false),
       })
     )
     .mutation(({ ctx, input }) => addParticipants(ctx.user, input)),

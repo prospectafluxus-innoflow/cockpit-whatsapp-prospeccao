@@ -37,6 +37,7 @@ describe("feedback rollout flag", () => {
       moduleEnabled: false,
       unavailableReason: "module_disabled",
       companyId: 7,
+      companyName: null,
       membership: null,
       canConfigure: false,
       canReadContent: false,

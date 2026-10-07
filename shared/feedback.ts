@@ -42,7 +42,7 @@ export const CYCLE_STATUS_LABELS: Record<DevelopmentCycleStatus, string> = {
 export const FEEDBACK_ROLE_LABELS: Record<FeedbackRole, string> = {
   collaborator: "Colaborador",
   manager: "Gestor",
-  supermanager: "Supergestor",
+  supermanager: "Gestor de áreas (Supergestor)",
   hr: "RH",
   company_admin: "Administrador da empresa",
 };

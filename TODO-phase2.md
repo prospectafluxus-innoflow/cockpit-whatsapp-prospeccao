@@ -8,8 +8,10 @@
 - [x] Telas: administração de configuração e organização, gestor com equipe autorizada e pendências, colaborador somente com próprios feedbacks liberados. Rótulos acolhedores com mesmas notas/fatos, orientações EEC, preview antes da liberação, manifestação opcional. Erros/retry claros, navegação integrada, teclado e responsividade. Sem IA reescrevendo conteúdo, ranking ou exposição ampla.
 - [x] Histórico: resultados por ciclo e competência, evidências acessíveis por links e consolidado de quatro ciclos na configuração trimestral. Mostrar parcial/concluídos e comparabilidade; sem inventar décima competência no passado ou somar Persona e Feedback. Seleção anual e acompanhamento autorizado por pessoa.
 - [x] Rollout: migração aditiva testada no PostgreSQL descartável, feature flag desativada por padrão, nenhum auto-grant, nenhum comando de migração novo no startup produtivo. Testes do módulo, TypeScript/build e regressões aprovados; revisão somente de leitura por agente independente e correção de achados confirmados.
-- [ ] Entrega: código em PR de revisão no repositório existente, sem merge/deploy; informar o que foi validado e condições antes de produção (backup, autorização de acessos e revisão das políticas/textos). 1:1, combinados, importação legado e dashboards avançados não integram esta entrega.
+- [x] Entrega: código em PR de revisão no repositório existente, sem merge/deploy; informar o que foi validado e condições antes de produção (backup, autorização de acessos e revisão das políticas/textos). 1:1, combinados, importação legado e dashboards avançados não integram esta entrega.
 
 ## Evidências de fechamento técnico
 
 Em 06/10/2026, TypeScript e build de produção passaram; a suíte oficial passou com 148 testes e dois testes de Gemini já ignorados na baseline. Foram aprovadas 30 verificações do fluxo integrado e 19 regressões de segurança em PostgreSQL descartável. A revisão independente encontrou oito ajustes, corrigidos e rechecados nos caminhos afetados. As regressões do cliente estão na suíte oficial. Não houve teste visual de navegador; habilitação/piloto/produção e revisão jurídica/metodológica permanecem etapas posteriores à PR.
+
+PR de revisão em rascunho: https://github.com/prospectafluxus-innoflow/cockpit-whatsapp-prospeccao/pull/26. Não houve merge/deploy ou habilitação de acessos reais.

@@ -202,6 +202,12 @@ try {
   assert.deepEqual(afterMembers, beforeMembers);
   assert.deepEqual(afterAudits, beforeAudits);
   pass("consultar não cria vínculo nem auditoria de mudança de acesso");
+  const pendingAccess = await caller(regular).workspace();
+  assert.equal(pendingAccess.enabled, false);
+  assert.equal(pendingAccess.moduleEnabled, true);
+  assert.equal(pendingAccess.unavailableReason, "membership_required");
+  assert.deepEqual(pendingAccess.feedbacks, []);
+  pass("conta sem acesso informa módulo ativo e acesso pendente, sem conteúdo");
   setFeedbackEnabledResolverForTests(() => false);
   const disabled = await api.companyAdministratorDirectory({
     companyId: company.id,

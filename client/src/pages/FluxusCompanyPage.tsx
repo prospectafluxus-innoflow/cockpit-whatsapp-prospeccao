@@ -37,7 +37,7 @@ import {
   Settings2,
   UsersRound,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   Bar,
@@ -94,6 +94,15 @@ export default function FluxusCompanyPage({
     },
     onError: mutationError => toast.error(mutationError.message),
   });
+
+  useEffect(() => {
+    if (data?.company?.id && window.location.hash === "#papeis-de-acesso") {
+      document.getElementById("papeis-de-acesso")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [data?.company?.id]);
 
   if (isLoading)
     return (
@@ -256,19 +265,23 @@ export default function FluxusCompanyPage({
           <div>
             <h2 className="font-semibold">Feedback de desenvolvimento</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Configure memberships, departamentos, escopos, template EEC e
-              ciclos sem conceder leitura automática de conteúdo.
+              Defina o administrador na lista de colaboradores abaixo, junto das
+              opções de perfil Persona. Depois, ele configura o Feedback pelo
+              próprio acesso ao Fluxus Persona.
             </p>
           </div>
           <Button
             variant="outline"
             className="shrink-0 gap-2"
             onClick={() =>
-              navigate(`/fluxus/admin/feedback/empresa/${companyId}`)
+              document.getElementById("papeis-de-acesso")?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              })
             }
           >
             <Settings2 className="h-4 w-4" />
-            Administração operacional
+            Definir administrador
           </Button>
         </section>
 

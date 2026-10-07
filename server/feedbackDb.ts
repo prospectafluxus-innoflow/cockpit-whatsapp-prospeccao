@@ -949,6 +949,7 @@ async function getDirectory(companyId: number) {
         eligible: eligibility.eligible,
         personaAssessmentId: eligibility.assessment?.id ?? null,
         eligibilityReason: eligibility.reason,
+        isCompanyAdmin: membership?.role === "company_admin",
         evaluatorEligible: Boolean(
           membership?.canReadFeedback &&
             CONTENT_READER_ROLES.includes(membership.role)
@@ -1161,6 +1162,84 @@ export async function bootstrapCompanyAdmin(
       metadata: { role: "company_admin", canReadFeedback: false },
     });
     return { success: true, membership };
+  });
+}
+
+export async function setCompanyAdministrator(
+  actor: Actor,
+  input: {
+    companyId: number;
+    userId: number;
+    isAdmin: boolean;
+    expectedIsAdmin: boolean;
+  }
+) {
+  requireFeedbackEnabled();
+  assertPositiveId(input.userId, "Usuário");
+  return db.transaction(async tx => {
+    await lock(tx, "company", input.companyId);
+    await requireAccessTx(tx, actor, input.companyId, {
+      platformBootstrap: true,
+    });
+    const target = await getLiveUserTx(tx, input.userId, input.companyId);
+    if (!target || target.accountType !== "fluxus")
+      fail("BAD_REQUEST", "Usuário Fluxus ativo da empresa não encontrado.");
+
+    const now = new Date();
+    const current = await getCurrentMembershipTx(
+      tx,
+      input.userId,
+      input.companyId,
+      now
+    );
+    const currentIsAdmin = current?.role === "company_admin";
+    if (currentIsAdmin !== input.expectedIsAdmin)
+      fail(
+        "CONFLICT",
+        "O estado de administrador da empresa mudou. Atualize a lista e tente novamente."
+      );
+
+    if (currentIsAdmin === input.isAdmin)
+      return { success: true, changed: false, membership: current };
+
+    if (current)
+      await tx
+        .update(feedbackMemberships)
+        .set({ endsAt: now })
+        .where(eq(feedbackMemberships.id, current.id));
+
+    const nextRole = input.isAdmin ? "company_admin" : "collaborator";
+    const inserted = await tx
+      .insert(feedbackMemberships)
+      .values({
+        companyId: input.companyId,
+        userId: input.userId,
+        role: nextRole,
+        canReadFeedback: false,
+        startsAt: now,
+        endsAt: null,
+        createdBy: actor.id,
+      })
+      .returning();
+    const membership = inserted[0]!;
+    await insertAudit(tx, {
+      actorUserId: actor.id,
+      subjectUserId: input.userId,
+      companyId: input.companyId,
+      action: input.isAdmin
+        ? "feedback.company_admin.enable"
+        : "feedback.company_admin.disable",
+      resourceType: "feedback_membership",
+      metadata: {
+        previousMembershipId: current?.id ?? null,
+        previousRole: current?.role ?? null,
+        previousCanReadFeedback: current?.canReadFeedback ?? null,
+        role: nextRole,
+        canReadFeedback: false,
+        isAdmin: input.isAdmin,
+      },
+    });
+    return { success: true, changed: true, membership };
   });
 }
 
@@ -2931,6 +3010,7 @@ export const feedbackDb = {
   getFeedback,
   history,
   bootstrapCompanyAdmin,
+  setCompanyAdministrator,
   setMembership,
   createDepartment,
   updateDepartment,

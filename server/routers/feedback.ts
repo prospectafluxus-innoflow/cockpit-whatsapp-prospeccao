@@ -21,6 +21,7 @@ import {
   removeParticipant,
   requireFeedbackEnabled,
   saveDraft,
+  setCompanyAdministrator,
   setManagementScope,
   setMembership,
   transitionCycle,
@@ -65,6 +66,17 @@ export const feedbackRouter = router({
     .mutation(({ ctx, input }) =>
       bootstrapCompanyAdmin(ctx.user, input.companyId, input.userId)
     ),
+
+  setCompanyAdministrator: enabledAdminProcedure
+    .input(
+      z.object({
+        companyId: id,
+        userId: id,
+        isAdmin: z.boolean(),
+        expectedIsAdmin: z.boolean(),
+      })
+    )
+    .mutation(({ ctx, input }) => setCompanyAdministrator(ctx.user, input)),
 
   setMembership: enabledProcedure
     .input(

@@ -16,6 +16,7 @@ import {
 } from "../../shared/fluxusVersioning";
 import { canAccessFluxusIndividualReport } from "../../shared/fluxusAccess";
 import { createUser, getUserByEmail, getUserById, updateUser } from "../db";
+import { exportReleasedFeedbackData } from "../feedbackPrivacy";
 import {
   decodeFluxusCompanyCodeStorage,
   decryptFluxusCompanyCode,
@@ -568,6 +569,8 @@ export const fluxusRouter = router({
       consents,
       privacyRequests: requests,
       assessments: assessments.map(item => ({ ...cycleSummary(item), answers: item.answers, result: item.result })),
+      feedbacks: await exportReleasedFeedbackData(ctx.user.id, ctx.user.companyId!),
+      feedbackAccessNote: "Este pacote inclui feedbacks já liberados. Solicitações de acesso ou correção sobre outros registros podem ser encaminhadas pela Central de Privacidade; a restrição de interface não limita direitos do titular.",
     };
   }),
 

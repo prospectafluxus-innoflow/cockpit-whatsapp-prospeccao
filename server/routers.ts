@@ -35,6 +35,7 @@ import { createHeartbeatJob, updateHeartbeatJob } from "./_core/heartbeat";
 import { invokeLLM } from "./_core/gemini";
 import { authOwnRouter } from "./routers/authOwn";
 import { fluxusRouter } from "./routers/fluxus";
+import { feedbackRouter } from "./routers/feedback";
 import { storagePut } from "./storage";
 import {
   getVapidPublicKey,
@@ -184,6 +185,7 @@ export const appRouter = router({
   system: systemRouter,
   authOwn: authOwnRouter,
   fluxus: fluxusRouter,
+  feedback: feedbackRouter,
   auth: router({
     me: publicProcedure.query(opts => {
       const user = opts.ctx.user;

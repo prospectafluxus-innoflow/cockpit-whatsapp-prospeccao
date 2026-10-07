@@ -1,7 +1,17 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpenCheck, ClipboardCheck, History, Home, LogOut, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import {
+  BookOpenCheck,
+  ClipboardCheck,
+  History,
+  Home,
+  LogOut,
+  MessageSquareText,
+  ShieldCheck,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { FluxusPersonaLogo } from "./FluxusBrand";
 
@@ -45,6 +55,7 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
 
   const navigation = [
     { path: "/fluxus", label: "Início", icon: Home },
+    { path: "/fluxus/feedback", label: "Feedback", icon: MessageSquareText },
     { path: "/fluxus/avaliacao", label: "Avaliação", icon: ClipboardCheck },
     { path: "/fluxus/historico", label: "Histórico", icon: History },
     ...(user.fluxusRole === "manager" || user.fluxusRole === "hr"
@@ -67,7 +78,8 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
 
           <nav className="flex items-center gap-1">
             {navigation.map(item => {
-              const active = location === item.path;
+              const active =
+                location === item.path || location.startsWith(`${item.path}/`);
               return (
                 <Button
                   key={item.path}

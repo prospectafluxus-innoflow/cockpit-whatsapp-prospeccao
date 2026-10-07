@@ -34,6 +34,31 @@ const FluxusMethodPage = lazy(() => import("./pages/FluxusMethodPage"));
 const FluxusAdminReportPage = lazy(
   () => import("./pages/FluxusAdminReportPage")
 );
+const FeedbackWorkspacePage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.default,
+  }))
+);
+const FeedbackCyclePage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.FeedbackCyclePage,
+  }))
+);
+const FeedbackEvaluationPage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.FeedbackEvaluationPage,
+  }))
+);
+const FeedbackHistoryPage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.FeedbackHistoryPage,
+  }))
+);
+const FeedbackTechnicalAdminPage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.FeedbackTechnicalAdminPage,
+  }))
+);
 
 function ApplicationTitle() {
   const [location] = useLocation();
@@ -58,6 +83,32 @@ function Router() {
       <Route path="/fluxus/login" component={FluxusLoginPage} />
       <Route path="/fluxus/cadastro" component={FluxusRegisterPage} />
 
+      {/* Feedback EEC — workspace, ciclos, avaliações e histórico */}
+      <Route path="/fluxus/feedback/ciclo/:id">
+        {params => (
+          <FluxusLayout>
+            <FeedbackCyclePage params={params} />
+          </FluxusLayout>
+        )}
+      </Route>
+      <Route path="/fluxus/feedback/avaliacao/:id">
+        {params => (
+          <FluxusLayout>
+            <FeedbackEvaluationPage params={params} />
+          </FluxusLayout>
+        )}
+      </Route>
+      <Route path="/fluxus/feedback/historico">
+        <FluxusLayout>
+          <FeedbackHistoryPage />
+        </FluxusLayout>
+      </Route>
+      <Route path="/fluxus/feedback">
+        <FluxusLayout>
+          <FeedbackWorkspacePage />
+        </FluxusLayout>
+      </Route>
+
       {/* Área exclusiva do colaborador Fluxus */}
       <Route path="/fluxus/avaliacao">
         <FluxusLayout>
@@ -65,10 +116,14 @@ function Router() {
         </FluxusLayout>
       </Route>
       <Route path="/fluxus/historico">
-        <FluxusLayout><FluxusHistoryPage /></FluxusLayout>
+        <FluxusLayout>
+          <FluxusHistoryPage />
+        </FluxusLayout>
       </Route>
       <Route path="/fluxus/equipe">
-        <FluxusLayout><FluxusTeamDashboardPage /></FluxusLayout>
+        <FluxusLayout>
+          <FluxusTeamDashboardPage />
+        </FluxusLayout>
       </Route>
       <Route path="/fluxus/relatorio/:id">
         {params => (
@@ -78,10 +133,14 @@ function Router() {
         )}
       </Route>
       <Route path="/fluxus/privacidade">
-        <FluxusLayout><FluxusPrivacyPage /></FluxusLayout>
+        <FluxusLayout>
+          <FluxusPrivacyPage />
+        </FluxusLayout>
       </Route>
       <Route path="/fluxus/metodologia">
-        <FluxusLayout><FluxusMethodPage /></FluxusLayout>
+        <FluxusLayout>
+          <FluxusMethodPage />
+        </FluxusLayout>
       </Route>
       <Route path="/fluxus">
         <FluxusLayout>
@@ -99,6 +158,10 @@ function Router() {
             <Route path="/dashboard" component={DashboardPage} />
             <Route path="/schedule" component={SchedulePage} />
             <Route path="/innoflow" component={InnoFlowPage} />
+            <Route
+              path="/fluxus/admin/feedback/empresa/:id"
+              component={FeedbackTechnicalAdminPage}
+            />
             <Route path="/fluxus/admin" component={FluxusAdminPage} />
             <Route
               path="/fluxus/admin/empresa/:id"

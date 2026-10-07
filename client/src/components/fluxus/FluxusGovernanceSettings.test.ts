@@ -27,11 +27,19 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({
-      feedback: { workspace: { invalidate: vi.fn() } },
+      feedback: {
+        workspace: { invalidate: vi.fn() },
+        companyAdministratorDirectory: { invalidate: vi.fn() },
+      },
       fluxus: { adminCompany: { invalidate: vi.fn() } },
     }),
     feedback: {
-      workspace: { useQuery: () => mocks.query },
+      workspace: {
+        useQuery: () => {
+          throw new Error("O seletor não pode depender do workspace completo");
+        },
+      },
+      companyAdministratorDirectory: { useQuery: () => mocks.query },
       setCompanyAdministrator: {
         useMutation: () => ({ mutateAsync: mocks.change, isPending: false }),
       },

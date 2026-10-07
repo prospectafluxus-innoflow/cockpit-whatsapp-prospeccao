@@ -11,6 +11,7 @@ import {
   addParticipants,
   assignEmployee,
   bootstrapCompanyAdmin,
+  companyAdministratorDirectory,
   commentFeedback,
   correctFeedback,
   createCycle,
@@ -45,6 +46,12 @@ export const feedbackRouter = router({
   workspace: protectedProcedure
     .input(z.object({ companyId: id.optional() }).optional())
     .query(({ ctx, input }) => workspace(ctx.user, input?.companyId ?? null)),
+
+  companyAdministratorDirectory: adminProcedure
+    .input(z.object({ companyId: id }))
+    .query(({ ctx, input }) =>
+      companyAdministratorDirectory(ctx.user, input.companyId)
+    ),
 
   get: enabledProcedure
     .input(z.object({ id }))

@@ -960,6 +960,78 @@ async function getDirectory(companyId: number) {
   return { directory, assignments, departments, people };
 }
 
+export async function companyAdministratorDirectory(
+  actor: Actor,
+  companyId: number
+) {
+  assertPositiveId(companyId, "Empresa");
+  if (!isPlatformAdmin(actor))
+    fail(
+      "FORBIDDEN",
+      "Somente administrador da plataforma pode consultar esta opção."
+    );
+  const [company, live] = await Promise.all([
+    getCompany(companyId),
+    getLiveUser(actor.id),
+  ]);
+  if (!company) fail("NOT_FOUND", "Empresa não encontrada.");
+  if (company.active !== 1) fail("FORBIDDEN", "A empresa não está ativa.");
+  if (!live) fail("FORBIDDEN", "Esta conta não está ativa.");
+  // Keep the same primary-table access guards even with the module disabled,
+  // while still avoiding any dependency on unmigrated feedback tables.
+  if (!isFeedbackEnabled()) return { enabled: false, companyId, people: [] };
+  const now = nowDate();
+  const [directory, memberships] = await Promise.all([
+    db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.companyId, companyId),
+          eq(users.accountType, "fluxus"),
+          eq(users.approvalStatus, "approved"),
+          isNull(users.privacyDeletedAt)
+        )
+      )
+      .orderBy(asc(users.id)),
+    db
+      .select({
+        userId: feedbackMemberships.userId,
+        role: feedbackMemberships.role,
+      })
+      .from(feedbackMemberships)
+      .where(
+        and(
+          eq(feedbackMemberships.companyId, companyId),
+          lte(feedbackMemberships.startsAt, now),
+          or(
+            isNull(feedbackMemberships.endsAt),
+            gt(feedbackMemberships.endsAt, now)
+          )
+        )
+      )
+      .orderBy(
+        desc(feedbackMemberships.startsAt),
+        desc(feedbackMemberships.id)
+      ),
+  ]);
+  // Match getCurrentMembership exactly, including overlapping legacy rows:
+  // the most recent currently effective membership wins, not any old admin role.
+  const currentRoles = new Map<number, string>();
+  for (const membership of memberships) {
+    if (!currentRoles.has(membership.userId))
+      currentRoles.set(membership.userId, membership.role);
+  }
+  return {
+    enabled: true,
+    companyId,
+    people: directory.map(person => ({
+      id: person.id,
+      isCompanyAdmin: currentRoles.get(person.id) === "company_admin",
+    })),
+  };
+}
+
 async function getSettings(companyId: number) {
   const rows = await db
     .select()
@@ -3007,6 +3079,7 @@ export async function transitionFeedbackStatus(
 
 export const feedbackDb = {
   workspace,
+  companyAdministratorDirectory,
   getFeedback,
   history,
   bootstrapCompanyAdmin,

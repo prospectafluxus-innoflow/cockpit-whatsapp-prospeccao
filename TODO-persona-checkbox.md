@@ -1,0 +1,5 @@
+# Visibilidade das caixas de seleção do Persona
+
+- [ ] Todas as caixas de seleção nas rotas Persona, incluindo cadastro, análise comportamental, administração, Feedback, confirmações e diálogos, devem ser laranja e reconhecíveis mesmo desmarcadas. Cobrir tanto componente Radix quanto input checkbox nativo; não mostrar inputs ocultos internos. Tamanho mínimo 20px e borda de 2px. Marcada/indeterminada com preenchimento laranja e marca escura, foco de teclado perceptível, desativada ainda visível com aspecto distinto e bloqueio preservado.
+- [ ] Isolar a mudança às rotas `/fluxus` e `/fluxus/*` e remover a marca visual ao navegar para outra área. Não mudar regras, seleções, salvamento, permissões, habilitação ou valores de dados. Não confirmar caixas de consentimento, atribuir acesso ou incluir participantes reais para testar.
+- [ ] Validar TypeScript, testes de escopo e cobertura dos estilos, build e diff; publicar pelo repositório/Railway existente e confirmar o CSS e a visibilidade na origem real sem executar alterações de dados.

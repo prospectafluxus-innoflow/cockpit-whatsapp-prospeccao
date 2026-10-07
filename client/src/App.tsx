@@ -19,6 +19,7 @@ import InnoFlowPage from "./pages/InnoFlowPage";
 import DashboardLayout from "./components/DashboardLayout";
 import { FluxusLayout } from "./components/fluxus/FluxusLayout";
 import FluxusAssessmentPage from "./pages/FluxusAssessmentPage";
+import { isPersonaRoute } from "./lib/personaUiScope";
 
 const FluxusLoginPage = lazy(() => import("./pages/FluxusLoginPage"));
 const FluxusRegisterPage = lazy(() => import("./pages/FluxusRegisterPage"));
@@ -64,9 +65,13 @@ function ApplicationTitle() {
   const [location] = useLocation();
 
   useEffect(() => {
-    document.title = location.startsWith("/fluxus")
-      ? "Fluxus Persona | InnoFlow"
-      : "ProspectaFluxus";
+    const persona = isPersonaRoute(location);
+    document.title = persona ? "Fluxus Persona | InnoFlow" : "ProspectaFluxus";
+    if (persona) document.body.dataset.personaUi = "true";
+    else delete document.body.dataset.personaUi;
+    return () => {
+      delete document.body.dataset.personaUi;
+    };
   }, [location]);
 
   return null;

@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -275,10 +274,11 @@ export function FluxusGovernanceSettings({
           >
             <h3 className="font-semibold">Colaboradores e papéis de acesso</h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Escolha o perfil Persona e marque, na mesma linha, quem será
-              administrador da empresa no Feedback. A administração permite
-              organizar competências, colaboradores e ciclos, sem liberar
-              automaticamente a leitura de feedbacks.
+              Escolha o perfil Persona e selecione Sim ou Não em Administrador
+              da empresa, na mesma linha. A alteração só é aplicada após sua
+              confirmação. A administração do Feedback permite organizar
+              competências, colaboradores e ciclos, sem liberar automaticamente
+              a leitura de feedbacks.
             </p>
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               No Persona, gestor e RH recebem acesso ao dashboard agregado da
@@ -320,6 +320,7 @@ export function FluxusGovernanceSettings({
                   feedback.data?.enabled &&
                     feedback.data.companyId === company.id &&
                     candidate &&
+                    typeof candidate.isCompanyAdmin === "boolean" &&
                     !feedback.error
                 );
                 const isAdmin = Boolean(candidate?.isCompanyAdmin);
@@ -357,39 +358,56 @@ export function FluxusGovernanceSettings({
                       </label>
                       <label
                         htmlFor={`company-admin-${person.id}`}
-                        className="flex min-h-10 items-center gap-2 text-sm"
+                        className="space-y-1"
                         title={
                           !known
                             ? "A conta precisa estar ativa nesta empresa e a consulta do Feedback precisa carregar."
                             : undefined
                         }
                       >
-                        <Checkbox
+                        <span className="block text-xs text-muted-foreground">
+                          Administrador da empresa (Feedback)
+                        </span>
+                        <select
                           id={`company-admin-${person.id}`}
                           aria-label={`Administrador da empresa no Feedback: ${person.name || "colaborador sem nome"}`}
-                          checked={known ? isAdmin : "indeterminate"}
+                          value={known ? (isAdmin ? "yes" : "no") : "unknown"}
                           disabled={
                             !known ||
                             feedback.isFetching ||
                             designation.isPending
                           }
-                          onCheckedChange={value => {
-                            if (!known || value === "indeterminate") return;
+                          onChange={event => {
+                            if (
+                              !known ||
+                              feedback.isFetching ||
+                              designation.isPending
+                            )
+                              return;
+                            const value = event.target.value;
+                            if (value !== "yes" && value !== "no") return;
+                            const nextIsAdmin = value === "yes";
+                            if (nextIsAdmin === isAdmin) return;
                             setAdminChange({
                               person,
                               companyId: company.id,
                               companyName: company.name,
-                              isAdmin: value,
+                              isAdmin: nextIsAdmin,
                               expectedIsAdmin: isAdmin,
                             });
                           }}
-                        />
-                        <span>
-                          Administrador da empresa{" "}
-                          <span className="text-xs text-muted-foreground">
-                            (Feedback)
-                          </span>
-                        </span>
+                          className="h-9 min-w-28 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground disabled:opacity-60"
+                        >
+                          {!known ? (
+                            <option value="unknown">
+                              {feedback.isLoading
+                                ? "Carregando…"
+                                : "Indisponível"}
+                            </option>
+                          ) : null}
+                          <option value="no">Não</option>
+                          <option value="yes">Sim</option>
+                        </select>
                       </label>
                     </div>
                   </div>

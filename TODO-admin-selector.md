@@ -1,0 +1,5 @@
+# Clareza do administrador no cadastro
+
+- [ ] Na mesma lista existente, ao lado do Perfil Persona Colaborador/Gestor/RH, mostrar Administrador da empresa (Feedback) com seletor explícito Sim/Não, visualmente igual ao perfil já usado. Exibir Não somente quando o estado persistido conhecido for falso e Sim somente quando verdadeiro. Carregamento, erro, ausência do candidato ou resposta sem booleano devem mostrar Carregando/Indisponível e bloquear alteração, sem fingir que a pessoa é admin.
+- [ ] Escolher outro valor abre a confirmação existente com pessoa, empresa e efeitos. Somente confirmar executa a mutação protegida já publicada; cancelar preserva o estado salvo. Não alterar API, regras de acesso, papéis Persona, dados, schema nem permissões reais para testar a correção.
+- [ ] Verificar testes afetados, TypeScript/build e publicar no Railway existente. Conferir visualmente seleção Sim e cancelamento, além do estado Não confirmado no banco/controle. Nenhum administrador escolhido automaticamente; entregar o mesmo caminho normal com o problema corrigido.

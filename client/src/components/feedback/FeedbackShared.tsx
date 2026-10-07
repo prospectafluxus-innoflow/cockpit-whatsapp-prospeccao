@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatFeedbackDate } from "@/lib/feedbackDates";
 import { ClipboardCheck, AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DevelopmentCycle } from "../../../../drizzle/feedbackSchema";
@@ -19,9 +20,7 @@ export function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 export function formatDate(value: Date | string | null | undefined) {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
+  return formatFeedbackDate(value);
 }
 export function canOpenFeedbackRecord({
   participantUserId,

@@ -9,6 +9,12 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  evaluatorOptions,
+  feedbackAccessUrl,
+  resolveCycleEvaluator,
+} from "@/lib/feedbackEvaluator";
 import {
   Select,
   SelectContent,
@@ -62,6 +68,8 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [evaluators, setEvaluators] = useState<Record<number, string>>({});
   const [cycleConfirm, setCycleConfirm] = useState(false);
+  const [enrolmentConfirmed, setEnrolmentConfirmed] = useState(false);
+  const [operationError, setOperationError] = useState<string | null>(null);
   const addParticipants = feedbackApi.addParticipants.useMutation();
   const transitionCycle = feedbackApi.transitionCycle.useMutation();
   const removeParticipant = feedbackApi.removeParticipant.useMutation();
@@ -87,10 +95,10 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
   const entries = data.feedbacks.filter(item => item.cycleId === cycleId);
   const assignedIds = new Set(entries.map(item => item.participantUserId));
   const eligiblePeople = data.people.filter(
-    person => person.eligible && !assignedIds.has(person.id)
-  );
-  const candidatePeople = data.people.filter(
-    person => person.evaluatorEligible
+    person =>
+      person.eligible &&
+      Boolean(person.assignmentId) &&
+      !assignedIds.has(person.id)
   );
   const nextStatuses = CYCLE_TRANSITIONS[cycle.status].filter(
     (status): status is "active" | "closed" | "cancelled" =>
@@ -98,31 +106,73 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
   );
   const refresh = () => void query.refetch();
   const submitParticipants = async () => {
+    setOperationError(null);
+    if (query.isFetching || query.error || addParticipants.isPending) return;
     const selectableIds = selected.filter(userId => !assignedIds.has(userId));
-    const participants = selectableIds
-      .map(userId => ({ userId, evaluatorUserId: Number(evaluators[userId]) }))
-      .filter(
-        item =>
-          Number.isInteger(item.evaluatorUserId) &&
-          item.evaluatorUserId > 0 &&
-          item.evaluatorUserId !== item.userId
-      );
-    if (!participants.length || participants.length !== selectableIds.length) {
-      toast.error(
-        "Selecione um avaliador válido e diferente para cada participante."
-      );
+    const selectedPeople = selectableIds.map(id =>
+      data.people.find(person => person.id === id)
+    );
+    const invalid = selectedPeople.find(
+      person =>
+        !person ||
+        !resolveCycleEvaluator(person, data.people, evaluators[person.id]).valid
+    );
+    if (
+      !selectedPeople.length ||
+      selectedPeople.some(person => !person) ||
+      invalid
+    ) {
+      const message = invalid
+        ? resolveCycleEvaluator(invalid, data.people, evaluators[invalid.id])
+            .reason
+        : "Selecione participantes com vínculo e avaliador autorizado.";
+      setOperationError(message);
+      toast.error(message);
       return;
     }
+    const needsIndividualAccess = selectedPeople.some(
+      person => !person?.hasFeedbackAccess
+    );
+    if (
+      needsIndividualAccess &&
+      (data.membership?.role !== "company_admin" || !enrolmentConfirmed)
+    ) {
+      const message =
+        "Confirme o cadastro de acesso individual dos participantes sem papel no Feedback. Somente o administrador da empresa pode fazê-lo.";
+      setOperationError(message);
+      toast.error(message);
+      return;
+    }
+    const participants = selectedPeople.map(person => ({
+      userId: person!.id,
+      evaluatorUserId:
+        evaluators[person!.id] === undefined
+          ? undefined
+          : Number(evaluators[person!.id]),
+      expectedAssignmentId: person!.assignmentId,
+    }));
     try {
-      await addParticipants.mutateAsync({ cycleId, participants });
-      toast.success("Participantes atribuídos.");
+      await addParticipants.mutateAsync({
+        cycleId,
+        participants,
+        enrollParticipants: needsIndividualAccess && enrolmentConfirmed,
+      });
       setSelected([]);
       setEvaluators({});
-      refresh();
+      setEnrolmentConfirmed(false);
+      const refreshed = await query.refetch();
+      toast.success("Participantes e avaliadores salvos no ciclo.");
+      if (refreshed.isError)
+        setOperationError(
+          "Atribuição gravada; não foi possível atualizar a lista. Atualize a página antes de repetir."
+        );
     } catch (error) {
-      toast.error(
-        errorMessage(error, "Não foi possível atribuir os participantes.")
+      const message = errorMessage(
+        error,
+        "Não foi possível atribuir os participantes."
       );
+      setOperationError(message);
+      toast.error(message);
     }
   };
   const submitCycleTransition = async (
@@ -204,15 +254,23 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
       {data.canConfigure && cycle.status === "planned" ? (
         <ParticipantPicker
           eligiblePeople={eligiblePeople}
-          candidatePeople={candidatePeople}
           allPeople={data.people}
           assignedIds={assignedIds}
           selected={selected}
-          setSelected={setSelected}
+          setSelected={value => {
+            setSelected(value);
+            setEnrolmentConfirmed(false);
+            setOperationError(null);
+          }}
           evaluators={evaluators}
           setEvaluators={setEvaluators}
           onSubmit={() => void submitParticipants()}
-          pending={addParticipants.isPending}
+          pending={addParticipants.isPending || query.isFetching}
+          cycleId={cycleId}
+          canEnrollParticipants={data.membership?.role === "company_admin"}
+          enrolmentConfirmed={enrolmentConfirmed}
+          setEnrolmentConfirmed={setEnrolmentConfirmed}
+          operationError={operationError}
         />
       ) : null}
       <CycleParticipants
@@ -301,7 +359,6 @@ function CycleOperations({
 }
 function ParticipantPicker({
   eligiblePeople,
-  candidatePeople,
   allPeople,
   assignedIds,
   selected,
@@ -310,9 +367,13 @@ function ParticipantPicker({
   setEvaluators,
   onSubmit,
   pending,
+  cycleId,
+  canEnrollParticipants,
+  enrolmentConfirmed,
+  setEnrolmentConfirmed,
+  operationError,
 }: {
   eligiblePeople: ReadonlyArray<FeedbackPerson>;
-  candidatePeople: ReadonlyArray<FeedbackPerson>;
   allPeople: ReadonlyArray<FeedbackPerson>;
   assignedIds: ReadonlySet<number>;
   selected: number[];
@@ -321,19 +382,41 @@ function ParticipantPicker({
   setEvaluators: (value: Record<number, string>) => void;
   onSubmit: () => void;
   pending: boolean;
+  cycleId: number;
+  canEnrollParticipants: boolean;
+  enrolmentConfirmed: boolean;
+  setEnrolmentConfirmed: (value: boolean) => void;
+  operationError: string | null;
 }) {
   const eligibleIds = new Set(eligiblePeople.map(person => person.id));
+  const selectedPeople = allPeople.filter(
+    person => selected.includes(person.id) && !assignedIds.has(person.id)
+  );
+  const missingAccess = selectedPeople.filter(
+    person => !person.hasFeedbackAccess
+  );
+  const selectedInvalid = selectedPeople.some(
+    person =>
+      !resolveCycleEvaluator(person, allPeople, evaluators[person.id]).valid
+  );
+  const [changing, setChanging] = useState<Record<number, boolean>>({});
   return (
     <Card className="border-border/60">
       <CardHeader>
-        <CardTitle className="text-lg">Participantes elegíveis</CardTitle>
+        <CardTitle className="text-lg">Participantes e avaliadores</CardTitle>
         <CardDescription>
-          Elegibilidade exige avaliação Persona concluída e válida, assignment
-          atual e vínculo na empresa. Motivos de inelegibilidade permanecem
-          visíveis.
+          O gestor direto já cadastrado é sugerido automaticamente. Use “Trocar
+          avaliador” somente para uma exceção neste ciclo; isso não muda o
+          gestor da pessoa.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        {operationError ? (
+          <Alert variant="destructive">
+            <AlertTitle>Status da inclusão</AlertTitle>
+            <AlertDescription>{operationError}</AlertDescription>
+          </Alert>
+        ) : null}
         <div className="overflow-x-auto rounded-xl border border-border/60">
           <Table>
             <TableHeader>
@@ -341,7 +424,9 @@ function ParticipantPicker({
                 <TableHead className="w-10" />
                 <TableHead>Pessoa</TableHead>
                 <TableHead>Elegibilidade</TableHead>
-                <TableHead className="min-w-56">Avaliador</TableHead>
+                <TableHead className="min-w-72">
+                  Avaliador deste ciclo
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -351,7 +436,7 @@ function ParticipantPicker({
                     colSpan={4}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    Nenhuma pessoa no escopo operacional.
+                    Nenhuma pessoa disponível.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -359,18 +444,28 @@ function ParticipantPicker({
                   const alreadyAssigned = assignedIds.has(person.id);
                   const checked =
                     !alreadyAssigned && selected.includes(person.id);
+                  const result = resolveCycleEvaluator(
+                    person,
+                    allPeople,
+                    evaluators[person.id]
+                  );
+                  const options = evaluatorOptions(person, allPeople);
+                  const openChange =
+                    changing[person.id] || evaluators[person.id] !== undefined;
                   return (
                     <TableRow key={person.id}>
                       <TableCell>
                         <Checkbox
                           checked={checked}
                           disabled={
-                            alreadyAssigned || !eligibleIds.has(person.id)
+                            pending ||
+                            alreadyAssigned ||
+                            !eligibleIds.has(person.id)
                           }
                           onCheckedChange={value =>
                             setSelected(
                               value === true && !alreadyAssigned
-                                ? [...selected, person.id]
+                                ? Array.from(new Set([...selected, person.id]))
                                 : selected.filter(id => id !== person.id)
                             )
                           }
@@ -386,53 +481,139 @@ function ParticipantPicker({
                         </p>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          {alreadyAssigned ? (
-                            <Badge variant="secondary">Já no ciclo</Badge>
-                          ) : null}
-                          {alreadyAssigned ? null : eligibleIds.has(
-                              person.id
-                            ) ? (
-                            <Badge variant="default">Elegível</Badge>
-                          ) : (
-                            <span className="text-xs text-amber-700 dark:text-amber-300">
-                              {person.eligibilityReason || "Não elegível"}
-                            </span>
-                          )}
-                        </div>
+                        {alreadyAssigned ? (
+                          <Badge variant="secondary">Já no ciclo</Badge>
+                        ) : !person.eligible ? (
+                          <span className="text-xs text-amber-700 dark:text-amber-300">
+                            {person.eligibilityReason || "Persona pendente"}
+                          </span>
+                        ) : !person.assignmentId ? (
+                          <div className="space-y-1 text-xs">
+                            <p>Sem vínculo organizacional</p>
+                            <Link
+                              className="underline"
+                              href={`/fluxus/feedback?section=organization&returnCycleId=${cycleId}`}
+                            >
+                              Cadastrar vínculo
+                            </Link>
+                          </div>
+                        ) : (
+                          <Badge variant="default">Persona concluído</Badge>
+                        )}
                       </TableCell>
                       <TableCell>
-                        {checked ? (
-                          <Select
-                            value={evaluators[person.id] || ""}
-                            onValueChange={value =>
-                              setEvaluators({
-                                ...evaluators,
-                                [person.id]: value,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Escolha o avaliador" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {candidatePeople
-                                .filter(candidate => candidate.id !== person.id)
-                                .map(candidate => (
-                                  <SelectItem
-                                    key={candidate.id}
-                                    value={String(candidate.id)}
-                                  >
-                                    {candidate.name ||
-                                      `Usuário #${candidate.id}`}
-                                  </SelectItem>
-                                ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
+                        {alreadyAssigned ? (
                           <span className="text-xs text-muted-foreground">
-                            Selecione a pessoa primeiro
+                            Confira em Avaliações atribuídas.
                           </span>
+                        ) : (
+                          <div className="space-y-2">
+                            <div>
+                              <p className="text-sm font-medium">
+                                {result.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {result.automatic
+                                  ? "Gestor direto cadastrado"
+                                  : "Avaliador escolhido para este ciclo"}
+                              </p>
+                            </div>
+                            {checked && result.reason ? (
+                              <div className="text-xs text-amber-700 dark:text-amber-300">
+                                <p>{result.reason}</p>
+                                <Link
+                                  className="mt-1 inline-block underline"
+                                  href={
+                                    result.id
+                                      ? feedbackAccessUrl(result.id, cycleId)
+                                      : `/fluxus/feedback?section=organization&returnCycleId=${cycleId}`
+                                  }
+                                >
+                                  {result.id
+                                    ? "Configurar acesso deste avaliador"
+                                    : "Configurar vínculo da pessoa"}
+                                </Link>
+                              </div>
+                            ) : null}
+                            {checked && !openChange ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  setChanging({
+                                    ...changing,
+                                    [person.id]: true,
+                                  })
+                                }
+                                disabled={pending}
+                              >
+                                Trocar avaliador
+                              </Button>
+                            ) : null}
+                            {checked && openChange ? (
+                              <div className="space-y-2">
+                                {options.length ? (
+                                  <Select
+                                    value={
+                                      evaluators[person.id] ??
+                                      (result.valid && result.id
+                                        ? String(result.id)
+                                        : "")
+                                    }
+                                    onValueChange={value =>
+                                      setEvaluators({
+                                        ...evaluators,
+                                        [person.id]: value,
+                                      })
+                                    }
+                                    disabled={pending}
+                                  >
+                                    <SelectTrigger
+                                      className="w-full"
+                                      aria-label={`Avaliador de ${person.name || person.id}`}
+                                    >
+                                      <SelectValue placeholder="Selecione um avaliador autorizado" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {options.map(candidate => (
+                                        <SelectItem
+                                          key={candidate.id}
+                                          value={String(candidate.id)}
+                                        >
+                                          {candidate.name ||
+                                            `Usuário #${candidate.id}`}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">
+                                    Nenhum avaliador autorizado para esta
+                                    pessoa. Ajuste Papéis e permissões; o
+                                    vínculo não concede leitura automaticamente.
+                                  </p>
+                                )}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={pending}
+                                  onClick={() => {
+                                    const next = { ...evaluators };
+                                    delete next[person.id];
+                                    setEvaluators(next);
+                                    setChanging({
+                                      ...changing,
+                                      [person.id]: false,
+                                    });
+                                  }}
+                                >
+                                  Usar gestor direto
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
                         )}
                       </TableCell>
                     </TableRow>
@@ -442,13 +623,60 @@ function ParticipantPicker({
             </TableBody>
           </Table>
         </div>
+        {missingAccess.length ? (
+          <Alert>
+            <AlertTitle>Acesso individual dos participantes</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>
+                {missingAccess
+                  .map(person => person.name || `Usuário #${person.id}`)
+                  .join(", ")}{" "}
+                ainda não possuem papel no Feedback. O acesso Colaborador
+                permite ver somente as próprias devolutivas liberadas, nunca
+                notas de colegas.
+              </p>
+              {canEnrollParticipants ? (
+                <label className="flex items-start gap-3">
+                  <Checkbox
+                    checked={enrolmentConfirmed}
+                    onCheckedChange={value =>
+                      setEnrolmentConfirmed(value === true)
+                    }
+                    disabled={pending}
+                  />
+                  <span>
+                    Confirmo criar somente esse acesso individual para as
+                    pessoas selecionadas ao adicioná-las ao ciclo.
+                  </span>
+                </label>
+              ) : (
+                <p>
+                  O administrador da empresa precisa autorizar esse acesso em
+                  Papéis e permissões.
+                </p>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {selectedInvalid ? (
+          <p className="text-sm text-amber-700 dark:text-amber-300">
+            Resolva os avisos dos avaliadores selecionados antes de adicionar.
+            Nenhuma autorização será ativada automaticamente.
+          </p>
+        ) : null}
         <Button
           onClick={onSubmit}
-          disabled={pending || selected.length === 0}
+          disabled={
+            pending ||
+            !selected.length ||
+            selectedInvalid ||
+            (missingAccess.length > 0 &&
+              (!canEnrollParticipants || !enrolmentConfirmed))
+          }
           className="gap-2"
         >
-          <UsersRound className="h-4 w-4" />{" "}
-          {pending ? "Atribuindo…" : "Atribuir selecionados"}
+          <UsersRound className="h-4 w-4" />
+          {pending ? "Adicionando…" : "Adicionar participantes selecionados"}
         </Button>
       </CardContent>
     </Card>

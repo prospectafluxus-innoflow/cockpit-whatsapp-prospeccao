@@ -51,6 +51,10 @@ import {
   upsertFluxusDebrief,
 } from "../fluxusDb";
 import {
+  getFluxusDirectTeamUserIds,
+  isFluxusDirectTeamUser,
+} from "../fluxusOrganization";
+import {
   adminProcedure,
   protectedProcedure,
   publicProcedure,
@@ -108,7 +112,8 @@ async function requireIndividualReportAccess(
     fluxusRole?: string | null;
   },
   companyId: number,
-  beta2Context = false
+  beta2Context = false,
+  subjectUserId?: number
 ) {
   const company = await getFluxusCompanyById(companyId);
   if (!company)
@@ -128,6 +133,18 @@ async function requireIndividualReportAccess(
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "A política de visibilidade da empresa não autoriza este acesso.",
+    });
+  }
+  if (
+    user.role !== "admin" &&
+    user.fluxusRole === "manager" &&
+    subjectUserId !== undefined &&
+    subjectUserId !== user.id &&
+    !(await isFluxusDirectTeamUser(user.id, companyId, subjectUserId))
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Este relatório não pertence à equipe direta do gestor.",
     });
   }
   return company;
@@ -576,7 +593,14 @@ export const fluxusRouter = router({
 
   teamDashboard: protectedProcedure.query(async ({ ctx }) => {
     requireFluxusOrganizationAccess(ctx.user);
-    const dashboard = await getFluxusCompanyDashboard(ctx.user.companyId!);
+    const allowedUserIds =
+      ctx.user.fluxusRole === "manager"
+        ? await getFluxusDirectTeamUserIds(ctx.user.id, ctx.user.companyId!)
+        : undefined;
+    const dashboard = await getFluxusCompanyDashboard(
+      ctx.user.companyId!,
+      allowedUserIds
+    );
     if (!dashboard) throw new TRPCError({ code: "NOT_FOUND", message: "Empresa não encontrada." });
     await recordFluxusAudit({ actorUserId: ctx.user.id, companyId: ctx.user.companyId!, action: "dashboard.aggregate_read", resourceType: "company_dashboard", metadata: { released: dashboard.summary.canAggregate, minimum: Math.max(5, dashboard.company.minimumAggregateSize) }, ipHash: hashRequestIp(ctx.req) });
     return {
@@ -593,12 +617,20 @@ export const fluxusRouter = router({
       ctx.user,
       ctx.user.companyId!
     );
-    const dashboard = await getFluxusCompanyDashboard(ctx.user.companyId!);
+    const allowedUserIds =
+      ctx.user.fluxusRole === "manager"
+        ? await getFluxusDirectTeamUserIds(ctx.user.id, ctx.user.companyId!)
+        : null;
+    const dashboard = await getFluxusCompanyDashboard(
+      ctx.user.companyId!,
+      allowedUserIds ?? undefined
+    );
     if (!dashboard)
       throw new TRPCError({ code: "NOT_FOUND", message: "Empresa não encontrada." });
     return dashboard.people
       .filter(
         person =>
+          (allowedUserIds === null || allowedUserIds.has(person.id)) &&
           person.assessmentId &&
           isSupportedFluxusVersion(person.instrumentVersion) &&
           (!isFluxusV2Version(person.instrumentVersion) ||
@@ -687,7 +719,8 @@ export const fluxusRouter = router({
       await requireIndividualReportAccess(
         ctx.user,
         assessment.companyId,
-        isFluxusV2Version(assessment.instrumentVersion)
+        isFluxusV2Version(assessment.instrumentVersion),
+        assessment.userId
       );
       await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: assessment.userId, companyId: assessment.companyId, assessmentId: assessment.id, action: "assessment.read_admin", resourceType: "assessment", ipHash: hashRequestIp(ctx.req) });
       return {
@@ -707,7 +740,8 @@ export const fluxusRouter = router({
       await requireIndividualReportAccess(
         ctx.user,
         assessment.companyId,
-        isFluxusV2Version(assessment.instrumentVersion)
+        isFluxusV2Version(assessment.instrumentVersion),
+        assessment.userId
       );
       const debrief = await upsertFluxusDebrief({ ...input, participantUserId: assessment.userId, facilitatorUserId: ctx.user.id, evidenceExamples: input.evidenceExamples || null, hypothesesTested: input.hypothesesTested || null, agreedActions: input.agreedActions || null, managerSupport: input.managerSupport || null, followUpDate: input.followUpDate || null, participantNotes: input.participantNotes || null });
       await recordFluxusAudit({ actorUserId: ctx.user.id, subjectUserId: assessment.userId, companyId: assessment.companyId, assessmentId: assessment.id, action: "debrief.save", resourceType: "debrief", metadata: { status: input.status } });

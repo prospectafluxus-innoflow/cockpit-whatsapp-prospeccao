@@ -437,7 +437,10 @@ function emptyDimensionTotals() {
   >;
 }
 
-export async function getFluxusCompanyDashboard(companyId: number) {
+export async function getFluxusCompanyDashboard(
+  companyId: number,
+  allowedUserIds?: ReadonlySet<number>
+) {
   const company = await getFluxusCompanyById(companyId);
   if (!company) return null;
 
@@ -464,9 +467,18 @@ export async function getFluxusCompanyDashboard(companyId: number) {
       .orderBy(desc(fluxusAssessments.createdAt)),
   ]);
 
+  // A scoped dashboard is intentionally filtered before any summary is
+  // calculated. An empty set means an empty team, never company-wide access.
+  const scopedCollaborators = allowedUserIds
+    ? collaborators.filter(person => allowedUserIds.has(person.id))
+    : collaborators;
+  const scopedAssessments = allowedUserIds
+    ? assessments.filter(assessment => allowedUserIds.has(assessment.userId))
+    : assessments;
+
   const latestByUser = new Map<number, FluxusAssessment>();
   const latestCompletedByUser = new Map<number, FluxusAssessment>();
-  for (const assessment of assessments) {
+  for (const assessment of scopedAssessments) {
     if (!latestByUser.has(assessment.userId))
       latestByUser.set(assessment.userId, assessment);
     if (
@@ -476,7 +488,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
       latestCompletedByUser.set(assessment.userId, assessment);
   }
 
-  const peopleWithResults = collaborators.map(collaborator => {
+  const peopleWithResults = scopedCollaborators.map(collaborator => {
     const assessment = latestByUser.get(collaborator.id) ?? null;
     const completedAssessment =
       latestCompletedByUser.get(collaborator.id) ?? null;
@@ -544,7 +556,7 @@ export async function getFluxusCompanyDashboard(companyId: number) {
     company,
     people,
     summary: {
-      collaborators: collaborators.length,
+      collaborators: scopedCollaborators.length,
       completed: allCompletedResults.length,
       currentVersionCompleted: completedResults.length,
       inProgress: peopleWithResults.filter(person => person.assessmentStatus === "draft")
@@ -552,11 +564,11 @@ export async function getFluxusCompanyDashboard(companyId: number) {
       notStarted: peopleWithResults.filter(
         person => person.assessmentStatus === "not_started"
       ).length,
-      completionRate: collaborators.length
-        ? Math.round((allCompletedResults.length / collaborators.length) * 100)
+      completionRate: scopedCollaborators.length
+        ? Math.round((allCompletedResults.length / scopedCollaborators.length) * 100)
         : 0,
-      currentVersionCompletionRate: collaborators.length
-        ? Math.round((completedResults.length / collaborators.length) * 100)
+      currentVersionCompletionRate: scopedCollaborators.length
+        ? Math.round((completedResults.length / scopedCollaborators.length) * 100)
         : 0,
       aggregateInstrumentVersion: CURRENT_FLUXUS_INSTRUMENT_VERSION,
       aggregateFormulaVersion: CURRENT_FLUXUS_FORMULA_VERSION,

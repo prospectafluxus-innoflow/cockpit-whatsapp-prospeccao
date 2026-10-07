@@ -13,6 +13,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { canConfirmCompanyAdministrator } from "@/lib/companyAdministrator";
+import {
+  administratorQueryRetryDelay,
+  shouldRetryAdministratorQuery,
+} from "@/lib/administratorQueryRecovery";
 import { AlertTriangle, Loader2, Save, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -61,9 +65,14 @@ export function FluxusGovernanceSettings({
     company.beta2OrganizationAccessEnabled
   );
   const [adminChange, setAdminChange] = useState<AdminChange | null>(null);
-  const feedback = trpc.feedback.workspace.useQuery(
+  const feedback = trpc.feedback.companyAdministratorDirectory.useQuery(
     { companyId: company.id },
-    { retry: false }
+    {
+      retry: shouldRetryAdministratorQuery,
+      retryDelay: administratorQueryRetryDelay,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    }
   );
   const designation = trpc.feedback.setCompanyAdministrator.useMutation();
   const organizationAccess = form.reportVisibility !== "participant_only";
@@ -112,6 +121,9 @@ export function FluxusGovernanceSettings({
       );
       setAdminChange(null);
       await Promise.all([
+        utils.feedback.companyAdministratorDirectory.invalidate({
+          companyId: company.id,
+        }),
         utils.feedback.workspace.invalidate({ companyId: company.id }),
         utils.fluxus.adminCompany.invalidate({ companyId: company.id }),
       ]);

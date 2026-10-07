@@ -62,6 +62,20 @@ describe("feedback rollout flag", () => {
     ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
   });
 
+  it("bloqueia administração de pessoa quando o módulo não está habilitado", async () => {
+    setFeedbackEnabledResolverForTests(() => false);
+    await expect(
+      feedbackRouter
+        .createCaller(context({ role: "admin" }))
+        .setCompanyAdministrator({
+          companyId: 7,
+          userId: 11,
+          isAdmin: true,
+          expectedIsAdmin: false,
+        })
+    ).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+  });
+
   it("exige conta aprovada mesmo quando a flag está ativa", async () => {
     setFeedbackEnabledResolverForTests(() => true);
     await expect(

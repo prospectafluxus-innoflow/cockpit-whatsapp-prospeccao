@@ -27,6 +27,7 @@ import {
   setMembership,
   transitionCycle,
   transitionFeedbackStatus,
+  updateEvaluationEvaluator,
   updateDepartment,
   updateSettings,
   workspace,
@@ -178,6 +179,16 @@ export const feedbackRouter = router({
       })
     )
     .mutation(({ ctx, input }) => addParticipants(ctx.user, input)),
+
+  updateEvaluationEvaluator: enabledProcedure
+    .input(
+      z.object({
+        evaluationId: id,
+        evaluatorUserId: id,
+        expectedRevision: z.number().int().nonnegative(),
+      })
+    )
+    .mutation(({ ctx, input }) => updateEvaluationEvaluator(ctx.user, input)),
 
   removeParticipant: enabledProcedure
     .input(z.object({ cycleId: id, userId: id }))

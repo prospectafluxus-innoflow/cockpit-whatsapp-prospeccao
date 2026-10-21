@@ -71,6 +71,8 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
   const [enrolmentConfirmed, setEnrolmentConfirmed] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const addParticipants = feedbackApi.addParticipants.useMutation();
+  const updateEvaluationEvaluator =
+    feedbackApi.updateEvaluationEvaluator.useMutation();
   const transitionCycle = feedbackApi.transitionCycle.useMutation();
   const removeParticipant = feedbackApi.removeParticipant.useMutation();
   const [, navigate] = useLocation();
@@ -105,6 +107,24 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
       status !== "planned"
   );
   const refresh = () => void query.refetch();
+  const changeEvaluator = async (
+    evaluationId: number,
+    evaluatorUserId: number,
+    expectedRevision: number
+  ) => {
+    try {
+      await updateEvaluationEvaluator.mutateAsync({
+        evaluationId,
+        evaluatorUserId,
+        expectedRevision,
+      });
+      await query.refetch();
+      toast.success("Avaliador alterado neste ciclo.");
+    } catch (error) {
+      toast.error(errorMessage(error, "Não foi possível alterar o avaliador."));
+      throw error;
+    }
+  };
   const submitParticipants = async () => {
     setOperationError(null);
     if (query.isFetching || query.error || addParticipants.isPending) return;
@@ -275,10 +295,12 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
       ) : null}
       <CycleParticipants
         entries={entries}
+        allPeople={data.people}
         canConfigure={data.canConfigure}
         canReadContent={data.canReadContent}
         viewerUserId={data.membership?.userId}
         cycleStatus={cycle.status}
+        onChangeEvaluator={changeEvaluator}
         onRemove={async userId => {
           if (
             !window.confirm(
@@ -684,10 +706,12 @@ function ParticipantPicker({
 }
 function CycleParticipants({
   entries,
+  allPeople,
   canConfigure,
   canReadContent,
   viewerUserId,
   cycleStatus,
+  onChangeEvaluator,
   onRemove,
 }: {
   entries: Array<{
@@ -699,12 +723,21 @@ function CycleParticipants({
     participantName: string | null;
     evaluatorName: string | null;
   }>;
+  allPeople: ReadonlyArray<FeedbackPerson>;
   canConfigure: boolean;
   canReadContent: boolean;
   viewerUserId: number | null | undefined;
   cycleStatus: DevelopmentCycle["status"];
+  onChangeEvaluator: (
+    evaluationId: number,
+    evaluatorUserId: number,
+    expectedRevision: number
+  ) => Promise<void>;
   onRemove: (userId: number) => void;
 }) {
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draftEvaluatorId, setDraftEvaluatorId] = useState("");
+  const [savingId, setSavingId] = useState<number | null>(null);
   return (
     <Card className="border-border/60">
       <CardHeader>
@@ -735,6 +768,20 @@ function CycleParticipants({
               </TableHeader>
               <TableBody>
                 {entries.map(entry => {
+                  const participant = allPeople.find(
+                    person => person.id === entry.participantUserId
+                  );
+                  const options = participant
+                    ? evaluatorOptions(participant, allPeople)
+                    : [];
+                  const currentEvaluator = allPeople.find(
+                    person => person.id === entry.evaluatorUserId
+                  );
+                  const evaluatorChoices =
+                    currentEvaluator &&
+                    !options.some(option => option.id === currentEvaluator.id)
+                      ? [currentEvaluator, ...options]
+                      : options;
                   const canOpen = canOpenFeedbackRecord({
                     participantUserId: entry.participantUserId,
                     viewerUserId,
@@ -748,8 +795,69 @@ function CycleParticipants({
                           `Usuário #${entry.participantUserId}`}
                       </TableCell>
                       <TableCell>
-                        {entry.evaluatorName ||
-                          `Usuário #${entry.evaluatorUserId}`}
+                        {editingId === entry.id ? (
+                          <div className="space-y-2">
+                            <Select
+                              value={draftEvaluatorId}
+                              onValueChange={setDraftEvaluatorId}
+                              disabled={savingId === entry.id}
+                            >
+                              <SelectTrigger
+                                className="min-w-56"
+                                aria-label={`Novo avaliador de ${entry.participantName || entry.participantUserId}`}
+                              >
+                                <SelectValue placeholder="Selecione o avaliador" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {evaluatorChoices.map(option => (
+                                  <SelectItem
+                                    key={option.id}
+                                    value={String(option.id)}
+                                  >
+                                    {option.name || `Usuário #${option.id}`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={
+                                  savingId === entry.id ||
+                                  !draftEvaluatorId ||
+                                  Number(draftEvaluatorId) ===
+                                    entry.evaluatorUserId
+                                }
+                                onClick={async () => {
+                                  setSavingId(entry.id);
+                                  try {
+                                    await onChangeEvaluator(
+                                      entry.id,
+                                      Number(draftEvaluatorId),
+                                      entry.revision
+                                    );
+                                    setEditingId(null);
+                                  } finally {
+                                    setSavingId(null);
+                                  }
+                                }}
+                              >
+                                {savingId === entry.id ? "Salvando…" : "Salvar"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={savingId === entry.id}
+                                onClick={() => setEditingId(null)}
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          entry.evaluatorName ||
+                          `Usuário #${entry.evaluatorUserId}`
+                        )}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={entry.status} />
@@ -780,13 +888,32 @@ function CycleParticipants({
                             </Button>
                           )}
                           {canConfigure && cycleStatus === "planned" ? (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => onRemove(entry.participantUserId)}
-                            >
-                              Remover
-                            </Button>
+                            <>
+                              {editingId !== entry.id ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDraftEvaluatorId(
+                                      String(entry.evaluatorUserId)
+                                    );
+                                    setEditingId(entry.id);
+                                  }}
+                                >
+                                  Alterar avaliador
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  onRemove(entry.participantUserId)
+                                }
+                                disabled={savingId === entry.id}
+                              >
+                                Remover
+                              </Button>
+                            </>
                           ) : null}
                         </div>
                       </TableCell>

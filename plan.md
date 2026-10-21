@@ -67,3 +67,7 @@ Contrato detalhado e critérios em TODO-feedback-usability.md. Separar controles
 ## Visibilidade das caixas de seleção — 07/10/2026
 
 Aplicar uma única regra visual a `/fluxus` e `/fluxus/*`, cobrindo administração, cadastro, análise, Feedback e diálogos em portal. Caixinhas Radix e nativas terão 20px, contorno laranja de 2px e fundo contrastante; seleção laranja com marca escura, foco de teclado visível e estado desativado com borda tracejada sem desaparecer. Excluir os inputs ocultos internos do Radix. Manter valores, disabled, permissões e confirmações exatamente iguais. Não recolorir outras áreas. Reutilizar o controlador de título para marcar o escopo no body e removê-lo ao sair do Persona. Sem alterações de dados ou de papéis para validar.
+
+## Alteração do avaliador antes da abertura do ciclo — 21/10/2026
+
+O avaliador sugerido pelo gestor direto deve permanecer editável para clientes. Administradores e RH autorizados podem alterar o avaliador de uma avaliação já atribuída enquanto o ciclo estiver planejado e a avaliação continuar em rascunho. A alteração é exclusiva daquele ciclo, não muda o vínculo hierárquico, exige que o novo avaliador esteja ativo, seja da mesma empresa e tenha autorização vigente para avaliar aquela pessoa; não concede permissões automaticamente. O servidor valida a revisão esperada, registra auditoria e bloqueia alterações após a abertura do ciclo ou início do preenchimento. A interface mostra “Alterar avaliador”, permite cancelar sem salvar e mantém “Usar gestor direto” no fluxo de novas atribuições.

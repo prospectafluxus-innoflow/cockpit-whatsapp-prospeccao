@@ -2479,6 +2479,114 @@ export async function addParticipants(
   });
 }
 
+export async function updateEvaluationEvaluator(
+  actor: Actor,
+  input: {
+    evaluationId: number;
+    evaluatorUserId: number;
+    expectedRevision: number;
+  }
+) {
+  requireFeedbackEnabled();
+  assertPositiveId(input.evaluationId, "Avaliação");
+  assertPositiveId(input.evaluatorUserId, "Avaliador");
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0)
+    fail("BAD_REQUEST", "Revisão esperada inválida.");
+
+  const evaluation = (
+    await db
+      .select()
+      .from(feedbackEvaluations)
+      .where(eq(feedbackEvaluations.id, input.evaluationId))
+      .limit(1)
+  )[0];
+  if (!evaluation) fail("NOT_FOUND", "Avaliação não encontrada.");
+
+  return db.transaction(async tx => {
+    await lock(tx, "company", evaluation.companyId);
+    await lock(tx, "cycle", evaluation.cycleId);
+    await lock(tx, "evaluation", input.evaluationId);
+    await requireConfigTx(tx, actor, evaluation.companyId);
+    const current = (
+      await tx
+        .select()
+        .from(feedbackEvaluations)
+        .where(eq(feedbackEvaluations.id, input.evaluationId))
+        .limit(1)
+    )[0];
+    if (!current) fail("NOT_FOUND", "Avaliação não encontrada.");
+    const cycle = (
+      await tx
+        .select()
+        .from(developmentCycles)
+        .where(eq(developmentCycles.id, current.cycleId))
+        .limit(1)
+    )[0];
+    if (!cycle) fail("NOT_FOUND", "Ciclo não encontrado.");
+    if (cycle.status !== "planned")
+      fail(
+        "CONFLICT",
+        "O avaliador só pode ser alterado enquanto o ciclo estiver planejado."
+      );
+    if (current.status !== "draft")
+      fail(
+        "CONFLICT",
+        "O avaliador só pode ser alterado antes do preenchimento da avaliação."
+      );
+    if (current.revision !== input.expectedRevision)
+      fail(
+        "CONFLICT",
+        "Esta avaliação foi atualizada por outra pessoa. Atualize a página antes de tentar novamente."
+      );
+    const result = await assertParticipantAndEvaluator(
+      tx,
+      current.companyId,
+      current.participantUserId,
+      input.evaluatorUserId,
+      current.assignmentId,
+      false
+    );
+    if (!result.participantMembership)
+      fail("BAD_REQUEST", "O participante precisa de membership vigente.");
+    const updatedRows = await tx
+      .update(feedbackEvaluations)
+      .set({
+        evaluatorUserId: result.evaluatorUserId,
+        revision: current.revision + 1,
+        updatedAt: nowDate(),
+      })
+      .where(
+        and(
+          eq(feedbackEvaluations.id, current.id),
+          eq(feedbackEvaluations.revision, input.expectedRevision),
+          eq(feedbackEvaluations.status, "draft")
+        )
+      )
+      .returning();
+    if (!updatedRows[0])
+      fail(
+        "CONFLICT",
+        "Esta avaliação foi atualizada por outra pessoa. Atualize a página antes de tentar novamente."
+      );
+    await insertAudit(tx, {
+      actorUserId: actor.id,
+      subjectUserId: current.participantUserId,
+      companyId: current.companyId,
+      action: "feedback.evaluator.update",
+      resourceType: "feedback_evaluation",
+      metadata: {
+        cycleId: current.cycleId,
+        feedbackId: current.id,
+        previousEvaluatorUserId: current.evaluatorUserId,
+        evaluatorUserId: result.evaluatorUserId,
+        previousRevision: current.revision,
+        revision: current.revision + 1,
+      },
+    });
+    return { success: true, feedback: safeEvaluation(updatedRows[0]!) };
+  });
+}
+
 export async function removeParticipant(
   actor: Actor,
   cycleId: number,

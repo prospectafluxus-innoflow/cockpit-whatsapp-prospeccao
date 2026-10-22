@@ -19,3 +19,20 @@
 - **Trello — bloqueio de corte:** o fire-and-forget foi corrigido: `queueLeadTrelloSync` retorna `Promise<void>` e as mutations aguardam o sync antes de responder, com falhas ainda toleradas e log sanitizado. Validar a integração real (entrega, retry, observabilidade e comportamento em cold start/terminação do Cloud Run) antes de considerar o corte definitivo.
 - **Cron/webhooks:** decidir IAM e provisionamento manual posterior. O cron exige `Authorization: Bearer <CRON_SECRET>` e `window`; webhooks WaBlast não são registrados nem tornados públicos automaticamente.
 - **Exposição pública:** validar health, secrets, auth, Supabase e integrações no serviço privado; só então decidir o binding `allUsers`.
+
+## Estado confirmado em 22/10/2026 após publicação
+
+- [x] Faturamento do projeto ativo e alerta mensal de R$ 30 criado (não é limite rígido).
+- [x] APIs Run/Build/Artifact Registry/Secret Manager habilitadas.
+- [x] Contas técnicas separadas e 9 secrets protegidos, com 15 configurações públicas/vazias preservadas.
+- [x] Build/deploy privado concluído; revisão `prospectafluxus-00001-lwg` pronta.
+- [x] Smoke privado read-only com 9 verificações aprovado.
+- [x] Exposição pública da aplicação liberada após validação; HTTP 200 no endereço e health, HTTP 401 para feedback sem login.
+- [x] Código atual de edição de avaliador confirmado no chunk de feedback servido pelo Google.
+- [ ] Login real dos usuários no novo domínio, sem compartilhar cookies do domínio antigo.
+- [ ] Transferir/validar lembretes, webhooks e links já distribuídos sem duplicar execuções.
+- [ ] Validar Trello e reprodução de áudios com uma sessão real; testes automáticos não substituem validação da integração.
+- [ ] Decidir domínio próprio e implantação contínua no Google para futuros commits.
+- [ ] Desativar Railway somente após a transição completa e autorização específica; serviço antigo preservado.
+
+Endereço público confirmado: https://prospectafluxus-664809259352.us-west1.run.app

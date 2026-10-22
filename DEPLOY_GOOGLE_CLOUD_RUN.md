@@ -191,3 +191,15 @@ Consulte a tabela vigente do Google Cloud e dos fornecedores antes de considerar
 Só depois do corte controlado, configure domínio, IAM público (se necessário), callback OAuth, Scheduler e webhooks conforme os contratos de cada fornecedor. Nenhuma dessas mudanças é feita por `scripts/deploy-cloud-run.sh`.
 
 Referências: [Cloud Run](https://cloud.google.com/run/docs), [Secret Manager](https://cloud.google.com/secret-manager/docs), [Cloud Run pricing](https://cloud.google.com/run/pricing) e [Supabase](https://supabase.com/docs).
+
+## Implantação realizada em 22/10/2026
+
+A aplicação foi publicada em **https://prospectafluxus-664809259352.us-west1.run.app**, no serviço `prospectafluxus`, região `us-west1`. A revisão inicial pronta é `prospectafluxus-00001-lwg`; o build inicial concluiu com sucesso. O deploy preserva o PostgreSQL e o storage S3 do Supabase e mantém `FLUXUS_FEEDBACK_ENABLED=true`.
+
+Foram configuradas contas técnicas separadas para build e runtime. Nove credenciais existentes foram importadas no Secret Manager sem serem incluídas no Git, Dockerfile ou pacote de código. O serviço usa 1 vCPU, 512Mi, CPU por requisição, mínimo zero e máximo configurado de uma instância tanto no serviço quanto na revisão. Esses limites reduzem consumo, mas não são um teto mensal de cobrança.
+
+A conta de faturamento autorizada foi ativada. O Google confirmou a criação de um alerta mensal de R$ 30; o alerta avisa sobre consumo e não bloqueia cobranças.
+
+Antes da exposição pública, passaram nove verificações HTTP sem criação ou alteração de dados: health, HTML, bundle principal, código de alteração de avaliador, sessão ausente, feedback bloqueado sem login, áudio bloqueado sem login, consulta Supabase com rejeição de um login inexistente e cron rejeitando token inválido. Após a liberação IAM, o endereço público e o health responderam HTTP 200, o módulo de feedback atual foi confirmado e feedback sem login continuou retornando HTTP 401. Também passaram 12 testes de porta/cron e 10 testes Trello, TypeScript e build de produção.
+
+**A transição completa não foi encerrada:** Railway permanece ativo como contingência. URLs de lembretes e webhooks não foram alteradas, nenhuma migration foi executada e nenhuma cobrança/subscrição antiga foi cancelada. O login real de clientes, integrações externas, URLs de links já distribuídos e configuração de automações precisam ser conferidos antes de desativar o host anterior. No novo domínio, o usuário precisa entrar novamente com suas credenciais habituais; cookies de sessão do Railway não são compartilhados entre domínios.

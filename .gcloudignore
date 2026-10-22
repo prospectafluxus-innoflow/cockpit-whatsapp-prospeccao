@@ -1,0 +1,23 @@
+# Pacote de source deploy. Configurações protegidas ficam fora deste repositório.
+.gcloudignore
+.git
+.gitignore
+#!include:.gitignore
+**/node_modules
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+*service-account*.json
+gcloud-*.json
+.npmrc
+.manus-logs
+.webdev
+coverage
+**/*.test.ts
+**/*.spec.ts
+.history

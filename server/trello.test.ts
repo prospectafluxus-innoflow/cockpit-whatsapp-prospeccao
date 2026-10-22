@@ -12,7 +12,12 @@ vi.mock("./integrationCrypto", () => ({
 }));
 
 import * as db from "./db";
-import { listBoardLists, listTrelloBoards, syncLeadToTrello } from "./trello";
+import {
+  listBoardLists,
+  listTrelloBoards,
+  queueLeadTrelloSync,
+  syncLeadToTrello,
+} from "./trello";
 
 const integration = {
   id: 1,
@@ -218,5 +223,47 @@ describe("sincronização de leads com o Trello", () => {
     expect(db.updateUserIntegrationState).toHaveBeenCalledWith(7, "trello", expect.objectContaining({
       lastError: expect.stringContaining("401"),
     }));
+  });
+
+  it("retorna uma promessa que aguarda o término da sincronização", async () => {
+    let releaseCards!: (response: Response) => void;
+    const cardsResponse = new Promise<Response>(resolve => {
+      releaseCards = resolve;
+    });
+    vi.mocked(fetch)
+      .mockReturnValueOnce(cardsResponse)
+      .mockResolvedValueOnce(jsonResponse({
+        id: "card-queued",
+        name: "Ana Silva",
+        desc: "prospectafluxus-lead:7:91",
+        url: "https://trello.com/c/queued",
+      }));
+
+    let settled = false;
+    const queued = queueLeadTrelloSync(7, 91).then(() => {
+      settled = true;
+    });
+
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(settled).toBe(false);
+
+    releaseCards(jsonResponse([]));
+
+    await expect(queued).resolves.toBeUndefined();
+    expect(settled).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("trata falha inesperada sem rejeitar e registra apenas a mensagem sanitizada", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(db.getUserIntegration).mockRejectedValueOnce(new Error("falha interna"));
+
+    await expect(queueLeadTrelloSync(7, 91)).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[Trello] Falha inesperada na fila de sincronização:",
+      "falha interna",
+    );
+    errorSpy.mockRestore();
   });
 });

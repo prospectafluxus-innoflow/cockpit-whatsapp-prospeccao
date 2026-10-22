@@ -11,4 +11,19 @@ README.md
 DEPLOY_GUIDE.md
 env.example.txt
 scripts/*
-!scripts/migrate-fluxus.mjs
+
+# Testes e ferramentas de desenvolvimento não entram na imagem.
+**/*.test.ts
+**/*.spec.ts
+vitest.config.ts
+coverage
+
+# Credenciais e material de chave privada nunca entram no contexto.
+*.pem
+*.key
+*p12
+*.pfx
+*credentials*.json
+*service-account*.json
+gcloud-*.json
+.npmrc

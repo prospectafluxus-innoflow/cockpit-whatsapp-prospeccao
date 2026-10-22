@@ -256,8 +256,8 @@ export function syncLeadToTrello(userId: number, leadId: number): Promise<Trello
   return sync;
 }
 
-export function queueLeadTrelloSync(userId: number, leadId: number): void {
-  void syncLeadToTrello(userId, leadId).catch(error => {
+export function queueLeadTrelloSync(userId: number, leadId: number): Promise<void> {
+  return syncLeadToTrello(userId, leadId).then(() => undefined).catch(error => {
     console.error("[Trello] Falha inesperada na fila de sincronização:", publicErrorMessage(error));
   });
 }

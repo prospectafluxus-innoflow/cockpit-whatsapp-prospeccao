@@ -1,6 +1,5 @@
 import express from "express";
 import { createServer } from "http";
-import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
@@ -10,30 +9,16 @@ import { serveStatic } from "./static";
 import { sendReminderHandler } from "../scheduleHandler";
 import { cronSendReminderHandler } from "../cronHandler";
 import { wablastWebhookHandler } from "../wablastWebhook";
-
-function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise(resolve => {
-    const server = net.createServer();
-    server.listen(port, () => {
-      server.close(() => resolve(true));
-    });
-    server.on("error", () => resolve(false));
-  });
-}
-
-async function findAvailablePort(startPort: number = 3000): Promise<number> {
-  for (let port = startPort; port < startPort + 20; port++) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-  throw new Error(`No available port found starting from ${startPort}`);
-}
+import { parseProductionPort, PRODUCTION_HOST } from "./productionPort";
 
 async function startServer() {
   const app = express();
   const server = createServer(app);
   app.set("trust proxy", 1);
+  // Health is intentionally generic and does not read or disclose secrets.
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ ok: true });
+  });
   // A assinatura Standard Webhooks exige os bytes exatos antes de JSON.parse.
   app.post("/api/webhooks/wablast", express.raw({ type: "application/json", limit: "1mb" }), wablastWebhookHandler);
   // Configure body parser with larger size limit for file uploads
@@ -58,16 +43,14 @@ async function startServer() {
   // Production mode: serve static files from dist/public
   serveStatic(app);
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  const port = parseProductionPort(process.env.PORT);
 
-  if (port !== preferredPort) {
-    console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
-  }
-
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  server.listen(port, PRODUCTION_HOST, () => {
+    console.log(`Server running on http://${PRODUCTION_HOST}:${port}/`);
   });
 }
 
-startServer().catch(console.error);
+startServer().catch(error => {
+  console.error("[production] startup failed:", error);
+  process.exitCode = 1;
+});

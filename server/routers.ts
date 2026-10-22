@@ -1024,16 +1024,36 @@ Responda APENAS com a mensagem, sem explicações adicionais.`;
 
       const result: Record<string, string | null> = {};
 
+      // Cloud Scheduler owns one hourly job and calls the central dispatcher.
+      // These per-window values are truthful managed markers for the existing
+      // UI, not fabricated Forge task IDs and not Google API responses.
+      if (process.env.REMINDER_SCHEDULER_PROVIDER === "google") {
+        for (const job of jobs) {
+          result[job.key] = job.enabled
+            ? `cloud-scheduler:user-${ctx.user.id}-${job.key}`
+            : null;
+        }
+
+        await upsertSchedule(ctx.user.id, {
+          morningTaskUid: result.morning,
+          lunchTaskUid: result.lunch,
+          afternoonTaskUid: result.afternoon,
+          eveningTaskUid: result.evening,
+        } as any);
+
+        return { ok: true, provider: "google", taskUids: result };
+      }
+
       for (const job of jobs) {
         if (!job.enabled) {
-          if (job.uid) { try { await updateHeartbeatJob(job.uid, { enable: false }, sessionToken); } catch {} }
+          if (job.uid) await updateHeartbeatJob(job.uid, { enable: false }, sessionToken);
           result[job.key] = job.uid ?? null;
           continue;
         }
         const cron = `0 0 ${toUtcH(job.hour)} * * *`;
         const label = job.key === "morning" ? "Manhã" : job.key === "lunch" ? "Almoço" : job.key === "afternoon" ? "Meio da tarde" : "Fim do dia";
         if (job.uid) {
-          try { await updateHeartbeatJob(job.uid, { cron, enable: true }, sessionToken); } catch {}
+          await updateHeartbeatJob(job.uid, { cron, enable: true }, sessionToken);
           result[job.key] = job.uid;
         } else {
           const created = await createHeartbeatJob({

@@ -1,204 +1,193 @@
 # Guia de Deploy — ProspectaFluxus no Google Cloud Run
 
-**Stack:** Google Cloud Run (hospedagem) + Supabase (banco PostgreSQL) + Google Gemini (IA)  
-**Custo estimado:** R$ 0,00/mês dentro dos limites gratuitos
+**Stack:** Google Cloud Run (hospedagem) + Supabase/PostgreSQL (banco) + integrações configuradas por Secret Manager.
+
+> **Custo:** não existe promessa de custo zero. O custo final depende de região, tráfego, CPU, memória, builds, armazenamento de imagens, rede, Secret Manager, Supabase, Gemini e do estado de faturamento/quota da conta. As faixas gratuitas são limites, não uma garantia de cobrança nula.
+
+Este guia descreve um primeiro deploy **privado**. O serviço só deve receber `allUsers` depois que os secrets, o callback de autenticação e o health check forem validados.
 
 ---
 
-## Pré-requisitos
+## 1. Pré-requisitos
 
-- Conta Google (já tem ✅)
-- Chave Gemini (já configurada ✅)
-- Banco Supabase (já criado ✅)
-- [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) instalado no computador
+- Projeto Google Cloud com faturamento e `gcloud` instalado.
+- Permissões para Cloud Run, Cloud Build, Artifact Registry e Secret Manager.
+- Supabase já existente. A aplicação continua usando o PostgreSQL do Supabase pela variável `DATABASE_URL`; este deploy não troca o banco.
+- Secrets criados previamente no Secret Manager por um operador/cofre aprovado. Os valores não devem ser gravados no repositório, no Dockerfile ou na linha de comando do script.
+- A conta de serviço de runtime do Cloud Run com `roles/secretmanager.secretAccessor` nos secrets necessários.
 
----
-
-## Passo 1 — Instalar o Google Cloud CLI
-
-### Windows
-1. Acesse: https://cloud.google.com/sdk/docs/install-sdk#windows
-2. Baixe o instalador `.exe` e execute
-3. Siga o assistente de instalação
-4. Ao final, abrirá um terminal — pressione Enter para fazer login
-
-### Mac
-```bash
-brew install google-cloud-sdk
-```
-
-### Verificar instalação
-```bash
-gcloud --version
-```
-
----
-
-## Passo 2 — Fazer login e criar o projeto
+Ative somente as APIs necessárias ao seu projeto, conforme a política da organização:
 
 ```bash
-# Login na sua conta Google
-gcloud auth login
-
-# Criar um novo projeto (substitua "prospectafluxus" por um nome único)
-gcloud projects create prospectafluxus-app --name="ProspectaFluxus"
-
-# Definir o projeto como padrão
-gcloud config set project prospectafluxus-app
-
-# Ativar as APIs necessárias
-gcloud services enable run.googleapis.com
-gcloud services enable cloudbuild.googleapis.com
-gcloud services enable cloudscheduler.googleapis.com
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  artifactregistry.googleapis.com \
+  secretmanager.googleapis.com
 ```
+
+O repositório contém o `Dockerfile`; o deploy usa `--source .` e, portanto, pode usar Cloud Build e Artifact Registry.
 
 ---
 
-## Passo 3 — Baixar o código do ProspectaFluxus
+## 2. Configuração protegida de secrets
 
-No Manus, clique em **⋯ (três pontos)** → **"Download as ZIP"** e extraia em uma pasta no seu computador.
+O script `scripts/deploy-cloud-run.sh` recebe apenas **nomes** de secrets por variáveis de configuração protegida. Ele nunca recebe valores de `DATABASE_URL`, chaves, tokens ou segredos inline.
 
-Abra o terminal dentro dessa pasta:
-```bash
-cd caminho/para/cockpit-whatsapp-prospeccao
-```
-
----
-
-## Passo 4 — Fazer o deploy no Cloud Run
+Obrigatórios:
 
 ```bash
-# Deploy direto (o Cloud Run faz o build automaticamente com o Dockerfile)
-gcloud run deploy prospectafluxus \
-  --source . \
-  --region us-central1 \
-  --platform managed \
-  --allow-unauthenticated \
-  --port 3000 \
-  --memory 512Mi \
-  --set-env-vars "NODE_ENV=production"
+export CLOUD_RUN_SECRET_DATABASE_URL_NAME='nome-do-secret-da-url-do-supabase'
+export CLOUD_RUN_SECRET_JWT_SECRET_NAME='nome-do-secret-jwt'
+export CLOUD_RUN_SECRET_CRON_SECRET_NAME='nome-do-secret-cron'
 ```
 
-Aguarde alguns minutos. Ao final, o terminal mostrará a URL do sistema, algo como:
-```
-Service URL: https://prospectafluxus-xxxx-uc.a.run.app
-```
-
-**Guarde essa URL** — ela será usada nos próximos passos.
-
----
-
-## Passo 5 — Configurar as variáveis de ambiente
-
-Substitua os valores pelos seus dados reais:
+Opcionais, somente se a funcionalidade correspondente estiver habilitada:
 
 ```bash
-gcloud run services update prospectafluxus \
-  --region us-central1 \
-  --set-env-vars \
-"DATABASE_URL=postgresql://postgres:[SUA_SENHA]@db.[SEU_PROJETO].supabase.co:5432/postgres,\
-JWT_SECRET=[UMA_STRING_LONGA_ALEATORIA],\
-GEMINI_API_KEY=[CRIE_UMA_NOVA_CHAVE_NO_GOOGLE_AI_STUDIO],\
-CRON_SECRET=[OUTRA_STRING_LONGA_ALEATORIA],\
-NODE_ENV=production"
+export CLOUD_RUN_SECRET_GEMINI_API_KEY_NAME='nome-do-secret-gemini'
+export CLOUD_RUN_SECRET_OPENROUTER_API_KEY_NAME='nome-do-secret-openrouter'
+export CLOUD_RUN_SECRET_BUILT_IN_FORGE_API_KEY_NAME='nome-do-secret-forge'
+export CLOUD_RUN_SECRET_WABLAST_API_KEY_NAME='nome-do-secret-wablast'
+export CLOUD_RUN_SECRET_WABLAST_WEBHOOK_SECRET_NAME='nome-do-secret-webhook-wablast'
+export CLOUD_RUN_SECRET_INTEGRATION_ENCRYPTION_KEY_NAME='nome-do-secret-integrations'
+export CLOUD_RUN_SECRET_RESEND_API_KEY_NAME='nome-do-secret-resend'
+export CLOUD_RUN_SECRET_S3_ACCESS_KEY_ID_NAME='nome-do-secret-s3-access-key'
+export CLOUD_RUN_SECRET_S3_SECRET_ACCESS_KEY_NAME='nome-do-secret-s3-secret-key'
+export CLOUD_RUN_SECRET_VAPID_PRIVATE_KEY_NAME='nome-do-secret-vapid-private'
 ```
 
-### Onde encontrar o DATABASE_URL do Supabase:
-1. Acesse https://supabase.com → seu projeto
-2. Vá em **Settings → Database → Connection string**
-3. Selecione **URI** e copie
+Os valores acima são exemplos de **nomes**, não valores secretos. O script referencia cada secret como `NOME_DA_VARIAVEL=secret-name:latest`. A rotação de uma versão deve seguir o processo da organização; não coloque uma URI de Supabase ou token na documentação.
 
-### Como gerar JWT_SECRET e CRON_SECRET:
-Gere dois valores diferentes e imprevisíveis com `openssl rand -base64 48`. Nunca reutilize exemplos de documentação nem grave os valores no repositório.
+`DATABASE_URL` permanece a conexão Supabase. O container não executa `db:migrate`, `drizzle-kit migrate` nem qualquer outro migration automaticamente.
+
+Também forneça `CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT` com o e-mail da conta técnica de execução e `CLOUD_RUN_BUILD_SERVICE_ACCOUNT` no formato `projects/PROJECT_ID/serviceAccounts/EMAIL`. A conta de runtime recebe acesso somente aos secrets da aplicação; a de build recebe `roles/run.builder` no projeto. Não use uma conta com permissão de Editor para executar a aplicação.
+
+`CLOUD_RUN_PUBLIC_ENV_FILE` pode apontar para um arquivo YAML/JSON contendo somente configurações não secretas: `NODE_ENV`, `FLUXUS_FEEDBACK_ENABLED`, configurações públicas de bucket/endpoint S3 e chave pública VAPID, além de campos vazios preservados. Credenciais continuam exclusivamente no Secret Manager. O flag de feedback deve permanecer `true` quando essa funcionalidade estiver habilitada na produção original.
 
 ---
 
-## Passo 6 — Executar a migração do banco
+## 3. Deploy privado inicial
+
+Execute a partir da raiz do repositório, depois de carregar a configuração protegida:
 
 ```bash
-# Instalar dependências localmente (apenas uma vez)
-npm install -g tsx
+chmod +x scripts/deploy-cloud-run.sh
 
-# Rodar a migração
-DATABASE_URL="postgresql://postgres:[SUA_SENHA]@db.[SEU_PROJETO].supabase.co:5432/postgres" \
-node scripts/migrate.mjs
+scripts/deploy-cloud-run.sh \
+  --project "$GOOGLE_CLOUD_PROJECT" \
+  --region "$GOOGLE_CLOUD_REGION" \
+  --service "$CLOUD_RUN_SERVICE"
 ```
+
+O script configura:
+
+- `min=0` e `max=1` instância;
+- `1` vCPU e `512Mi` de memória;
+- CPU alocada por requisição (`--cpu-throttling`);
+- porta `8080` (o Cloud Run injeta `PORT`, que o entrypoint valida sem fallback);
+- `NODE_ENV=production`;
+- `--no-allow-unauthenticated` para manter o serviço privado;
+- referências a Secret Manager, sem valores inline.
+
+O script **não** cria Cloud Scheduler, não cria webhooks públicos e não executa migrations. A imagem também não copia scripts de migration para o runtime. A aplicação aguarda a tentativa de sincronização Trello dentro da requisição, evitando que ela fique abandonada depois da resposta em um serviço com CPU por requisição; falhas continuam registradas e não invalidam a atualização do lead.
+
+Não acrescente uma permissão pública neste primeiro passo.
 
 ---
 
-## Passo 7 — Configurar os agendamentos automáticos (Cloud Scheduler)
+## 4. Validar sem tornar o serviço público
 
-Os lembretes automáticos são enviados 3 vezes ao dia. Substitua `[SUA_URL]` pela URL do Cloud Run e `[SEU_CRON_SECRET]` pelo valor que definiu:
+O endpoint de aplicação é deliberadamente genérico:
+
+```http
+GET /api/health
+200 {"ok":true}
+```
+
+Ele não retorna secrets, versão, URL de banco ou diagnóstico interno. Como o serviço ainda é privado, valide usando uma identidade autorizada:
 
 ```bash
-# Lembrete da manhã (8h, horário de Brasília)
-gcloud scheduler jobs create http prospectafluxus-morning \
-  --location us-central1 \
-  --schedule "0 11 * * *" \
-  --uri "https://prospectafluxus-xxxx-uc.a.run.app/api/cron/send-reminder" \
-  --message-body '{"period":"morning"}' \
-  --headers "Content-Type=application/json,x-cron-secret=[SEU_CRON_SECRET]" \
-  --time-zone "UTC"
+SERVICE_URL="$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
+  --project "$GOOGLE_CLOUD_PROJECT" \
+  --region "$GOOGLE_CLOUD_REGION" \
+  --format='value(status.url)')"
 
-# Lembrete do almoço (13h, horário de Brasília)
-gcloud scheduler jobs create http prospectafluxus-afternoon \
-  --location us-central1 \
-  --schedule "0 16 * * *" \
-  --uri "https://prospectafluxus-xxxx-uc.a.run.app/api/cron/send-reminder" \
-  --message-body '{"period":"afternoon"}' \
-  --headers "Content-Type=application/json,x-cron-secret=[SEU_CRON_SECRET]" \
-  --time-zone "UTC"
-
-# Lembrete do fim do dia (18h, horário de Brasília)
-gcloud scheduler jobs create http prospectafluxus-evening \
-  --location us-central1 \
-  --schedule "0 21 * * *" \
-  --uri "https://prospectafluxus-xxxx-uc.a.run.app/api/cron/send-reminder" \
-  --message-body '{"period":"evening"}' \
-  --headers "Content-Type=application/json,x-cron-secret=[SEU_CRON_SECRET]" \
-  --time-zone "UTC"
+curl --fail-with-body \
+  -H "Authorization: Bearer $(gcloud auth print-identity-token)" \
+  "$SERVICE_URL/api/health"
 ```
 
----
+Também confirme nos logs que o processo subiu na porta fornecida pelo Cloud Run, que o callback OAuth não está apontando para o ambiente antigo e que o acesso ao Supabase funciona antes de abrir tráfego público.
 
-## Passo 8 — Atualizar o botão no site da InnoFlow
-
-Após o deploy, substitua `https://app.innoflow.com.br` no `index_modified.html` pela URL real do Cloud Run:
-
-```
-https://prospectafluxus-xxxx-uc.a.run.app
-```
-
----
-
-## (Opcional) Passo 9 — Domínio personalizado
-
-Para usar `app.innoflow.com.br` em vez da URL do Google:
+Depois da validação de secrets, autenticação e rotas, a publicação pública é uma decisão explícita do operador, por exemplo via IAM:
 
 ```bash
-gcloud run domain-mappings create \
-  --service prospectafluxus \
-  --domain app.innoflow.com.br \
-  --region us-central1
+gcloud run services add-iam-policy-binding "$CLOUD_RUN_SERVICE" \
+  --project "$GOOGLE_CLOUD_PROJECT" \
+  --region "$GOOGLE_CLOUD_REGION" \
+  --member='allUsers' \
+  --role='roles/run.invoker'
 ```
 
-O comando mostrará os registros DNS para adicionar no painel do seu domínio (Registro.br ou onde estiver).
+Esse comando não faz parte do script inicial.
 
 ---
 
-## Resumo dos limites gratuitos
+## 5. Contrato do cron (não provisionado automaticamente)
 
-| Serviço | Limite gratuito | Uso estimado |
-|---|---|---|
-| Cloud Run | 2M req/mês + 360.000 vCPU-s | ~1.000 req/mês ✅ |
-| Cloud Scheduler | 3 jobs gratuitos | 3 jobs ✅ |
-| Supabase | 500 MB banco + 5 GB transferência | ~10 MB ✅ |
-| Gemini API | 1.500 req/dia | ~50 req/dia ✅ |
+O deploy não cria jobs. Se um operador configurar um scheduler posteriormente, o endpoint independente exige:
+
+```http
+POST /api/cron/send-reminder
+Authorization: Bearer <CRON_SECRET>
+Content-Type: application/json
+
+{"window":"morning"}
+```
+
+`window` deve ser exatamente um destes valores:
+
+- `morning`
+- `lunch`
+- `afternoon`
+- `evening`
+
+Sem `CRON_SECRET` configurado, ou com bearer ausente/incorreto, a resposta é `401`; uma janela inválida retorna `400`. O valor do secret deve ser obtido pelo mecanismo protegido aprovado, nunca commitado ou colado no repositório.
+
+O endpoint `/api/scheduled/send-reminder` é uma integração distinta. Não foi reconfigurado neste trabalho. Webhooks WaBlast/Trello continuam dependendo de seus próprios secrets e de uma decisão posterior de exposição/roteamento.
 
 ---
 
-## Suporte
+## 6. Supabase e migrations
 
-Em caso de dúvidas, entre em contato com a InnoFlow ou consulte:
-- [Documentação do Cloud Run](https://cloud.google.com/run/docs)
-- [Documentação do Supabase](https://supabase.com/docs)
+- Supabase continua sendo o banco da aplicação via `DATABASE_URL` no Secret Manager.
+- O deploy não roda migrations, seed, cron, webhook registration ou limpeza de dados.
+- Qualquer migration deve ser revisada e executada separadamente, com janela, backup e procedimento de rollback aprovados.
+- O Cloud Run é stateless; arquivos locais não são armazenamento durável. A rota existente `/manus-storage/*` ainda depende do backend de storage configurado e precisa de validação específica antes do corte.
+
+---
+
+## 7. Limites gratuitos e custos possíveis
+
+Os limites variam por produto, região, conta e data. Como referência para o free tier usual do Cloud Run, mantenha as unidades separadas:
+
+A referência mensal usual para cobrança por requisição é de 2 milhões de requisições, 180.000 vCPU-segundos e 360.000 GiB-segundos. CPU e memória são cotas distintas: `512Mi` representa `0,5 GiB`, não uma quantidade de vCPU. A franquia não inclui necessariamente rede e outros produtos. Nenhum job do Cloud Scheduler é criado por esse roteiro.
+
+Mesmo dentro de uma faixa gratuita, podem existir custos ou requisitos de faturamento para:
+
+- Cloud Build e armazenamento/egress do Artifact Registry gerados pelo `--source .`;
+- tráfego de saída e serviços Google usados pelas integrações;
+- armazenamento e operações do Secret Manager;
+- Supabase, Gemini, WaBlast, Resend e demais fornecedores;
+- regiões, quotas, créditos promocionais expirados ou mudanças de preço.
+
+Consulte a tabela vigente do Google Cloud e dos fornecedores antes de considerar o orçamento fechado.
+
+---
+
+## 8. Domínio personalizado e operação posterior
+
+Só depois do corte controlado, configure domínio, IAM público (se necessário), callback OAuth, Scheduler e webhooks conforme os contratos de cada fornecedor. Nenhuma dessas mudanças é feita por `scripts/deploy-cloud-run.sh`.
+
+Referências: [Cloud Run](https://cloud.google.com/run/docs), [Secret Manager](https://cloud.google.com/secret-manager/docs), [Cloud Run pricing](https://cloud.google.com/run/pricing) e [Supabase](https://supabase.com/docs).

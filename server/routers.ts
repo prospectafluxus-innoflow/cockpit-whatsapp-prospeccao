@@ -813,7 +813,7 @@ export const appRouter = router({
 
         await updateLead(input.leadId, ctx.user.id, updates as any);
         if (input.status === "respondeu") {
-          queueLeadTrelloSync(ctx.user.id, input.leadId);
+          await queueLeadTrelloSync(ctx.user.id, input.leadId);
         }
         return { success: true, trelloSyncQueued: input.status === "respondeu" };
       }),
@@ -838,7 +838,7 @@ export const appRouter = router({
           ...(input.column === "Respondeu" ? { respondedAt: new Date() } : {}),
         });
         if (input.column === "Respondeu") {
-          queueLeadTrelloSync(ctx.user.id, input.leadId);
+          await queueLeadTrelloSync(ctx.user.id, input.leadId);
         }
         return { success: true, trelloSyncQueued: input.column === "Respondeu" };
       }),

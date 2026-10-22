@@ -21,7 +21,7 @@ export async function cronSendReminderHandler(req: Request, res: Response) {
     const authHeader = req.headers.authorization ?? "";
     const cronSecret = ENV.cronSecret;
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 

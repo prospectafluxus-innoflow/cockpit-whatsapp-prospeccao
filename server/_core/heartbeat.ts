@@ -5,10 +5,11 @@
  * (Render Cron Jobs) e não precisam de criação dinâmica via API.
  *
  * Este módulo mantém a interface original para compatibilidade com
- * server/routers.ts, mas retorna stubs quando o Manus Forge não está disponível.
+ * server/routers.ts. No provider não-Google, uma ausência do Forge é erro
+ * explícito: nunca simulamos um job que não foi criado.
  *
  * Para o ProspectaFluxus independente, o agendamento é feito via:
- * - Render Cron Jobs (render.yaml) para produção
+ * - Render Cron Jobs (render.yaml) para produção legada
  * - Endpoint /api/cron/send-reminder protegido por CRON_SECRET
  */
 
@@ -78,19 +79,14 @@ async function forgeRequest(
 }
 
 /**
- * Cria um job de heartbeat.
- * Se o Manus Forge estiver disponível, cria via API.
- * Caso contrário, retorna um taskUid simulado (para deploy independente).
+ * Cria um job de heartbeat no Manus Forge.
  */
 export async function createHeartbeatJob(
   job: HeartbeatJob,
   sessionToken: string
 ): Promise<{ taskUid: string }> {
   if (!isForgeAvailable()) {
-    // Modo independente: retorna um UID simulado baseado no nome do job
-    const taskUid = `render-cron-${job.name}-${Date.now()}`;
-    console.log(`[Heartbeat] Modo independente — job simulado: ${taskUid}`);
-    return { taskUid };
+    throw new Error("Manus Forge não está configurado para este provider de agendamento.");
   }
 
   try {
@@ -109,8 +105,9 @@ export async function createHeartbeatJob(
 
     return { taskUid: data.taskUid ?? data.task_uid ?? `forge-${job.name}` };
   } catch (err) {
-    console.error("[Heartbeat] Falha ao criar job via Forge:", err);
-    return { taskUid: `fallback-${job.name}-${Date.now()}` };
+    throw new Error(
+      `Falha ao criar job via Manus Forge: ${err instanceof Error ? err.message : "erro desconhecido"}`,
+    );
   }
 }
 
@@ -123,8 +120,7 @@ export async function updateHeartbeatJob(
   sessionToken: string
 ): Promise<void> {
   if (!isForgeAvailable()) {
-    console.log(`[Heartbeat] Modo independente — update simulado para: ${taskUid}`);
-    return;
+    throw new Error("Manus Forge não está configurado para este provider de agendamento.");
   }
 
   try {
@@ -142,7 +138,9 @@ export async function updateHeartbeatJob(
       sessionToken
     );
   } catch (err) {
-    console.error("[Heartbeat] Falha ao atualizar job via Forge:", err);
+    throw new Error(
+      `Falha ao atualizar job via Manus Forge: ${err instanceof Error ? err.message : "erro desconhecido"}`,
+    );
   }
 }
 
@@ -154,14 +152,15 @@ export async function deleteHeartbeatJob(
   sessionToken: string
 ): Promise<void> {
   if (!isForgeAvailable()) {
-    console.log(`[Heartbeat] Modo independente — delete simulado para: ${taskUid}`);
-    return;
+    throw new Error("Manus Forge não está configurado para este provider de agendamento.");
   }
 
   try {
     await forgeRequest("DeleteHeartbeatJob", { taskUid }, sessionToken);
   } catch (err) {
-    console.error("[Heartbeat] Falha ao deletar job via Forge:", err);
+    throw new Error(
+      `Falha ao deletar job via Manus Forge: ${err instanceof Error ? err.message : "erro desconhecido"}`,
+    );
   }
 }
 
@@ -172,14 +171,15 @@ export async function listHeartbeatJobs(
   sessionToken: string
 ): Promise<HeartbeatJobInfo[]> {
   if (!isForgeAvailable()) {
-    return [];
+    throw new Error("Manus Forge não está configurado para este provider de agendamento.");
   }
 
   try {
     const data = await forgeRequest("ListHeartbeatJobs", {}, sessionToken) as any;
     return data.jobs ?? data.heartbeatJobs ?? [];
   } catch (err) {
-    console.error("[Heartbeat] Falha ao listar jobs via Forge:", err);
-    return [];
+    throw new Error(
+      `Falha ao listar jobs via Manus Forge: ${err instanceof Error ? err.message : "erro desconhecido"}`,
+    );
   }
 }

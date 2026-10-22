@@ -9,7 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
 import { sendReminderHandler } from "../scheduleHandler";
-import { cronSendReminderHandler } from "../cronHandler";
+import { cronDispatchRemindersHandler, cronSendReminderHandler } from "../cronHandler";
 import { wablastWebhookHandler } from "../wablastWebhook";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -48,6 +48,7 @@ async function startServer() {
   app.post("/api/scheduled/send-reminder", sendReminderHandler);
   // Render Cron Jobs endpoint (independente)
   app.post("/api/cron/send-reminder", cronSendReminderHandler);
+  app.post("/api/cron/dispatch-reminders", cronDispatchRemindersHandler);
 
   // tRPC API
   app.use(

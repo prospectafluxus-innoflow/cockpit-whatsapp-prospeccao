@@ -7,7 +7,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./static";
 import { sendReminderHandler } from "../scheduleHandler";
-import { cronSendReminderHandler } from "../cronHandler";
+import { cronDispatchRemindersHandler, cronSendReminderHandler } from "../cronHandler";
 import { wablastWebhookHandler } from "../wablastWebhook";
 import { parseProductionPort, PRODUCTION_HOST } from "./productionPort";
 
@@ -30,6 +30,7 @@ async function startServer() {
   app.post("/api/scheduled/send-reminder", sendReminderHandler);
   // Railway Cron Jobs endpoint (independente)
   app.post("/api/cron/send-reminder", cronSendReminderHandler);
+  app.post("/api/cron/dispatch-reminders", cronDispatchRemindersHandler);
 
   // tRPC API
   app.use(

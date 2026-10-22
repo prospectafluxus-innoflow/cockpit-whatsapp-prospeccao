@@ -676,3 +676,45 @@ export const wablastWebhookEvents = pgTable(
 );
 
 export type WaBlastWebhookEvent = typeof wablastWebhookEvents.$inferSelect;
+
+// ─── Ledger server-only de dispatch de lembretes ─────────────────────────────
+export type ReminderDispatchStatus = "claimed" | "sent" | "failed" | "not-delivered";
+
+export const reminderDispatchLedger = pgTable(
+  "reminder_dispatch_ledger",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    localDate: date("localDate").notNull(),
+    window: varchar("window", { length: 16 }).notNull(),
+    status: varchar("status", { length: 20 })
+      .$type<ReminderDispatchStatus>()
+      .notNull()
+      .default("claimed"),
+    claimedAt: timestamp("claimedAt").defaultNow().notNull(),
+    sentAt: timestamp("sentAt"),
+    failedAt: timestamp("failedAt"),
+    errorCode: varchar("errorCode", { length: 64 }),
+    errorMessage: text("errorMessage"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("reminder_dispatch_ledger_user_date_window_idx").on(
+      table.userId,
+      table.localDate,
+      table.window,
+    ),
+    check(
+      "reminder_dispatch_ledger_window_check",
+      sql`${table.window} IN ('morning', 'lunch', 'afternoon', 'evening')`,
+    ),
+    check(
+      "reminder_dispatch_ledger_status_check",
+      sql`${table.status} IN ('claimed', 'sent', 'failed', 'not-delivered')`,
+    ),
+  ],
+);
+
+export type ReminderDispatchLedger = typeof reminderDispatchLedger.$inferSelect;
+export type InsertReminderDispatchLedger = typeof reminderDispatchLedger.$inferInsert;

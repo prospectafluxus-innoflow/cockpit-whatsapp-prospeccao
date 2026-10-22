@@ -140,11 +140,13 @@ export async function notifyOwner({
   userId,
   title,
   content,
+  url,
+  tag,
 }: NotificationInput & { userId: number }): Promise<boolean> {
   console.log(`[Notificação] user=${userId} ${title}\n${content}`);
 
   const [pushResult, emailDelivered] = await Promise.all([
-    sendWebPushToUser(userId, { title, content }),
+    sendWebPushToUser(userId, { title, content, url, tag }),
     sendOptionalEmail(title, content),
   ]);
 

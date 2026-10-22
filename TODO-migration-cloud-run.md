@@ -1,38 +1,54 @@
-# TODO — migração para Cloud Run
+# TODO — migração para Google Cloud Run
 
-## Resultados reais deste trabalho
+Atualizado em 22/10/2026, após a primeira publicação automática e a ativação do agendador.
 
-- Entrypoint de produção valida `PORT` como porta decimal entre `1` e `65535`, falha rápido quando ausente/inválida e escuta exatamente em `0.0.0.0` sem procurar portas alternativas.
-- `GET /api/health` responde `200 {"ok":true}` sem consultar ou devolver secrets.
-- `.dockerignore` mantém `.env*`, `.git`, credenciais/chaves privadas, testes e tooling local fora do contexto; source necessário para o build permanece incluído.
-- A imagem não copia migration para o runtime.
-- `scripts/deploy-cloud-run.sh` foi preparado para `project`, `region` e `service`, com `min=0`, `max=1`, `1 vCPU`, `512Mi`, CPU request-based e serviço privado inicialmente. Secrets entram somente como referências do Secret Manager vindas de configuração protegida.
-- O script não executa migrations, não cria cron jobs/webhooks e não altera o comportamento do Persona ou do Trello.
-- O guia foi corrigido para não prometer custo zero, separar `vCPU-s` de `GiB-s` e documentar `Authorization: Bearer <CRON_SECRET>` com `window`.
+## Aplicação e publicação
 
-## Pendências antes de um corte definitivo
+- [x] Publicar Prospecta e Persona em https://prospectafluxus-664809259352.us-west1.run.app, preservando o mesmo PostgreSQL e storage Supabase.
+- [x] Manter o Feedback EEC habilitado e publicar a alteração de avaliador já implementada, sem alterar participantes, ciclos, permissões ou avaliações durante os testes de migração.
+- [x] Usar 1 vCPU, 512Mi, mínimo zero e máximo configurado de uma instância no serviço e na revisão. Esses parâmetros reduzem consumo, mas não são um teto mensal de cobrança.
+- [x] Separar contas técnicas de build, runtime e deploy. Preservar as nove referências de secrets e suas permissões restritas no Secret Manager.
+- [x] Criar alerta mensal de R$ 30 na conta de faturamento autorizada. O alerta não impede cobranças.
+- [x] Conferir health público, HTML e bloqueio de dados de feedback sem login. O login próprio por e-mail/senha permanece; não foi introduzida dependência de OAuth externo.
+- [x] Executar TypeScript, build e 248 testes unitários; dois testes externos permaneceram pulados.
 
-- **Credenciais/configuração:** fornecer, por mecanismo protegido, os nomes dos secrets e conceder `roles/secretmanager.secretAccessor` à service account de runtime. Nenhuma credencial real foi recebida ou testada neste trabalho.
-- **Auth callback:** confirmar `OAUTH_SERVER_URL`, `VITE_APP_ID`, URLs de callback e cookies no domínio Cloud Run; testar login completo antes de liberar `allUsers`.
-- **Supabase:** confirmar conectividade, pool/SSL e executar migrations somente em procedimento separado, revisado e com rollback. O deploy preserva `DATABASE_URL` e não escreve no banco.
-- **Storage:** validar a dependência existente de `/manus-storage/*`/Manus Forge, URLs assinadas, persistência e comportamento sem filesystem local durável.
-- **Trello — bloqueio de corte:** o fire-and-forget foi corrigido: `queueLeadTrelloSync` retorna `Promise<void>` e as mutations aguardam o sync antes de responder, com falhas ainda toleradas e log sanitizado. Validar a integração real (entrega, retry, observabilidade e comportamento em cold start/terminação do Cloud Run) antes de considerar o corte definitivo.
-- **Cron/webhooks:** decidir IAM e provisionamento manual posterior. O cron exige `Authorization: Bearer <CRON_SECRET>` e `window`; webhooks WaBlast não são registrados nem tornados públicos automaticamente.
-- **Exposição pública:** validar health, secrets, auth, Supabase e integrações no serviço privado; só então decidir o binding `allUsers`.
+Revisão de produção confirmada: `prospectafluxus-00003-llh`, com 100% do tráfego e label de código `20f419bca0af95c39282660c19158c3c0f8f74c2`.
 
-## Estado confirmado em 22/10/2026 após publicação
+## Implantação contínua
 
-- [x] Faturamento do projeto ativo e alerta mensal de R$ 30 criado (não é limite rígido).
-- [x] APIs Run/Build/Artifact Registry/Secret Manager habilitadas.
-- [x] Contas técnicas separadas e 9 secrets protegidos, com 15 configurações públicas/vazias preservadas.
-- [x] Build/deploy privado concluído; revisão `prospectafluxus-00001-lwg` pronta.
-- [x] Smoke privado read-only com 9 verificações aprovado.
-- [x] Exposição pública da aplicação liberada após validação; HTTP 200 no endereço e health, HTTP 401 para feedback sem login.
-- [x] Código atual de edição de avaliador confirmado no chunk de feedback servido pelo Google.
-- [ ] Login real dos usuários no novo domínio, sem compartilhar cookies do domínio antigo.
-- [ ] Transferir/validar lembretes, webhooks e links já distribuídos sem duplicar execuções.
-- [ ] Validar Trello e reprodução de áudios com uma sessão real; testes automáticos não substituem validação da integração.
-- [ ] Decidir domínio próprio e implantação contínua no Google para futuros commits.
-- [ ] Desativar Railway somente após a transição completa e autorização específica; serviço antigo preservado.
+- [x] Integrar o PR #36 e executar o primeiro GitHub Actions até sucesso: https://github.com/prospectafluxus-innoflow/cockpit-whatsapp-prospeccao/actions/runs/39866951576.
+- [x] Restringir Workload Identity Federation aos IDs numéricos do repositório e proprietário, branch `main`, workflow exato e eventos `push`/`workflow_dispatch`. Não há chave permanente de conta técnica.
+- [x] Preservar env/secrets e IAM público nas próximas publicações. O workflow não executa migrations nem recria o Scheduler.
+- [x] Excluir `gha-creds-*.json` do Git, Docker e pacote Google. Os identificadores públicos do provider/conta técnica têm defaults no workflow; não dependem de permissões para editar variáveis GitHub.
 
-Endereço público confirmado: https://prospectafluxus-664809259352.us-west1.run.app
+## Lembretes
+
+- [x] Criar apenas um Cloud Scheduler: `fluxus-reminders-hourly`, cron `0 * * * *`, fuso `America/Sao_Paulo`, destino `/api/cron/dispatch-reminders` no Google.
+- [x] Respeitar o horário e a habilitação de cada janela cadastrada por usuário, em vez de quatro horários globais fixos.
+- [x] Aplicar somente a migration operacional `cloud_run_reminder_dispatch_ledger`, com RLS e unicidade por usuário/data local/janela. Não houve migration de conteúdo de Persona.
+- [x] Conferir dry-run HTTP e execução pelo próprio Scheduler com HTTP 200, sem enviar notificações ou gravar claims de teste.
+- [x] Habilitar o corpo real `{"dryRun":false}` somente depois do teste aprovado. Scheduler está `ENABLED`, com retries desativados para evitar reenvio automático ambíguo.
+- [x] Usar links absolutos para o Google nas notificações. A entrega depende de canal disponível e da permissão Web Push do usuário.
+
+A reserva é at-most-once por usuário/data/janela: falhas ou entrega ambígua não liberam automaticamente nova tentativa. O ledger registra resultado sem guardar nomes de leads ou credenciais. Não foi feito um teste de envio real a usuários.
+
+## Site da Innoflow
+
+- [x] Confirmar recuperação de `www.innoflow.com.br`: principais imagens, Blog e Colaborador responderam HTTP 200.
+- [x] Confirmar que Área do Cliente e Persona, no desktop e mobile, apontam para o Google; Colaborador continua em `/colaborador`.
+- [x] Respeitar a publicação Netlify reservada à usuária. Não fizemos rollback nem upload de uma nova publicação Netlify.
+
+O deploy incompleto das 19h16 continha somente um arquivo no inventário do Netlify; a recuperação posterior foi confirmada. Não foi comprovado por que o upload da pasta informado pela usuária resultou naquele inventário. O favicon ainda retornava 404 na verificação de recuperação; as páginas e imagens principais não apresentavam essa falha.
+
+## Integrações preservadas e pendências reais
+
+- [x] Validar por leitura o bucket S3 e o prefixo de áudio do Supabase, sem upload, exclusão ou alteração de mídia. Não existem modelos com `audioKey` nem objetos no prefixo `audio/` para testar reprodução de áudio já cadastrado.
+- [x] Manter WaBlast desabilitado e sua fila pausada, exatamente como na origem. Nenhum WhatsApp foi enviado; callback externo do provedor não foi reconfigurado nem declarado como validado.
+- [ ] Validar login real da administradora e dos clientes no domínio Google. Cookies do Railway não são compartilhados; o navegador ainda apresentava a tela de login.
+- [ ] Resolver as duas conexões Trello existentes: a chave configurada não decifra as credenciais armazenadas (AES-GCM rejeitou a autenticação). Não foi gerada nova chave de integração nem alterado o cadastro dessas conexões. É necessário recuperar a chave original correta ou reconectar cada integração pelo mecanismo protegido, com a identidade adequada. Não é possível atribuir esse problema exclusivamente à migração sem validar a origem.
+- [ ] Validar reprodução/upload de áudio pela interface quando houver mídia e sessão real. Bucket acessível não substitui essa verificação.
+- [ ] Reativar permissões de notificações no novo domínio conforme necessário. As inscrições antigas foram preservadas, mas não foi simulada aceitação de permissão pelo usuário.
+- [ ] Reconfigurar e validar o webhook WaBlast no provedor antes de uma futura habilitação de envios. Não ativar a fila automaticamente durante a migração.
+- [ ] Encerrar Railway apenas depois da validação real das integrações e autorização específica. O serviço antigo e o faturamento/subscrição permanecem intactos.
+
+Domínio próprio para Prospecta/Persona é uma decisão opcional posterior; o site da Innoflow já usa seus links funcionais do Google. Não é necessário migrar o site institucional ou a área Colaborador para concluir a hospedagem da aplicação.

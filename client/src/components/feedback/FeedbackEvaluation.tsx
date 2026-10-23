@@ -397,19 +397,6 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
               />
             ))}
           </div>
-          {data.canTransition && next ? (
-            <TransitionActions
-              status={status}
-              next={next}
-              complete={complete}
-              releaseConfirm={releaseConfirm}
-              setReleaseConfirm={setReleaseConfirm}
-              ackConfirm={ackConfirm}
-              setAckConfirm={setAckConfirm}
-              onTransition={nextStatus => void changeStatus(nextStatus)}
-              pending={transition.isPending}
-            />
-          ) : null}
         </TabsContent>
         <TabsContent value="preview" className="space-y-5">
           <CollaboratorPreview
@@ -426,6 +413,19 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
           />
         </TabsContent>
       </Tabs>
+      {data.canTransition && data.cycle.status === "active" && next ? (
+        <TransitionActions
+          status={status}
+          next={next}
+          complete={complete}
+          releaseConfirm={releaseConfirm}
+          setReleaseConfirm={setReleaseConfirm}
+          ackConfirm={ackConfirm}
+          setAckConfirm={setAckConfirm}
+          onTransition={nextStatus => void changeStatus(nextStatus)}
+          pending={transition.isPending}
+        />
+      ) : null}
     </div>
   );
 }

@@ -5,7 +5,7 @@
 - [x] Colaborador consegue visualizar e confirmar a declaração de ciência na própria devolutiva liberada, sem precisar acessar a aba Editor EEC, que continua bloqueada para ele.
 - [x] A ação permanece condicionada a `canTransition`, ciclo ativo, confirmação explícita, revisão atual e autorização do servidor. Ler a página não registra ciência; gestores não registram ciência em nome do participante.
 - [x] Avaliadores mantêm suas ações de concluir, registrar devolutiva, liberar e encerrar. Nenhuma nota, EEC, acesso, participante ou estado real foi alterado nos testes.
-- [ ] Publicar pelo workflow Google já autorizado e confirmar a versão servida.
+- [x] Publicar pelo workflow Google já autorizado e confirmar a versão servida: PR #37, execução 39880759901 concluída com sucesso, revisão `prospectafluxus-00004-74q`, commit `6035aa7938bdf2916fd00dad5cbceab7d0d9b846`; hash do módulo público idêntico ao build local corrigido.
 
 Defeito confirmado em 22/10/2026: `TransitionActions` estava dentro do `TabsContent value="editor"`, inacessível ao participante que inicia na aba preview com o editor desabilitado. Solução mínima: posicionar as ações fora das abas, mantendo a API existente e a condição adicional de ciclo ativo.
 

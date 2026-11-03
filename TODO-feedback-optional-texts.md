@@ -7,8 +7,12 @@ Solicitação da usuária em 03/11/2026: retirar a obrigatoriedade de Evidência
 - [x] Indicar os textos como opcionais no editor e substituir mensagens antigas de obrigatoriedade.
 - [x] Preservar competências do snapshot, limites de texto, revisão, escopo, ciclo ativo, motivo da correção e liberação/ciência explícitas; sem alterações nos dados preenchidos.
 - [x] Conferir regressões locais: TypeScript aprovado, 262 testes aprovados e 2 testes Gemini ignorados conforme a configuração; build de produção aprovado.
-- [ ] Confirmar a publicação automática e o módulo atualizado no endereço Google antes de afirmar disponibilidade em produção.
+- [x] Confirmar a publicação automática e o módulo atualizado no endereço Google antes de afirmar disponibilidade em produção.
+
+## Publicação confirmada — 03/11/2026
+
+PR #38 integrado; commit de produção b7ca46f3c27f37c2ba50d0f7cf4909173c7fc92e. GitHub Actions 41660332733 terminou com sucesso, incluindo testes, smoke público e proveniência. Google Cloud Run serve a revisão prospectafluxus-00005-z49. O módulo público FeedbackPages-DkAvZAUQ.js contém os rótulos opcionais e corresponde pelo SHA-256 ao build local validado; a página referencia esse módulo. Endpoint /api/health retornou HTTP 200.
 
 Foram reproduzidos dez testes falhando antes da alteração e posteriormente aprovados, incluindo texto vazio, textos omitidos, nota zero, nota ausente e indicação visual dos campos opcionais. Os testes de integração com banco real não foram executados; o fixture de rejeição por notas ausentes continua correto e teve apenas o rótulo atualizado.
 
-Diagnósticos: Webdev não possui projeto vinculado nesta tarefa; utilizar a checagem TypeScript e o Vitest do repositório externo existente, sem reinicializar infraestrutura. Nenhuma nota, evidência, avaliação ou permissão real foi alterada para validar essa mudança.
+Diagnósticos: Webdev não possui projeto vinculado nesta tarefa; utilizar a checagem TypeScript e o Vitest do repositório externo existente, sem reinicializar infraestrutura. Nenhuma nota, evidência, avaliação ou permissão real foi alterada para validar essa mudança. Não atualizar o navegador da usuária antes de ela salvar o rascunho.

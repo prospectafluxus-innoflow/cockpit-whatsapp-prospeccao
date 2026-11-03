@@ -104,3 +104,30 @@ describe("ciência na devolutiva do colaborador", () => {
     expect(render()).not.toContain("Avançar etapa");
   });
 });
+
+describe("textos opcionais no editor EEC", () => {
+  it("identifica os textos como opcionais e mantém a exigência das notas", () => {
+    mocks.detail.feedback = {
+      id: 1,
+      status: "draft",
+      revision: 0,
+      items: [],
+      participantComment: null,
+    };
+    mocks.detail.cycle = {
+      ...(mocks.detail.cycle as Record<string, unknown>),
+      competencySnapshot: [
+        { id: "quality", name: "Qualidade", definition: "Entregas adequadas" },
+      ],
+    };
+    mocks.detail.isParticipant = false;
+    mocks.detail.canEdit = true;
+    const markup = render();
+    expect(markup).toContain("Evidência observável (opcional)");
+    expect(markup).toContain("Efeito verificável (opcional)");
+    expect(markup).toContain("Conselho e apoio (opcional)");
+    expect(markup).toContain("Nota de 0 a 6 (obrigatória)");
+    expect(markup).toContain("Faltam notas para concluir");
+    expect(markup).not.toContain("aceita os quatro campos EEC");
+  });
+});

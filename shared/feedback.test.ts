@@ -9,6 +9,7 @@ import {
   classifyFeedback,
   calculateFeedback,
   validateFeedbackItems,
+  feedbackItemSchema,
   consolidateFeedback,
   isFeedbackVisibleToParticipant,
   FEEDBACK_ACKNOWLEDGEMENT,
@@ -151,10 +152,48 @@ describe("EEC e liberação", () => {
       validateFeedbackItems(items().slice(0, 9), snapshot, true)
     ).toThrow());
   it.each(["evidence", "effect", "advice"] as const)(
-    "exige %s inclusive em notas positivas",
+    "permite %s vazio inclusive em notas positivas",
     field => {
       const list = items(6);
       list[0]![field] = " ";
+      expect(validateFeedbackItems(list, snapshot, true)[0]![field]).toBe("");
+    }
+  );
+  it.each([0, 3, 5, 6])(
+    "conclui com nota %i e todos os textos opcionais vazios",
+    score => {
+      const list = items(score).map(item => ({
+        ...item,
+        evidence: "",
+        effect: "",
+        advice: "",
+      }));
+      expect(validateFeedbackItems(list, snapshot, true)).toEqual(list);
+      expect(calculateFeedback(list, snapshot.length).complete).toBe(true);
+    }
+  );
+  it("normaliza textos omitidos na API sem inventar conteúdo", () => {
+    expect(
+      feedbackItemSchema.parse({ competencyId: "quality", score: 5 })
+    ).toEqual({
+      competencyId: "quality",
+      score: 5,
+      evidence: "",
+      effect: "",
+      advice: "",
+      notes: "",
+    });
+  });
+  it("continua exigindo nota para todas as competências", () => {
+    expect(() => validateFeedbackItems(items(null), snapshot, true)).toThrow(
+      "Preencha a nota de todas as competências para concluir."
+    );
+  });
+  it.each(["evidence", "effect", "advice"] as const)(
+    "mantém o limite de 5000 caracteres de %s",
+    field => {
+      const list = items();
+      list[0]![field] = "a".repeat(5001);
       expect(() => validateFeedbackItems(list, snapshot, true)).toThrow();
     }
   );

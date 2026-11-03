@@ -128,13 +128,7 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
     ["completed", "debriefed", "released", "acknowledged"].includes(status);
   const complete =
     items.length === data.cycle.competencySnapshot.length &&
-    items.every(
-      item =>
-        item.score !== null &&
-        item.evidence.trim() &&
-        item.effect.trim() &&
-        item.advice.trim()
-    );
+    items.every(item => item.score !== null);
   const updateItem = (competencyId: string, patch: Partial<FeedbackItem>) => {
     dirtyDraft.current = true;
     setRevisionConflict(false);
@@ -186,7 +180,7 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
     }
     if (nextStatus === "completed" && !complete) {
       toast.error(
-        "Preencha nota, evidência, efeito e conselho para todas as competências."
+        "Preencha a nota de todas as competências. Os textos EEC são opcionais."
       );
       return;
     }
@@ -221,7 +215,7 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
   const submitCorrection = async () => {
     if (!correctionReason.trim() || !complete) {
       toast.error(
-        "Informe o motivo e preencha todos os itens antes de corrigir."
+        "Informe o motivo e a nota de todas as competências antes de corrigir."
       );
       return;
     }
@@ -354,8 +348,9 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
               <div>
                 <p className="font-medium">Rascunho da avaliação</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Salve explicitamente para continuar depois. A conclusão só
-                  aceita os quatro campos EEC de todas as competências.
+                  Salve explicitamente para continuar depois. Para concluir,
+                  informe a nota de cada competência. Evidência, efeito,
+                  conselho e anotações são opcionais.
                 </p>
               </div>
               <Button
@@ -521,7 +516,7 @@ function EvaluationItemCard({
             <CardDescription>{competency.definition}</CardDescription>
           </div>
           <div className="min-w-44">
-            <Label className="text-xs">Nota de 0 a 6</Label>
+            <Label className="text-xs">Nota de 0 a 6 (obrigatória)</Label>
             <Select
               disabled={!editable}
               value={item.score === null ? "null" : String(item.score)}
@@ -552,7 +547,7 @@ function EvaluationItemCard({
       <CardContent className="grid gap-4 md:grid-cols-3">
         <GuidedTextarea
           id={`${competency.id}-evidence`}
-          label="Evidência observável"
+          label="Evidência observável (opcional)"
           guidance={EEC_GUIDANCE.evidence}
           value={item.evidence}
           disabled={!editable}
@@ -560,7 +555,7 @@ function EvaluationItemCard({
         />
         <GuidedTextarea
           id={`${competency.id}-effect`}
-          label="Efeito verificável"
+          label="Efeito verificável (opcional)"
           guidance={EEC_GUIDANCE.effect}
           value={item.effect}
           disabled={!editable}
@@ -568,7 +563,7 @@ function EvaluationItemCard({
         />
         <GuidedTextarea
           id={`${competency.id}-advice`}
-          label="Conselho e apoio"
+          label="Conselho e apoio (opcional)"
           guidance={EEC_GUIDANCE.advice}
           value={item.advice}
           disabled={!editable}
@@ -686,7 +681,7 @@ function TransitionActions({
         </div>
         {next === "completed" && !complete ? (
           <p className="text-sm text-amber-700 dark:text-amber-300">
-            Ainda faltam campos obrigatórios para concluir.
+            Faltam notas para concluir. Os campos de texto são opcionais.
           </p>
         ) : null}
         {needsRelease ? (
@@ -735,7 +730,7 @@ function CollaboratorPreview({
           </CardTitle>
           <CardDescription>
             O avaliador registrará uma nova conversa antes de liberar novamente
-            as notas e os quatro campos EEC.
+            as notas e os textos EEC preenchidos.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -818,7 +813,7 @@ function PreviewBlock({ title, value }: { title: string; value: string }) {
         {title}
       </p>
       <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-        {value || "Ainda não informado."}
+        {value || "Não informado."}
       </p>
     </div>
   );

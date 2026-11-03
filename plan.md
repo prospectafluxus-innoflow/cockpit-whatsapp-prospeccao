@@ -26,7 +26,7 @@ Interação guiada e progressiva: configurar, selecionar, revisar e ativar. Dife
 
 ## Escolhas operacionais
 
-Para a primeira implementação, rascunho pode ser incompleto e conclusão exige nota+Evidência+Efeito+Conselho em todas competências. Classificação automática por faixas: 0–3 desenvolvimento, 4–5 construtiva/satisfatória, 6 positiva/surpreendente. São os padrões propostos na conversa; podem ser ajustados na revisão metodológica antes da produção sem conceder criação livre aos clientes. Notas ausentes não viram zero.
+Na primeira implementação, conclusão exigia nota+Evidência+Efeito+Conselho em todas competências. Em 03/11/2026, a usuária solicitou retirar a obrigatoriedade dos textos: a conclusão e a correção agora exigem somente nota em todas as competências; Evidência, Efeito, Conselho e anotações são opcionais. Textos omitidos na API são normalizados para string vazia e os limites de tamanho continuam iguais. Rascunho pode permanecer incompleto. Classificação automática por faixas: 0–3 desenvolvimento, 4–5 construtiva/satisfatória, 6 positiva/surpreendente. Não alterar o método de cálculo, catálogo ou comparabilidade dos ciclos; notas ausentes não viram zero. Segurança, ciclo ativo, revisão esperada, motivo da correção e confirmações de liberação/ciência permanecem obrigatórios. Contrato e registro em TODO-feedback-optional-texts.md.
 
 Consolidação conta ciclos concluídos, exclui cancelados e sinaliza incompletude. Não somar scores Persona ao Feedback. Competências ou versões diferentes tornam totais não diretamente comparáveis. Alteração pós-liberação exige motivo, trilha de revisão e nova devolutiva/liberação/ciência. Retenção e políticas jurídicas serão revisadas antes de habilitar em clientes reais.
 

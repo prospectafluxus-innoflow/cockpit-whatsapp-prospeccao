@@ -281,7 +281,7 @@ try {
       revision: savedBlank.revision,
       status: "completed",
     }),
-    "conclusão exige notas e EEC"
+    "conclusão exige notas"
   );
   await denied(
     managerApi.saveDraft({ id, revision: 0, items: blankItems }),

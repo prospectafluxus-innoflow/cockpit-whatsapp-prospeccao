@@ -137,9 +137,9 @@ export function competencySnapshot(
 export const feedbackItemSchema = z.object({
   competencyId: z.string(),
   score: z.number().int().min(0).max(6).nullable(),
-  evidence: z.string().trim().max(5000),
-  effect: z.string().trim().max(5000),
-  advice: z.string().trim().max(5000),
+  evidence: z.string().trim().max(5000).default(""),
+  effect: z.string().trim().max(5000).default(""),
+  advice: z.string().trim().max(5000).default(""),
   notes: z.string().trim().max(5000).default(""),
 });
 export type FeedbackItem = z.infer<typeof feedbackItemSchema>;
@@ -196,14 +196,9 @@ export function validateFeedbackItems(
   }
   if (
     complete &&
-    (parsed.length !== snapshot.length ||
-      parsed.some(
-        i => i.score === null || !i.evidence || !i.effect || !i.advice
-      ))
+    (parsed.length !== snapshot.length || parsed.some(i => i.score === null))
   ) {
-    throw new Error(
-      "Preencha nota, evidência, efeito e conselho de todas as competências para concluir."
-    );
+    throw new Error("Preencha a nota de todas as competências para concluir.");
   }
   return parsed;
 }

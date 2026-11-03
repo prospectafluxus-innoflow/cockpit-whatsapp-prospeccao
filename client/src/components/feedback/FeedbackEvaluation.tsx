@@ -1,5 +1,4 @@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,11 +27,9 @@ import {
 import {
   EEC_GUIDANCE,
   FEEDBACK_ACKNOWLEDGEMENT,
-  FEEDBACK_COLLABORATOR_LABELS,
   FEEDBACK_PURPOSE,
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_TRANSITIONS,
-  classifyFeedback,
   isFeedbackVisibleToParticipant,
   type FeedbackStatus,
 } from "@shared/feedback";
@@ -40,11 +37,13 @@ import {
   ArrowLeft,
   ArrowRight,
   FilePenLine,
+  FileText,
   LockKeyhole,
   MessageSquareText,
   Save,
   ShieldCheck,
 } from "lucide-react";
+import { FeedbackReportDocument } from "./FeedbackReport";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -252,6 +251,15 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
       );
     }
   };
+  const openReport = () => {
+    if (dirtyDraft.current) {
+      toast.error(
+        "Salve o rascunho ou a correção antes de abrir o relatório. Ele usa a última revisão salva."
+      );
+      return;
+    }
+    navigate(`/fluxus/feedback/avaliacao/${feedbackId}/relatorio`);
+  };
   const next = FEEDBACK_TRANSITIONS[status][0];
   const participantView = data.isParticipant;
   const participantAwaitingRelease =
@@ -276,6 +284,11 @@ export function FeedbackEvaluationPage({ params }: { params: { id: string } }) {
         description={FEEDBACK_PURPOSE}
       >
         <StatusBadge status={status} />
+        {!participantAwaitingRelease ? (
+          <Button variant="outline" onClick={openReport} className="gap-2">
+            <FileText className="h-4 w-4" /> Ver relatório / PDF
+          </Button>
+        ) : null}
       </PageHeader>
       {participantAwaitingRelease ? (
         <Alert className="border-primary/20 bg-primary/5">
@@ -723,100 +736,17 @@ function CollaboratorPreview({
 }) {
   if (restricted) {
     return (
-      <Card className="border-primary/20 bg-primary/5">
-        <CardHeader>
-          <CardTitle className="text-xl">
-            A devolutiva está sendo revisada
-          </CardTitle>
-          <CardDescription>
-            O avaliador registrará uma nova conversa antes de liberar novamente
-            as notas e os textos EEC preenchidos.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <Alert>
+        <LockKeyhole className="h-4 w-4" />
+        <AlertTitle>A devolutiva está sendo revisada</AlertTitle>
+        <AlertDescription>
+          O avaliador registrará uma nova conversa antes de liberar novamente as
+          notas e os textos EEC preenchidos.
+        </AlertDescription>
+      </Alert>
     );
   }
-  return (
-    <Card className="border-border/60">
-      <CardHeader>
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <MessageSquareText className="h-5 w-5" />
-          </div>
-          <div>
-            <CardTitle className="text-xl">
-              Uma devolutiva para apoiar seu desenvolvimento
-            </CardTitle>
-            <CardDescription>
-              {data.cycle.name} · {formatDate(data.cycle.startsOn)} a{" "}
-              {formatDate(data.cycle.endsOn)}
-            </CardDescription>
-          </div>
-        </div>
-        <p className="pt-3 text-sm leading-relaxed text-muted-foreground">
-          {FEEDBACK_PURPOSE}
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {data.cycle.competencySnapshot.map(competency => {
-          const item =
-            items.find(current => current.competencyId === competency.id) ??
-            emptyItem(competency.id);
-          const classification =
-            item.score === null ? null : classifyFeedback(item.score);
-          return (
-            <div
-              key={competency.id}
-              className="rounded-2xl border border-border/60 p-5"
-            >
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="font-semibold">
-                    {classification
-                      ? FEEDBACK_COLLABORATOR_LABELS[classification]
-                      : "Competência em avaliação"}
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {competency.name} · {competency.definition}
-                  </p>
-                </div>
-                <Badge variant="secondary">{scoreLabel(item.score)}</Badge>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-3">
-                <PreviewBlock
-                  title="O que foi observado"
-                  value={item.evidence}
-                />
-                <PreviewBlock title="Qual foi o efeito" value={item.effect} />
-                <PreviewBlock
-                  title="Próximo passo e apoio"
-                  value={item.advice}
-                />
-              </div>
-              {item.notes ? (
-                <div className="mt-4 rounded-xl bg-muted/40 p-3 text-sm">
-                  <strong>Anotação adicional:</strong> {item.notes}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PreviewBlock({ title, value }: { title: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
-        {value || "Não informado."}
-      </p>
-    </div>
-  );
+  return <FeedbackReportDocument data={data} items={items} />;
 }
 
 function ParticipantComment({

@@ -50,6 +50,11 @@ const FeedbackEvaluationPage = lazy(() =>
     default: module.FeedbackEvaluationPage,
   }))
 );
+const FeedbackReportPage = lazy(() =>
+  import("./pages/FeedbackPages").then(module => ({
+    default: module.FeedbackReportPage,
+  }))
+);
 const FeedbackHistoryPage = lazy(() =>
   import("./pages/FeedbackPages").then(module => ({
     default: module.FeedbackHistoryPage,
@@ -93,6 +98,13 @@ function Router() {
         {params => (
           <FluxusLayout>
             <FeedbackCyclePage params={params} />
+          </FluxusLayout>
+        )}
+      </Route>
+      <Route path="/fluxus/feedback/avaliacao/:id/relatorio">
+        {params => (
+          <FluxusLayout>
+            <FeedbackReportPage params={params} />
           </FluxusLayout>
         )}
       </Route>

@@ -8,7 +8,7 @@ Pedido de 03/11/2026: reunir o resultado do Feedback em um relatório para mostr
 - [x] Reusar o GET autorizado e a fórmula compartilhada; zero é nota real, ausência não vira zero, parcial/rascunho e não liberado são identificados. Evidência, Efeito, Conselho e anotações continuam opcionais.
 - [x] Colaborador só acessa sua versão liberada; correção aguardando liberação não mostra conteúdo, totais nem impressão. Não criar endpoint público, exportar todas as pessoas, abrir papéis ou alterar liberação/ciência.
 - [x] Conferir componentes, cálculos e impressão com dados sintéticos: TypeScript, 273 testes aprovados / 2 Gemini ignorados e build de produção aprovados. PDFs sintéticos de 5 e 6 páginas em A4 preservaram totais, textos e a última competência, sem navegação/controles; conferência visual de resumo e texto longo aprovada.
-- [ ] Publicar no Google e confirmar a revisão e os assets servidos antes de declarar produção.
+- [x] Publicar no Google e confirmar a revisão e os assets servidos antes de declarar produção. Confirmado em 11/11/2026: PR #39 integrado, deploy GitHub Actions 43092581481 concluído com sucesso, revisão `prospectafluxus-00006-rx8`, commit `cc1e48f9c7fe20d9fa0b88776a1cda59b004ac45`. Os hashes dos módulos JS/CSS públicos coincidem com os artefatos locais testados e estão referenciados pelo bundle/HTML atual. Rota retorna o shell HTTP 200; consulta de feedback sem login retorna HTTP 401.
 
 ## Implementação
 

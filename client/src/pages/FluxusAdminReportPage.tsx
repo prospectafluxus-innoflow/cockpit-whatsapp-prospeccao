@@ -3,7 +3,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FluxusReportTabs } from "@/components/fluxus/FluxusReportTabs";
 import { FluxusDebriefGuide } from "@/components/fluxus/FluxusDebriefGuide";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Download } from "lucide-react";
+import { isFluxusV2Result } from "@shared/fluxusVersioning";
+import { ArrowLeft, Download, FileText } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function FluxusAdminReportPage({
@@ -50,6 +51,19 @@ export default function FluxusAdminReportPage({
           >
             <ArrowLeft className="h-4 w-4" /> Voltar
           </Button>
+          {isFluxusV2Result(data.assessment.result!) ? (
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() =>
+                navigate(
+                  `${isPlatformAdminRoute ? `/fluxus/admin/empresa/${data.assessment.companyId}/executiva` : "/fluxus/executiva"}?assessmentId=${assessmentId}`
+                )
+              }
+            >
+              <FileText className="h-4 w-4" /> Visão executiva
+            </Button>
+          ) : null}
           <Button
             variant="outline"
             onClick={() => window.print()}

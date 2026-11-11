@@ -718,3 +718,6 @@ export const reminderDispatchLedger = pgTable(
 
 export type ReminderDispatchLedger = typeof reminderDispatchLedger.$inferSelect;
 export type InsertReminderDispatchLedger = typeof reminderDispatchLedger.$inferInsert;
+
+// Relatórios de leitura executiva da análise comportamental (sem alterar respostas).
+export { fluxusExecutiveReports } from "./fluxusExecutiveSchema";

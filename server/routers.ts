@@ -36,6 +36,7 @@ import { invokeLLM } from "./_core/gemini";
 import { authOwnRouter } from "./routers/authOwn";
 import { fluxusRouter } from "./routers/fluxus";
 import { feedbackRouter } from "./routers/feedback";
+import { fluxusExecutiveRouter } from "./routers/fluxusExecutive";
 import { storagePut } from "./storage";
 import {
   getVapidPublicKey,
@@ -186,6 +187,7 @@ export const appRouter = router({
   authOwn: authOwnRouter,
   fluxus: fluxusRouter,
   feedback: feedbackRouter,
+  fluxusExecutive: fluxusExecutiveRouter,
   auth: router({
     me: publicProcedure.query(opts => {
       const user = opts.ctx.user;

@@ -261,6 +261,28 @@ export default function FluxusCompanyPage({
           </div>
         </section>
 
+        <section className="flex flex-col gap-3 rounded-2xl border border-orange-500/30 bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold">
+              Visão executiva · Perfil comportamental
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Relatório individual ou da equipe, com linguagem simples, gráficos
+              e complementos da consultoria. Montado dentro do Persona, sem
+              importar apresentações.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="shrink-0 gap-2"
+            onClick={() =>
+              navigate(`/fluxus/admin/empresa/${companyId}/executiva`)
+            }
+          >
+            <Eye className="h-4 w-4" /> Abrir visão executiva
+          </Button>
+        </section>
+
         <section className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Feedback de desenvolvimento</h2>
@@ -327,8 +349,9 @@ export default function FluxusCompanyPage({
                   Visão consolidada da empresa
                 </CardTitle>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Médias exibidas somente a partir de três avaliações
-                  concluídas.
+                  Médias exibidas somente a partir de{" "}
+                  {Math.max(5, company.minimumAggregateSize)} avaliações Beta 2
+                  comparáveis concluídas.
                 </p>
               </div>
               {canAggregate ? (
@@ -402,7 +425,8 @@ export default function FluxusCompanyPage({
                 <LockKeyhole className="h-9 w-9 text-muted-foreground" />
                 <h3 className="mt-4 font-medium">Consolidado protegido</h3>
                 <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-                  São necessárias três avaliações concluídas para reduzir a
+                  São necessárias {Math.max(5, company.minimumAggregateSize)}{" "}
+                  avaliações Beta 2 comparáveis concluídas para reduzir a
                   identificação indireta de respostas individuais. Os relatórios
                   individuais autorizados continuam disponíveis abaixo.
                 </p>

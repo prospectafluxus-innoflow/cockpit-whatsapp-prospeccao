@@ -37,6 +37,7 @@ import { authOwnRouter } from "./routers/authOwn";
 import { fluxusRouter } from "./routers/fluxus";
 import { feedbackRouter } from "./routers/feedback";
 import { fluxusExecutiveRouter } from "./routers/fluxusExecutive";
+import { fluxusComplementaryRouter } from "./routers/fluxusComplementary";
 import { storagePut } from "./storage";
 import {
   getVapidPublicKey,
@@ -188,6 +189,7 @@ export const appRouter = router({
   fluxus: fluxusRouter,
   feedback: feedbackRouter,
   fluxusExecutive: fluxusExecutiveRouter,
+  fluxusComplementary: fluxusComplementaryRouter,
   auth: router({
     me: publicProcedure.query(opts => {
       const user = opts.ctx.user;

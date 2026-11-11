@@ -10,6 +10,7 @@ import { sendReminderHandler } from "../scheduleHandler";
 import { cronDispatchRemindersHandler, cronSendReminderHandler } from "../cronHandler";
 import { wablastWebhookHandler } from "../wablastWebhook";
 import { parseProductionPort, PRODUCTION_HOST } from "./productionPort";
+import { complementaryRequestLimits } from "../fluxusComplementaryLimits";
 
 async function startServer() {
   const app = express();
@@ -22,6 +23,7 @@ async function startServer() {
   // A assinatura Standard Webhooks exige os bytes exatos antes de JSON.parse.
   app.post("/api/webhooks/wablast", express.raw({ type: "application/json", limit: "1mb" }), wablastWebhookHandler);
   // Configure body parser with larger size limit for file uploads
+  app.use(complementaryRequestLimits());
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);

@@ -24,6 +24,9 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
+# Extração local e limitada de PDFs pessoais, sem envio a IA externa.
+RUN apk add --no-cache poppler-utils
+
 # Instalar pnpm para instalar apenas dependências de produção
 RUN npm install -g pnpm@10.4.1
 

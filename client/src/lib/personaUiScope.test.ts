@@ -4,6 +4,7 @@ import { isPersonaRoute } from "./personaUiScope";
 
 const css = readFileSync("client/src/index.css", "utf8")
   .split("/* Persona: seleção visível")[1]
+  .split("/* Feedback EEC:")[0]
   .replace(/^[\s\S]*?\*\//, "");
 
 describe("caixas laranja em todas as rotinas do Persona", () => {
@@ -19,6 +20,7 @@ describe("caixas laranja em todas as rotinas do Persona", () => {
     "/fluxus/feedback",
     "/fluxus/feedback/ciclo/4",
     "/fluxus/feedback/avaliacao/1",
+    "/fluxus/feedback/avaliacao/1/relatorio",
     "/fluxus/feedback/historico",
     "/fluxus?section=organization",
     "/fluxus/admin/empresa/1#papeis-de-acesso",

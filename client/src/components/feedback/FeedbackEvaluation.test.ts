@@ -1,7 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { FEEDBACK_ACKNOWLEDGEMENT } from "@shared/feedback";
+import {
+  FEEDBACK_ACKNOWLEDGEMENT,
+  FEEDBACK_COMPETENCIES,
+} from "@shared/feedback";
 
 const mocks = vi.hoisted(() => ({ detail: {} as Record<string, unknown> }));
 vi.mock("@/lib/feedbackApi", () => {
@@ -43,7 +46,16 @@ beforeEach(() => {
       id: 1,
       status: "released",
       revision: 1,
-      items: [],
+      items: [
+        {
+          competencyId: FEEDBACK_COMPETENCIES[0]!.id,
+          score: 5,
+          evidence: "Entrega registrada",
+          effect: "",
+          advice: "",
+          notes: "",
+        },
+      ],
       participantComment: null,
     },
     cycle: {
@@ -52,9 +64,11 @@ beforeEach(() => {
       status: "active",
       startsOn: "2026-10-01",
       endsOn: "2026-12-31",
-      competencySnapshot: [],
+      competencySnapshot: FEEDBACK_COMPETENCIES.slice(0, 1),
+      methodVersion: "innoflow-eec-1.0",
     },
     participant: { id: 7, name: "Participante de teste" },
+    evaluator: { id: 8, name: "Avaliador de teste" },
     isParticipant: true,
     canEdit: false,
     canTransition: true,
@@ -74,6 +88,8 @@ describe("ciência na devolutiva do colaborador", () => {
     expect(markup).toContain("Avançar etapa");
     expect(markup).toMatch(/<button[^>]*disabled[^>]*>Avançar etapa/);
     expect(markup).not.toContain("Rascunho da avaliação");
+    expect(markup).toContain("Ver relatório / PDF");
+    expect(markup).toContain("Pontuação obtida");
   });
 
   it("não oferece transição sem autorização da resposta do servidor", () => {
@@ -94,6 +110,8 @@ describe("ciência na devolutiva do colaborador", () => {
     expect(markup).toContain("Uma nova devolutiva está sendo preparada");
     expect(markup).not.toContain(FEEDBACK_ACKNOWLEDGEMENT);
     expect(markup).not.toContain("Avançar etapa");
+    expect(markup).not.toContain("Ver relatório / PDF");
+    expect(markup).not.toContain("Pontuação obtida");
   });
 
   it("não oferece ciência em ciclo inativo mesmo com permissão obsoleta", () => {

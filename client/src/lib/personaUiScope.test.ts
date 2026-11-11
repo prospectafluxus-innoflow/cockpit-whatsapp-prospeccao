@@ -26,6 +26,8 @@ describe("caixas laranja em todas as rotinas do Persona", () => {
     "/fluxus/feedback/historico",
     "/fluxus?section=organization",
     "/fluxus/admin/empresa/1#papeis-de-acesso",
+    "/fluxus/complementares",
+    "/fluxus/admin/complementares",
   ])("ativa o escopo em %s", pathname => {
     expect(isPersonaRoute(pathname)).toBe(true);
   });

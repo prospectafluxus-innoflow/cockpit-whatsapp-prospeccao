@@ -1,0 +1,109 @@
+{
+  "routes": [
+    {
+      "path": "/login"
+    },
+    {
+      "path": "/register"
+    },
+    {
+      "path": "/forgot-password"
+    },
+    {
+      "path": "/reset-password"
+    },
+    {
+      "path": "/fluxus/login"
+    },
+    {
+      "path": "/fluxus/cadastro"
+    },
+    {
+      "path": "/fluxus/feedback/ciclo/:id"
+    },
+    {
+      "path": "/fluxus/feedback/avaliacao/:id/relatorio"
+    },
+    {
+      "path": "/fluxus/feedback/avaliacao/:id"
+    },
+    {
+      "path": "/fluxus/feedback/historico"
+    },
+    {
+      "path": "/fluxus/feedback"
+    },
+    {
+      "path": "/fluxus/complementares"
+    },
+    {
+      "path": "/fluxus/avaliacao"
+    },
+    {
+      "path": "/fluxus/historico"
+    },
+    {
+      "path": "/fluxus/equipe"
+    },
+    {
+      "path": "/fluxus/executiva"
+    },
+    {
+      "path": "/fluxus/relatorio/:id"
+    },
+    {
+      "path": "/fluxus/privacidade"
+    },
+    {
+      "path": "/fluxus/metodologia"
+    },
+    {
+      "path": "/fluxus"
+    },
+    {
+      "path": "/"
+    },
+    {
+      "path": "/cockpit"
+    },
+    {
+      "path": "/kanban"
+    },
+    {
+      "path": "/dashboard"
+    },
+    {
+      "path": "/schedule"
+    },
+    {
+      "path": "/innoflow"
+    },
+    {
+      "path": "/fluxus/admin/feedback/empresa/:id"
+    },
+    {
+      "path": "/fluxus/admin/complementares"
+    },
+    {
+      "path": "/fluxus/admin"
+    },
+    {
+      "path": "/fluxus/admin/empresa/:id/executiva"
+    },
+    {
+      "path": "/fluxus/admin/empresa/:id"
+    },
+    {
+      "path": "/fluxus/admin/relatorio/:id"
+    },
+    {
+      "path": "/admin"
+    },
+    {
+      "path": "/profile"
+    },
+    {
+      "path": "/404"
+    }
+  ]
+}

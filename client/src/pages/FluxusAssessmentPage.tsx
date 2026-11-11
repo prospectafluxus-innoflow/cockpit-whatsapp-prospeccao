@@ -44,9 +44,7 @@ export default function FluxusAssessmentPage() {
         getFluxusItemsForVersion(
           data.assessment.instrumentVersion,
           section
-        ).some(
-          item => data.assessment.answers?.[item.id] === undefined
-        )
+        ).some(item => data.assessment.answers?.[item.id] === undefined)
       );
       setStep(firstIncomplete >= 0 ? firstIncomplete : 0);
       setHydrated(true);
@@ -77,7 +75,7 @@ export default function FluxusAssessmentPage() {
     onSuccess: async () => {
       toast.success("Avaliação concluída. Seu relatório está pronto.");
       await utils.fluxus.me.invalidate();
-      navigate("/fluxus");
+      navigate("/fluxus?completed=1");
     },
     onError: mutationError =>
       toast.error(mutationError.message || "Não foi possível concluir."),
@@ -193,14 +191,12 @@ export default function FluxusAssessmentPage() {
             const done = getFluxusItemsForVersion(
               instrumentVersion,
               section
-            ).every(
-              item => answers[item.id] !== undefined
-            );
+            ).every(item => answers[item.id] !== undefined);
             const sectionLabel = getFluxusSectionMetaForVersion(
               instrumentVersion,
               section
-            ).title
-              .replace(/^Bloco\s+\d+[AB]?\s*·\s*/i, "")
+            )
+              .title.replace(/^Bloco\s+\d+[AB]?\s*·\s*/i, "")
               .replace(/^Etapa\s+\d+\s*·\s*/i, "");
             return (
               <button

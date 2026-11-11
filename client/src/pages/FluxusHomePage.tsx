@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FluxusReportTabs } from "@/components/fluxus/FluxusReportTabs";
+import FluxusComplementaryInvitation from "@/components/fluxus/FluxusComplementaryInvitation";
 import { trpc } from "@/lib/trpc";
 import { isFluxusV2Version } from "@shared/fluxusVersioning";
 import {
@@ -90,6 +91,7 @@ export default function FluxusHomePage() {
             <Download className="h-4 w-4" /> Salvar PDF do colaborador
           </Button>
         </div>
+        <FluxusComplementaryInvitation />
         <FluxusReportTabs
           result={assessment.result!}
           personName={user.name}
@@ -149,7 +151,8 @@ export default function FluxusHomePage() {
                     </h2>
                     <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
                       São {assessment.completion.total} afirmações em quatro
-                      etapas. O preenchimento leva aproximadamente {isBeta2 ? "15 a 20" : "12 a 18"}
+                      etapas. O preenchimento leva aproximadamente{" "}
+                      {isBeta2 ? "15 a 20" : "12 a 18"}
                       minutos.
                     </p>
                   </div>

@@ -51,6 +51,7 @@ const menuItems = [
 const adminMenuItems = [
   { icon: MessageCircleMore, label: "Área InnoFlow", path: "/innoflow" },
   { icon: BrainCircuit, label: "Fluxus Persona", path: "/fluxus/admin" },
+  { icon: BrainCircuit, label: "Complementares recebidos", path: "/fluxus/admin/complementares" },
   { icon: Shield, label: "Administração", path: "/admin" },
 ];
 

@@ -56,6 +56,7 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
   const navigation = [
     { path: "/fluxus", label: "Início", icon: Home },
     { path: "/fluxus/feedback", label: "Feedback", icon: MessageSquareText },
+    { path: "/fluxus/complementares", label: "Complementares", icon: BookOpenCheck },
     { path: "/fluxus/avaliacao", label: "Avaliação", icon: ClipboardCheck },
     { path: "/fluxus/historico", label: "Histórico", icon: History },
     ...(user.fluxusRole === "manager" || user.fluxusRole === "hr"

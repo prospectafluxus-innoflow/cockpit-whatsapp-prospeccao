@@ -721,3 +721,6 @@ export type InsertReminderDispatchLedger = typeof reminderDispatchLedger.$inferI
 
 // Relatórios de leitura executiva da análise comportamental (sem alterar respostas).
 export { fluxusExecutiveReports } from "./fluxusExecutiveSchema";
+
+// PDFs complementares opcionais: cofre cifrado e autorização específica.
+export { fluxusComplementaryReports } from "./fluxusComplementarySchema";

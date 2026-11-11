@@ -35,6 +35,7 @@ const FluxusMethodPage = lazy(() => import("./pages/FluxusMethodPage"));
 const FluxusAdminReportPage = lazy(
   () => import("./pages/FluxusAdminReportPage")
 );
+const FluxusExecutivePage = lazy(() => import("./pages/FluxusExecutivePage"));
 const FeedbackWorkspacePage = lazy(() =>
   import("./pages/FeedbackPages").then(module => ({
     default: module.default,
@@ -142,6 +143,11 @@ function Router() {
           <FluxusTeamDashboardPage />
         </FluxusLayout>
       </Route>
+      <Route path="/fluxus/executiva">
+        <FluxusLayout>
+          <FluxusExecutivePage />
+        </FluxusLayout>
+      </Route>
       <Route path="/fluxus/relatorio/:id">
         {params => (
           <FluxusLayout>
@@ -180,6 +186,10 @@ function Router() {
               component={FeedbackTechnicalAdminPage}
             />
             <Route path="/fluxus/admin" component={FluxusAdminPage} />
+            <Route
+              path="/fluxus/admin/empresa/:id/executiva"
+              component={FluxusExecutivePage}
+            />
             <Route
               path="/fluxus/admin/empresa/:id"
               component={FluxusCompanyPage}

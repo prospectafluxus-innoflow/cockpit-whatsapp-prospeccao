@@ -55,13 +55,24 @@ export default function FluxusTeamDashboardPage() {
             </p>
           </div>
         </div>
+        {canAccessIndividual && data.company?.beta2OrganizationAccessEnabled ? (
+          <Button
+            variant="outline"
+            className="mt-5 gap-2"
+            onClick={() => navigate("/fluxus/executiva")}
+          >
+            <Eye className="h-4 w-4" /> Visão executiva da equipe
+          </Button>
+        ) : null}
       </section>
 
       {!data.privacy.released || !data.summary ? (
         <Card className="border-amber-500/30">
           <CardContent className="flex min-h-72 flex-col items-center justify-center p-8 text-center">
             <LockKeyhole className="h-10 w-10 text-amber-500" />
-            <h2 className="mt-4 text-xl font-semibold">Dados agregados protegidos</h2>
+            <h2 className="mt-4 text-xl font-semibold">
+              Dados agregados protegidos
+            </h2>
             <p className="mt-2 max-w-lg text-sm text-muted-foreground">
               {data.privacy.explanation} O mínimo configurado é{" "}
               {data.privacy.minimumRespondents} avaliações concluídas.
@@ -71,7 +82,11 @@ export default function FluxusTeamDashboardPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <Metric icon={ShieldCheck} label="Privacidade" value="Agregado liberado" />
+            <Metric
+              icon={ShieldCheck}
+              label="Privacidade"
+              value="Agregado liberado"
+            />
             <Metric
               icon={BarChart3}
               label="Participação"
@@ -88,7 +103,9 @@ export default function FluxusTeamDashboardPage() {
               <CardTitle>Médias do grupo — Beta 2, escala de 1 a 7</CardTitle>
             </CardHeader>
             <p className="px-6 text-xs text-muted-foreground">
-              Instrumento {data.summary.aggregateInstrumentVersion} · fórmula {data.summary.aggregateFormulaVersion}. Resultados Beta 1 permanecem no histórico individual e não entram nestas médias.
+              Instrumento {data.summary.aggregateInstrumentVersion} · fórmula{" "}
+              {data.summary.aggregateFormulaVersion}. Resultados Beta 1
+              permanecem no histórico individual e não entram nestas médias.
             </p>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {FLUXUS_DIMENSIONS.map(dimension => {
@@ -133,10 +150,10 @@ export default function FluxusTeamDashboardPage() {
         <CardContent>
           {!canAccessIndividual ? (
             <div className="flex items-start gap-3 rounded-xl bg-muted/40 p-4 text-sm text-muted-foreground">
-              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />
-              A política de visibilidade da empresa não libera relatórios
-              individuais para o seu papel. O dashboard agregado permanece
-              disponível quando o limiar de privacidade é atendido.
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />A política de
+              visibilidade da empresa não libera relatórios individuais para o
+              seu papel. O dashboard agregado permanece disponível quando o
+              limiar de privacidade é atendido.
             </div>
           ) : directory.isLoading ? (
             <Skeleton className="h-28 rounded-xl" />
@@ -148,7 +165,9 @@ export default function FluxusTeamDashboardPage() {
                   className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-4"
                 >
                   <div>
-                    <p className="font-medium">{person.name || "Participante"}</p>
+                    <p className="font-medium">
+                      {person.name || "Participante"}
+                    </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {person.jobTitle || "Cargo não informado"}
                       {person.department ? ` · ${person.department}` : ""}
@@ -158,7 +177,9 @@ export default function FluxusTeamDashboardPage() {
                     size="sm"
                     variant="outline"
                     className="gap-2"
-                    onClick={() => navigate(`/fluxus/relatorio/${person.assessmentId}`)}
+                    onClick={() =>
+                      navigate(`/fluxus/relatorio/${person.assessmentId}`)
+                    }
                   >
                     <Eye className="h-4 w-4" /> Abrir
                   </Button>
@@ -190,7 +211,9 @@ function Metric({
       <CardContent className="flex items-center gap-4 p-5">
         <Icon className="h-6 w-6 text-primary" />
         <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
           <p className="mt-1 font-semibold">{value}</p>
         </div>
       </CardContent>
@@ -198,7 +221,15 @@ function Metric({
   );
 }
 
-function Bar({ label, value, color }: { label: string; value: number; color: string }) {
+function Bar({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
   return (
     <div>
       <div className="flex justify-between text-xs">

@@ -95,6 +95,45 @@ describe("validações puras da importação complementar", () => {
     ).toThrow();
   });
 
+  it("aceita PDFs até 5 MiB sem estourar a pilha do validador Base64", () => {
+    for (const size of [4 * 1024 * 1024, 5 * 1024 * 1024]) {
+      const pdf = Buffer.alloc(size, 32);
+      pdf.write("%PDF-1.7\n", 0, "ascii");
+      pdf.write("\n%%EOF\n", size - 7, "ascii");
+      expect(decodeCanonicalPdf(pdf.toString("base64")).equals(pdf)).toBe(true);
+    }
+  });
+
+  it("rejeita Base64 grande adulterado e excesso de bytes com BAD_REQUEST", () => {
+    const pdf = Buffer.alloc(5 * 1024 * 1024, 32);
+    pdf.write("%PDF-1.7\n", 0, "ascii");
+    pdf.write("\n%%EOF\n", pdf.length - 7, "ascii");
+    const canonical = pdf.toString("base64");
+    for (const value of [
+      canonical.slice(0, -4) + "????",
+      canonical.slice(0, 100) + "=" + canonical.slice(101),
+      canonical.slice(0, -1),
+      canonical.slice(0, -4) + "Cgq=",
+      Buffer.concat([pdf, Buffer.from(" ")]).toString("base64"),
+    ]) {
+      expect(() => decodeCanonicalPdf(value)).toThrowError(
+        expect.objectContaining({ code: "BAD_REQUEST" })
+      );
+    }
+  });
+
+  it("mantém padding e bits finais canônicos também para PDFs pequenos", () => {
+    const pdf = Buffer.from("%PDF-1.7\n%%EOF\n", "ascii");
+    for (let bytes = 0; bytes < 3; bytes++) {
+      const input = Buffer.concat([pdf, Buffer.alloc(bytes, 32)]);
+      const canonical = input.toString("base64");
+      expect(decodeCanonicalPdf(canonical).equals(input)).toBe(true);
+      expect(() => decodeCanonicalPdf(canonical + "====")).toThrowError(
+        expect.objectContaining({ code: "BAD_REQUEST" })
+      );
+    }
+  });
+
   it("separa QP, Sabotadores e Crítica sem inventar zero para nulos", () => {
     expect(
       normalizeComplementaryValues({ pq: 47, saboteurs: {}, critic: {} }, "pq")

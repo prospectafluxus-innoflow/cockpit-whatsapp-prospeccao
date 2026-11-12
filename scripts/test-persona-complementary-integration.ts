@@ -39,7 +39,8 @@ async function main() {
   function syntheticPdf(
     kind: "pq" | "saboteurs" = "pq",
     owner = "Pessoa Teste",
-    marker = ""
+    marker = "",
+    paddingBytes = 0
   ): Buffer {
     const title =
       kind === "pq"
@@ -75,6 +76,9 @@ async function main() {
       offsets.push(Buffer.byteLength(output));
       output += `${index + 1} 0 obj\n${object}\nendobj\n`;
     });
+    // Comentário fora do stream: aumenta o arquivo sem aumentar o texto
+    // extraído nem mudar as pontuações fictícias ou o número de páginas.
+    if (paddingBytes > 0) output += `%${" ".repeat(paddingBytes)}\n`;
     const xref = Buffer.byteLength(output);
     output += `xref\n0 6\n0000000000 65535 f \n${offsets
       .slice(1)
@@ -622,6 +626,61 @@ async function main() {
         } finally {
           await sql.unsafe(
             "ALTER TABLE fluxus_audit_logs DROP CONSTRAINT complementary_it_audit_fail"
+          );
+        }
+      }
+    );
+
+    await check(
+      "QP e Sabotadores maiores que 4 MiB completam o fluxo cifrado perto do teto de 5 MiB",
+      async () => {
+        for (const kind of ["pq", "saboteurs"] as const) {
+          const pdf = syntheticPdf(
+            kind,
+            "Pessoa Teste",
+            "large private pdf",
+            5 * 1024 * 1024 - 4096
+          );
+          assert.ok(pdf.length > 4 * 1024 * 1024);
+          assert.ok(pdf.length <= 5 * 1024 * 1024);
+          const imported = await service.uploadComplementaryReport({
+            ...baseInput,
+            kind,
+            pdfBase64: pdf.toString("base64"),
+            recipientUserIds: [],
+            consentText: complementaryConsentText([]),
+          });
+          assert.equal(imported.status, "pending");
+          const reopened = await service.getComplementaryDetail(
+            10,
+            imported.id
+          );
+          assert.equal(reopened.sourceName, "Pessoa Teste");
+          const confirmed = await service.confirmComplementaryReport({
+            userId: 10,
+            reportId: imported.id,
+            expectedRevision: imported.revision,
+            sourceDate: "2026-11-11",
+            values:
+              kind === "pq"
+                ? { pq: 47, saboteurs: {}, critic: {} }
+                : { pq: null, saboteurs, critic: {} },
+            identityConfirmed: true,
+          });
+          assert.equal(confirmed.status, "confirmed");
+          const downloaded = await service.downloadComplementaryReport(
+            10,
+            imported.id
+          );
+          assert.ok(Buffer.from(downloaded.base64, "base64").equals(pdf));
+          await service.revokeComplementaryReport({
+            userId: 10,
+            reportId: imported.id,
+            expectedRevision: confirmed.revision,
+          });
+          await denied(
+            () => service.downloadComplementaryReport(10, imported.id),
+            "NOT_FOUND"
           );
         }
       }

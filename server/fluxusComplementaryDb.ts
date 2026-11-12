@@ -373,13 +373,14 @@ export function decodeCanonicalPdf(pdfBase64: string): Buffer {
     typeof pdfBase64 !== "string" ||
     pdfBase64.length === 0 ||
     pdfBase64.length > MAX_BASE64_LENGTH ||
-    /\s/.test(pdfBase64) ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      pdfBase64
-    )
+    pdfBase64.length % 4 !== 0 ||
+    /[^A-Za-z0-9+/=]/.test(pdfBase64)
   ) {
     badRequest("O PDF deve ser Base64 canônico e válido.");
   }
+  // Grupos repetidos de Base64 estouram a pilha do V8 em PDFs de 4–5 MiB.
+  // A varredura de alfabeto acima é linear; o round-trip abaixo exige também
+  // padding correto e bits finais canônicos, sem depender de backtracking.
   const pdf = Buffer.from(pdfBase64, "base64");
   if (
     !pdf.length ||

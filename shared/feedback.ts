@@ -16,6 +16,9 @@ export const CYCLE_STATUSES = [
   "cancelled",
 ] as const;
 export type DevelopmentCycleStatus = (typeof CYCLE_STATUSES)[number];
+export function canAddFeedbackParticipants(status: DevelopmentCycleStatus) {
+  return status === "planned" || status === "active";
+}
 export const FEEDBACK_STATUSES = [
   "draft",
   "completed",

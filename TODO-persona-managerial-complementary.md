@@ -13,4 +13,6 @@ TypeScript e build de produção aprovados. Suíte completa: 388 testes aprovado
 
 Revisão independente identificou uma priorização automática por nota; removida. A impressão sintética confirmou a preservação dos textos e a omissão dos complementos pelo Ctrl+P direto. O layout usa colunas de impressão explícitas para não herdar o empilhamento móvel e mantém o Crítico junto dos resultados.
 
-Publicação ainda aguardando confirmação da revisão e dos assets servidos pelo Google.
+Publicação confirmada em 11/11/2026 pelo PR #42, commit `6ad6add8704739b95cb0e1d3cf3a46646ea4d18a`, pipeline `43136632934` concluído com sucesso e revisão Google `prospectafluxus-00009-b9q`. Os dois assets do módulo gerencial são idênticos aos compilados localmente; login público respondeu HTTP 200 e consulta gerencial sem login respondeu HTTP 401. Nenhum dado de colaborador foi consultado para essa conferência.
+
+A integração gerencial está publicada. Novos uploads continuam desativados (`FLUXUS_COMPLEMENTARY_ENABLED=false`): a liberação para colaboradores depende da validação do termo/governança e dos direitos de uso dos relatórios externos. O item de publicação/habilitação permanece aberto somente para essa pendência, não por falta de deploy.

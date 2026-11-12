@@ -123,6 +123,33 @@ async function main() {
       }
     );
     await check(
+      "tipo errado explica qual PDF enviar sem gravar uma importação",
+      async () => {
+        for (const kind of ["pq", "saboteurs"] as const) {
+          await assert.rejects(
+            () =>
+              service.uploadComplementaryReport({
+                ...baseInput,
+                kind,
+                pdfBase64: syntheticPdf(
+                  kind === "pq" ? "saboteurs" : "pq"
+                ).toString("base64"),
+              }),
+            (error: unknown) => {
+              const failure = error as { code?: string; message: string };
+              assert.equal(failure.code, "BAD_REQUEST");
+              assert.match(failure.message, /Tipo de relatório/);
+              assert.match(failure.message, /separadamente/);
+              return true;
+            }
+          );
+        }
+        const rows =
+          await sql`SELECT count(*)::int AS count FROM fluxus_complementary_reports LIMIT 1`;
+        assert.equal(rows[0].count, 0);
+      }
+    );
+    await check(
       "não importa sem consentimento, com nome diferente ou sem Persona concluído",
       async () => {
         await denied(

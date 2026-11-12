@@ -38,6 +38,7 @@ import {
 import {
   CYCLE_STATUS_LABELS,
   CYCLE_TRANSITIONS,
+  canAddFeedbackParticipants,
   type FeedbackStatus,
 } from "@shared/feedback";
 import type { DevelopmentCycle } from "../../../../drizzle/feedbackSchema";
@@ -223,6 +224,13 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
         description={`Período de ${formatDate(cycle.startsOn)} a ${formatDate(cycle.endsOn)} · template v${cycle.templateVersion} · ${cycle.methodVersion}`}
       >
         <CycleStatusBadge status={cycle.status} />
+        {data.canConfigure && canAddFeedbackParticipants(cycle.status) ? (
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <a href="#participantes-do-ciclo">
+              <UsersRound className="h-4 w-4" /> Adicionar participantes
+            </a>
+          </Button>
+        ) : null}
       </PageHeader>
       <Card className="border-border/60">
         <CardContent className="grid gap-4 p-6 sm:grid-cols-3">
@@ -271,7 +279,7 @@ export function FeedbackCyclePage({ params }: { params: { id: string } }) {
           </div>
         </CardContent>
       </Card>
-      {data.canConfigure && cycle.status === "planned" ? (
+      {data.canConfigure && canAddFeedbackParticipants(cycle.status) ? (
         <ParticipantPicker
           eligiblePeople={eligiblePeople}
           allPeople={data.people}
@@ -423,13 +431,14 @@ function ParticipantPicker({
   );
   const [changing, setChanging] = useState<Record<number, boolean>>({});
   return (
-    <Card className="border-border/60">
+    <Card id="participantes-do-ciclo" className="scroll-mt-24 border-border/60">
       <CardHeader>
         <CardTitle className="text-lg">Participantes e avaliadores</CardTitle>
         <CardDescription>
           O gestor direto já cadastrado é sugerido automaticamente. Use “Trocar
           avaliador” somente para uma exceção neste ciclo; isso não muda o
-          gestor da pessoa.
+          gestor da pessoa. Você pode adicionar pessoas enquanto o ciclo estiver
+          Planejado ou Ativo. As avaliações já existentes não são alteradas.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -752,7 +761,13 @@ function CycleParticipants({
           <EmptyState
             icon={UsersRound}
             title="Ainda sem participantes"
-            description="Adicione pessoas elegíveis ao ciclo planejado para começar."
+            description={
+              canConfigure && canAddFeedbackParticipants(cycleStatus)
+                ? "Use Adicionar participantes no topo ou a seção Participantes e avaliadores acima para começar."
+                : cycleStatus === "closed" || cycleStatus === "cancelled"
+                  ? "Este ciclo foi finalizado e não aceita novas inclusões."
+                  : "Não há avaliações atribuídas disponíveis para seu acesso neste ciclo."
+            }
           />
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border/60">

@@ -105,6 +105,10 @@ try {
   const participant = await createUser("colaborador", company!.id);
   const pending = await createUser("persona-pendente", company!.id);
   const outsider = await createUser("outro-tenant", otherCompany!.id);
+  const lateParticipant = await createUser(
+    "incluido-no-ciclo-ativo",
+    company!.id
+  );
   function caller(user: typeof participant) {
     const ctx: TrpcContext = {
       user,
@@ -134,6 +138,7 @@ try {
     [otherManager, "manager", true],
     [participant, "collaborator", false],
     [pending, "collaborator", false],
+    [lateParticipant, "collaborator", false],
   ] as const) {
     await adminApi.setMembership({
       companyId: company!.id,
@@ -163,6 +168,12 @@ try {
     userId: pending.id,
     departmentId: secondDepartment.id,
     managerUserId: otherManager.id,
+  });
+  await adminApi.assignEmployee({
+    companyId: company!.id,
+    userId: lateParticipant.id,
+    departmentId: department.id,
+    managerUserId: manager.id,
   });
   await denied(
     adminApi.updateDepartment({
@@ -201,18 +212,26 @@ try {
     answers,
     completedAt
   );
-  await db
-    .insert(fluxusAssessments)
-    .values({
-      userId: participant.id,
-      companyId: company!.id,
-      status: "completed",
-      instrumentVersion: result.instrumentVersion,
-      formulaVersion: result.formulaVersion,
-      answers,
-      result,
-      completedAt,
-    });
+  await db.insert(fluxusAssessments).values({
+    userId: participant.id,
+    companyId: company!.id,
+    status: "completed",
+    instrumentVersion: result.instrumentVersion,
+    formulaVersion: result.formulaVersion,
+    answers,
+    result,
+    completedAt,
+  });
+  await db.insert(fluxusAssessments).values({
+    userId: lateParticipant.id,
+    companyId: company!.id,
+    status: "completed",
+    instrumentVersion: result.instrumentVersion,
+    formulaVersion: result.formulaVersion,
+    answers,
+    result,
+    completedAt,
+  });
   const settings = FEEDBACK_COMPETENCIES.map(item => item.id);
   await adminApi.updateSettings({
     companyId: company!.id,
@@ -400,7 +419,79 @@ try {
     revision: renewedAck.revision,
     status: "closed",
   });
+  const preserved = await managerApi.get({ id });
+  await denied(
+    managerApi.addParticipants({
+      cycleId: cycle.id,
+      participants: [
+        { userId: lateParticipant.id, evaluatorUserId: manager.id },
+      ],
+    }),
+    "gestor não configura inclusões no ciclo ativo"
+  );
+  await denied(
+    adminApi.addParticipants({
+      cycleId: cycle.id,
+      participants: [
+        { userId: lateParticipant.id, evaluatorUserId: otherManager.id },
+      ],
+    }),
+    "inclusão no ciclo ativo mantém o escopo do avaliador"
+  );
+  const additions = await adminApi.addParticipants({
+    cycleId: cycle.id,
+    participants: [{ userId: lateParticipant.id, evaluatorUserId: manager.id }],
+  });
+  const lateId = additions.feedbacks[0]!.id;
+  assert.equal(additions.feedbacks[0]!.status, "draft");
+  assert.equal(additions.feedbacks[0]!.revision, 0);
+  const afterAddition = await managerApi.get({ id });
+  assert.deepEqual(afterAddition.feedback, preserved.feedback);
+  assert.deepEqual(afterAddition.cycle, preserved.cycle);
+  assert.equal(afterAddition.cycle.status, "active");
+  pass(
+    "inclusão ativa preserva período, ciclo, notas, revisão e avaliação anterior"
+  );
+  await denied(
+    adminApi.addParticipants({
+      cycleId: cycle.id,
+      participants: [
+        { userId: lateParticipant.id, evaluatorUserId: manager.id },
+      ],
+    }),
+    "inclusão ativa não duplica participantes"
+  );
+  let lateFeedback = await managerApi.saveDraft({
+    id: lateId,
+    revision: 0,
+    items: eec(5),
+  });
+  for (const status of ["completed", "debriefed", "released"] as const) {
+    lateFeedback = await managerApi.transition({
+      id: lateId,
+      revision: lateFeedback.revision,
+      status,
+    });
+  }
+  const lateAcknowledged = await caller(lateParticipant).transition({
+    id: lateId,
+    revision: lateFeedback.revision,
+    status: "acknowledged",
+  });
+  await managerApi.transition({
+    id: lateId,
+    revision: lateAcknowledged.revision,
+    status: "closed",
+  });
   await adminApi.transitionCycle({ id: cycle.id, status: "closed" });
+  await assert.rejects(
+    adminApi.addParticipants({
+      cycleId: cycle.id,
+      participants: [{ userId: pending.id }],
+    }),
+    /Ciclos encerrados ou cancelados não aceitam novas inclusões/
+  );
+  pass("ciclo encerrado bloqueia inclusão antes de qualquer gravação");
   pass(
     "ciclo completo: rascunho até encerramento com devolutiva e ciência explícitas"
   );
@@ -476,6 +567,14 @@ try {
   );
   pass("nova seleção não reescreve competências de ciclos anteriores");
   await adminApi.transitionCycle({ id: future.id, status: "cancelled" });
+  await assert.rejects(
+    adminApi.addParticipants({
+      cycleId: future.id,
+      participants: [{ userId: lateParticipant.id }],
+    }),
+    /Ciclos encerrados ou cancelados não aceitam novas inclusões/
+  );
+  pass("ciclo cancelado bloqueia inclusão antes de qualquer gravação");
   const plain = JSON.stringify(await managerApi.workspace());
   assert(
     !plain.includes("passwordHash") &&
@@ -484,7 +583,10 @@ try {
   );
   pass("workspace não retorna credenciais nem conteúdo Persona");
   const audit = await db
-    .select({ action: fluxusAuditLogs.action })
+    .select({
+      action: fluxusAuditLogs.action,
+      metadata: fluxusAuditLogs.metadata,
+    })
     .from(fluxusAuditLogs)
     .where(
       and(
@@ -497,6 +599,20 @@ try {
       audit.some(row => row.action === "feedback.transition.acknowledged")
   );
   pass("trilha de auditoria existe no fluxo integrado");
+  assert(
+    audit.some(row => {
+      const metadata = row.metadata as {
+        feedbackId?: number;
+        cycleStatus?: string;
+      };
+      return (
+        row.action === "feedback.participant.add" &&
+        metadata?.feedbackId === lateId &&
+        metadata?.cycleStatus === "active"
+      );
+    })
+  );
+  pass("auditoria identifica a inclusão aditiva no ciclo ativo");
   await writeFile(
     process.env.FEEDBACK_TEST_FIXTURE_FILE ??
       "/tmp/persona-phase2-fixture.json",

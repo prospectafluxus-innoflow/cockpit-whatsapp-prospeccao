@@ -43,6 +43,7 @@ import {
   FEEDBACK_ROLES,
   FEEDBACK_STATUS_LABELS,
   FEEDBACK_TRANSITIONS,
+  canAddFeedbackParticipants,
   competencyIdsSchema,
   competencySnapshot,
   calculateFeedback,
@@ -2352,10 +2353,10 @@ export async function addParticipants(
         .where(eq(developmentCycles.id, input.cycleId))
         .limit(1)
     )[0];
-    if (!current || current.status !== "planned")
+    if (!current || !canAddFeedbackParticipants(current.status))
       fail(
         "CONFLICT",
-        "Participantes só podem ser adicionados a ciclo planejado."
+        "Participantes só podem ser adicionados a ciclos planejados ou ativos. Ciclos encerrados ou cancelados não aceitam novas inclusões."
       );
     const actorAccess = await requireConfigTx(tx, actor, current.companyId);
     const enrollParticipants = input.enrollParticipants === true;
@@ -2470,6 +2471,7 @@ export async function addParticipants(
         resourceType: "feedback_evaluation",
         metadata: {
           cycleId: current.id,
+          cycleStatus: current.status,
           feedbackId: rows[0]!.id,
           evaluatorUserId: item.evaluatorUserId,
         },

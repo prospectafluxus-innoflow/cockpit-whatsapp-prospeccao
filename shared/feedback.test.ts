@@ -4,6 +4,7 @@ import {
   FEEDBACK_METHOD_VERSION,
   FEEDBACK_TRANSITIONS,
   CYCLE_TRANSITIONS,
+  canAddFeedbackParticipants,
   competencySnapshot,
   competencyIdsSchema,
   classifyFeedback,
@@ -75,6 +76,17 @@ describe("catálogo de Feedback EEC", () => {
       "Qualidade das Entregas"
     );
     expect(copy.map(c => c.id)).toEqual(["quality", "productivity"]);
+  });
+});
+
+describe("inclusão de participantes no mesmo ciclo", () => {
+  it.each([
+    ["planned", true],
+    ["active", true],
+    ["closed", false],
+    ["cancelled", false],
+  ] as const)("permite inclusão em %s: %s", (status, allowed) => {
+    expect(canAddFeedbackParticipants(status)).toBe(allowed);
   });
 });
 

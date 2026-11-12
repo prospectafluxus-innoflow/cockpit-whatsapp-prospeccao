@@ -6,6 +6,7 @@ import {
 import {
   getExecutiveDirectory,
   getExecutivePreview,
+  getMyExecutiveReport,
   listExecutiveReports,
   previewExecutive,
   saveExecutiveReport,
@@ -21,6 +22,10 @@ const executiveProcedure = protectedProcedure.use(async ({ ctx, next }) => {
 });
 
 export const fluxusExecutiveRouter = router({
+  myReport: executiveProcedure.query(({ ctx }) =>
+    getMyExecutiveReport(ctx.user)
+  ),
+
   directory: executiveProcedure
     .input(companyInputSchema)
     .query(({ ctx, input }) =>

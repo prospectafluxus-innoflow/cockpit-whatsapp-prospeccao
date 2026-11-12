@@ -1018,13 +1018,22 @@ export default function FluxusExecutivePage({
               onClear={() => setSelectedIds([])}
             />
             <fieldset disabled={controlsBusy} className="min-w-0 border-0 p-0">
-              <NotesEditor
-                mode={mode}
-                people={visiblePeople}
-                notes={notes}
-                canEdit={canEdit}
-                onChange={handleNotesChange}
-              />
+              <details className="persona-executive-optional-notes rounded-xl border border-slate-200 bg-white p-4">
+                <summary className="cursor-pointer font-semibold text-slate-900">
+                  Adicionar notas da consultoria (opcional)
+                </summary>
+                <p className="mt-2 text-sm text-slate-600">
+                  O relatório é gerado mesmo sem estes campos. Abra apenas se
+                  quiser acrescentar contexto.
+                </p>
+                <NotesEditor
+                  mode={mode}
+                  people={visiblePeople}
+                  notes={notes}
+                  canEdit={canEdit}
+                  onChange={handleNotesChange}
+                />
+              </details>
             </fieldset>
             <SavedReports
               reports={reports}

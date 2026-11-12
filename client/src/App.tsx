@@ -36,6 +36,7 @@ const FluxusAdminReportPage = lazy(
   () => import("./pages/FluxusAdminReportPage")
 );
 const FluxusExecutivePage = lazy(() => import("./pages/FluxusExecutivePage"));
+const FluxusOwnReportPage = lazy(() => import("./pages/FluxusOwnReportPage"));
 const FluxusComplementaryPage = lazy(
   () => import("./pages/FluxusComplementaryPage")
 );
@@ -131,6 +132,11 @@ function Router() {
       </Route>
 
       {/* Área exclusiva do colaborador Fluxus */}
+      <Route path="/fluxus/meu-relatorio">
+        <FluxusLayout>
+          <FluxusOwnReportPage />
+        </FluxusLayout>
+      </Route>
       <Route path="/fluxus/complementares">
         <FluxusLayout>
           <FluxusComplementaryPage />

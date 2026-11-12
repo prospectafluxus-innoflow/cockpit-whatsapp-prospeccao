@@ -4,6 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpenCheck,
   ClipboardCheck,
+  FileText,
   History,
   Home,
   LogOut,
@@ -55,8 +56,13 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
 
   const navigation = [
     { path: "/fluxus", label: "Início", icon: Home },
+    { path: "/fluxus/meu-relatorio", label: "Meu relatório", icon: FileText },
     { path: "/fluxus/feedback", label: "Feedback", icon: MessageSquareText },
-    { path: "/fluxus/complementares", label: "Complementares", icon: BookOpenCheck },
+    {
+      path: "/fluxus/complementares",
+      label: "Complementares",
+      icon: BookOpenCheck,
+    },
     { path: "/fluxus/avaliacao", label: "Avaliação", icon: ClipboardCheck },
     { path: "/fluxus/historico", label: "Histórico", icon: History },
     ...(user.fluxusRole === "manager" || user.fluxusRole === "hr"

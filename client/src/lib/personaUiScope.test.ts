@@ -13,6 +13,7 @@ describe("caixas laranja em todas as rotinas do Persona", () => {
     "/fluxus/login",
     "/fluxus/cadastro",
     "/fluxus/avaliacao",
+    "/fluxus/meu-relatorio",
     "/fluxus/relatorio/1",
     "/fluxus/privacidade",
     "/fluxus/admin",

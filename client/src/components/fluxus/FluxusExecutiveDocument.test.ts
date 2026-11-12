@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { FLUXUS_V2_ITEMS, calculateFluxusV2Result } from "@shared/fluxusV2";
 import { buildExecutiveDocument } from "@shared/fluxusExecutiveAnalysis";
 import {
@@ -172,6 +173,15 @@ describe("FluxusExecutiveDocument", () => {
     expect(markup).not.toContain("persona-executive-person-overview");
     expect(markup).not.toContain("O que representa");
     expect(markup).not.toContain("persona-executive-consultant-notes");
+  });
+
+  it("usa sete linhas completas na tela, sem herdar duas colunas da grade anterior", () => {
+    const css = readFileSync(
+      "client/src/components/fluxus/FluxusExecutiveDocument.model.css",
+      "utf8"
+    );
+    const block = css.split(".fluxus-model-moment-bars {")[1]!.split("}")[0];
+    expect(block).toContain("grid-template-columns: minmax(0, 1fr)");
   });
 
   it("com foco individual começa na ficha e mantém detalhes depois dela", () => {

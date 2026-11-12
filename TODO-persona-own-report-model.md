@@ -1,0 +1,8 @@
+# Correção: relatório próprio e visual de referência
+
+- [x] Titular vê o próprio documento pronto em 'Meu relatório integrado', mesmo sem acesso de gestor/RH. A API deriva usuário/empresa apenas da sessão, consulta somente avaliações próprias canônicas concluídas e retorna a mais recente válida. Não entrega notas privadas/salvos da consultoria nem dados alheios.
+- [x] QP/Sabotadores próprios já confirmados aparecem pelo guard atual, vinculados ao ciclo; nenhum novo consentimento, envio ou compartilhamento foi executado por esta correção.
+- [x] Ficha individual segue a composição do PPT Vertical páginas 9–10: coluna navy, gráficos navy/laranja lado a lado, sete barras com sinais e três caminhos de desenvolvimento. Pontuações e textos longos permanecem acessíveis e imprimíveis nas folhas seguintes.
+- [x] Navegação clara com 'Meu relatório' no menu e 'Meu relatório integrado' na home. O documento próprio abre diretamente na ficha, sem montagem ou notas consultivas. Notas opcionais ficam recolhidas na montagem gerencial. Impressão revalida acesso e fontes no servidor antes de exportar.
+- [x] TypeScript, suíte completa de 404 testes e regressões direcionadas após revisão aprovados; build de produção concluído. Revisão independente levou a duas correções: filtrar resultado canônico antes de escolher o mais recente e não forçar quebra antes da primeira ficha pessoal. Renderização sintética A4 horizontal confirmou painéis lado a lado, ficha na primeira página e notas extensas sem cortes; sem dados reais nos testes.
+- [ ] Publicação confirmada no Google antes de anunciar a correção disponível.

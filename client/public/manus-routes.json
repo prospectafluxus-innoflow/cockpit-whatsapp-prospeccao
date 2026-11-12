@@ -34,6 +34,9 @@
       "path": "/fluxus/feedback"
     },
     {
+      "path": "/fluxus/meu-relatorio"
+    },
+    {
       "path": "/fluxus/complementares"
     },
     {
@@ -101,9 +104,6 @@
     },
     {
       "path": "/profile"
-    },
-    {
-      "path": "/404"
     }
   ]
 }

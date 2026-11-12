@@ -21,17 +21,19 @@ import {
 } from "@shared/fluxusV2";
 import { FluxusPersonaLogo } from "./FluxusBrand";
 import { FluxusExecutiveComplementary } from "./FluxusExecutiveComplementary";
+import "./FluxusExecutiveDocument.model.css";
 
 export type FluxusExecutiveDocumentProps = {
   data: ExecutiveDocumentData;
   notes: ExecutiveNotes;
+  focusIndividual?: boolean;
 };
 
-const PROFILE_COLOR = "#43a97b";
-const FUNCTION_COLOR = "#4f82d1";
-const ORANGE_COLOR = "#d97706";
+const PROFILE_COLOR = "#12324f";
+const FUNCTION_COLOR = "#f28c1b";
+const ORANGE_COLOR = "#f28c1b";
 const GRID_COLOR = "#cbd5e1";
-const DARK_COLOR = "#172033";
+const DARK_COLOR = "#12324f";
 
 const formatScore = (value: number | null | undefined) =>
   Number.isFinite(value) ? (value as number).toFixed(1).replace(".", ",") : "—";
@@ -87,7 +89,7 @@ function DocumentFooter({
   generatedAt: string;
 }) {
   return (
-    <footer className="persona-executive-footer">
+    <footer className="persona-executive-footer fluxus-model-footer">
       <p>Confidencial · uso para desenvolvimento e conversas responsáveis.</p>
       <p>
         Fonte: respostas autorrelatadas concluídas · datas das respostas:{" "}
@@ -668,7 +670,7 @@ function ConsultantNotes({ entries }: { entries: ConsultantNoteEntry[] }) {
   const filledEntries = entries.filter(entry => hasText(entry.value));
   if (!filledEntries.length) return null;
   return (
-    <aside className="persona-executive-consultant-notes">
+    <aside className="persona-executive-consultant-notes fluxus-model-notes">
       <h3>Complementos da consultoria (opcionais)</h3>
       {filledEntries.map(entry => (
         <NoteBlock key={entry.label} label={entry.label} value={entry.value} />
@@ -686,7 +688,7 @@ function NoteBlock({
 }) {
   if (!hasText(value)) return null;
   return (
-    <div className="persona-executive-note-block">
+    <div className="persona-executive-note-block fluxus-model-note-block">
       <strong>{label}</strong>
       <p>{value}</p>
     </div>
@@ -712,7 +714,7 @@ function ScoreBars({
     top + plotHeight - (Math.max(1, Math.min(7, score)) / 7) * plotHeight;
   const height = (score: number) => top + plotHeight - y(score);
   return (
-    <div className="persona-executive-chart-block">
+    <div className="persona-executive-chart-block fluxus-model-chart">
       <div
         className="persona-executive-chart-legend"
         aria-label="Legenda do gráfico"
@@ -735,7 +737,7 @@ function ScoreBars({
           Perfil natural versus função percebida
         </title>
         <desc id={`${chartId}-desc`}>
-          Barras verdes mostram o perfil natural e barras azuis mostram a função
+          Barras navy mostram o perfil natural e barras laranja mostram a função
           percebida nos quatro eixos, em escala de um a sete.
         </desc>
         {[1, 3, 5, 7].map(value => (
@@ -819,79 +821,81 @@ function ScoreBars({
   );
 }
 
-function IndividualMoment({
-  result,
-  idSuffix,
-}: {
-  result: FluxusV2Result;
-  idSuffix: string;
-}) {
+const momentBarLabel = (dimension: FluxusMomentDimension) => {
+  const labels: Record<FluxusMomentDimension, string> = {
+    engajamento: "Engajamento",
+    cargaSustentavel: "Carga sustentável",
+    autonomia: "Autonomia",
+    clareza: "Clareza de papel",
+    apoioReconhecimento: "Apoio",
+    relacoesSeguranca: "Relações",
+    desenvolvimento: "Desenvolvimento",
+  };
+  return labels[dimension];
+};
+
+function IndividualMoment({ result }: { result: FluxusV2Result }) {
   return (
-    <section
-      className="persona-executive-person-section persona-executive-person-moment"
-      aria-labelledby={`persona-executive-person-moment-title-${idSuffix}`}
+    <div
+      className="persona-executive-moment-grid fluxus-model-moment-bars"
+      role="list"
+      aria-label="Sete dimensões do momento atual da pessoa"
     >
-      <div className="persona-executive-section-heading">
-        <p className="persona-executive-kicker">Condições do ciclo</p>
-        <h3 id={`persona-executive-person-moment-title-${idSuffix}`}>
-          Momento atual
-        </h3>
-        <p>
-          Texto e sinal aparecem junto da cor para não depender apenas de
-          diferenciação visual.
-        </p>
-      </div>
-      <div
-        className="persona-executive-moment-grid"
-        role="list"
-        aria-label="Sete dimensões do momento atual da pessoa"
-      >
-        {FLUXUS_MOMENT_DIMENSIONS.map(dimension => {
-          const item = result.momento[dimension];
-          return (
-            <article
-              className="persona-executive-moment-card"
-              key={dimension}
-              role="listitem"
-            >
-              <div className="persona-executive-card-heading">
-                <h4>{FLUXUS_MOMENT_META[dimension].label}</h4>
-                <strong>{formatScore(item.score)} / 7</strong>
-              </div>
-              <span className={signalClass(item.score)}>
-                {item.signal === "favoravel"
-                  ? "Favorável"
-                  : item.signal === "acompanhar"
-                    ? "Acompanhar"
-                    : "Priorizar conversa"}
+      {FLUXUS_MOMENT_DIMENSIONS.map(dimension => {
+        const item = result.momento[dimension];
+        const signalLabel =
+          item.signal === "favoravel"
+            ? "Favorável"
+            : item.signal === "acompanhar"
+              ? "Acompanhar"
+              : "Priorizar conversa";
+        const tone =
+          item.signal === "favoravel"
+            ? "fluxus-model-moment-row--good"
+            : item.signal === "acompanhar"
+              ? "fluxus-model-moment-row--watch"
+              : "fluxus-model-moment-row--risk";
+        return (
+          <article
+            className={`persona-executive-moment-card fluxus-model-moment-row ${tone}`}
+            key={dimension}
+            role="listitem"
+            aria-label={`${FLUXUS_MOMENT_META[dimension].label}: ${formatScore(item.score)} / 7 · ${signalLabel}`}
+          >
+            <div className="fluxus-model-moment-label">
+              <span title={FLUXUS_MOMENT_META[dimension].label}>
+                {momentBarLabel(dimension)}
               </span>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+              <strong>{formatScore(item.score)}</strong>
+            </div>
+            <div className="fluxus-model-moment-track" aria-hidden="true">
+              <span
+                style={{
+                  width: `${Math.max(0, Math.min(100, (item.score / 7) * 100))}%`,
+                }}
+              />
+            </div>
+            <span className="fluxus-model-sr-only">{signalLabel}</span>
+          </article>
+        );
+      })}
+    </div>
   );
 }
 
-function IndividualIndicators({
-  result,
-  idSuffix,
-}: {
-  result: FluxusV2Result;
-  idSuffix: string;
-}) {
+function IndividualIndicators({ result }: { result: FluxusV2Result }) {
   return (
     <section
-      className="persona-executive-person-section persona-executive-person-indicators"
-      aria-labelledby={`persona-executive-person-indicators-title-${idSuffix}`}
+      className="persona-executive-person-section persona-executive-person-indicators fluxus-model-detail-block"
+      aria-labelledby="fluxus-model-indicators-title"
     >
       <div className="persona-executive-section-heading">
         <p className="persona-executive-kicker">Sustentabilidade</p>
-        <h3 id={`persona-executive-person-indicators-title-${idSuffix}`}>
+        <h3 id="fluxus-model-indicators-title">
           Cinco indicadores para orientar apoio
         </h3>
       </div>
-      <div className="persona-executive-indicator-grid persona-executive-indicator-grid--compact">
+      <div className="persona-executive-indicator-grid persona-executive-indicator-grid--compact fluxus-model-indicators-grid">
         {FLUXUS_SUSTAINABILITY_INDICATORS.map(indicator => {
           const item = result.indicadores[indicator];
           const meta = FLUXUS_SUSTAINABILITY_META[indicator];
@@ -919,6 +923,74 @@ function IndividualIndicators({
   );
 }
 
+function IndividualDetails({ person }: { person: ExecutivePerson }) {
+  const { result } = person;
+  return (
+    <section
+      className="persona-executive-sheet persona-executive-person-section fluxus-model-details-sheet"
+      aria-labelledby={`fluxus-model-details-title-${person.assessmentId}`}
+    >
+      <div className="persona-executive-section-heading fluxus-model-details-heading">
+        <p className="persona-executive-kicker">Folha detalhada</p>
+        <h2 id={`fluxus-model-details-title-${person.assessmentId}`}>
+          Indicadores e metadados da ficha
+        </h2>
+        <p>
+          Pontuações completas do ciclo e referências de leitura; os valores
+          seguem o resultado Beta 2 recebido e não são recalculados na
+          apresentação.
+        </p>
+      </div>
+      <div className="fluxus-model-details-grid">
+        <IndividualIndicators result={result} />
+        <section className="persona-executive-person-section fluxus-model-detail-block fluxus-model-metadata-block">
+          <div className="persona-executive-section-heading">
+            <p className="persona-executive-kicker">Contexto do ciclo</p>
+            <h3>Metadados e medidas derivadas</h3>
+          </div>
+          <dl className="fluxus-model-metadata">
+            <div>
+              <dt>Data da resposta</dt>
+              <dd>{formatDate(person.completedAt)}</dd>
+            </div>
+            <div>
+              <dt>Ciclo</dt>
+              <dd>{formatCycle(person)}</dd>
+            </div>
+            <div>
+              <dt>Predominância autorrelatada</dt>
+              <dd>{FLUXUS_DIMENSION_META[result.predominante].label}</dd>
+            </div>
+            <div>
+              <dt>Maior demanda percebida</dt>
+              <dd>
+                {FLUXUS_DIMENSION_META[result.maiorDemanda].label} ·{" "}
+                {formatScore(result.maiorGap)} ponto(s)
+              </dd>
+            </div>
+            <div>
+              <dt>Janela de referência</dt>
+              <dd>{result.referenceWindow}</dd>
+            </div>
+            <div>
+              <dt>Momento geral</dt>
+              <dd>{formatScore(result.momentoGeral)} / 7</dd>
+            </div>
+            <div>
+              <dt>Distância média de adaptação</dt>
+              <dd>{formatScore(result.distanciaMediaAdaptacao)} ponto(s)</dd>
+            </div>
+            <div>
+              <dt>Dimensões com demanda relevante</dt>
+              <dd>{result.dimensoesComDemandaRelevante}</dd>
+            </div>
+          </dl>
+        </section>
+      </div>
+    </section>
+  );
+}
+
 function IndividualSheet({
   person,
   notes,
@@ -935,58 +1007,43 @@ function IndividualSheet({
     recommendations: "",
   };
   const name = textOrFallback(person.name, "Participante");
+  const signalTone =
+    person.result.sustentabilidade === "Sustentável"
+      ? "fluxus-model-signal--good"
+      : person.result.sustentabilidade === "Ponto de atenção"
+        ? "fluxus-model-signal--watch"
+        : "fluxus-model-signal--risk";
   return (
-    <section
-      className="persona-executive-sheet persona-executive-person-sheet"
-      aria-labelledby={`persona-executive-person-${person.assessmentId}`}
-    >
-      <div className="persona-executive-person-heading">
-        <div>
-          <p className="persona-executive-kicker">Ficha de pessoa</p>
-          <h2 id={`persona-executive-person-${person.assessmentId}`}>{name}</h2>
-          <p>
-            {textOrFallback(person.jobTitle, "Cargo não informado")} ·{" "}
-            {textOrFallback(person.department, "Departamento não informado")}
+    <>
+      <section
+        className="persona-executive-sheet persona-executive-person-sheet fluxus-model-sheet"
+        aria-labelledby={`persona-executive-person-${person.assessmentId}`}
+      >
+        <aside className="fluxus-model-rail">
+          <p className="fluxus-model-rail__eyebrow">
+            Perfil individual · {formatCycle(person)}
           </p>
-        </div>
-        <div className="persona-executive-person-score">
-          <span>Sinal do ciclo</span>
-          <strong>{person.result.sustentabilidade}</strong>
-          <small>
-            Índice Fluxus {formatScore(person.result.indiceSustentabilidade)} /
-            7
-          </small>
-        </div>
-      </div>
-      <dl className="persona-executive-person-meta">
-        <div>
-          <dt>Data da resposta</dt>
-          <dd>{formatDate(person.completedAt)}</dd>
-        </div>
-        <div>
-          <dt>Ciclo</dt>
-          <dd>{formatCycle(person)}</dd>
-        </div>
-        <div>
-          <dt>Predominância autorrelatada</dt>
-          <dd>{FLUXUS_DIMENSION_META[person.result.predominante].label}</dd>
-        </div>
-        <div>
-          <dt>Maior demanda percebida</dt>
-          <dd>
-            {FLUXUS_DIMENSION_META[person.result.maiorDemanda].label} ·{" "}
-            {formatScore(person.result.maiorGap)} ponto(s)
-          </dd>
-        </div>
-      </dl>
-      <div className="persona-executive-person-overview">
-        <section className="persona-executive-person-overview-column persona-executive-person-overview-column--signals">
-          <div className="persona-executive-person-section persona-executive-person-overview-block">
-            <div className="persona-executive-section-heading">
-              <p className="persona-executive-kicker">Leitura orientadora</p>
-              <h3>Forças a confirmar</h3>
-            </div>
-            <ul className="persona-executive-bullet-list">
+          <h2 id={`persona-executive-person-${person.assessmentId}`}>{name}</h2>
+          <p className="fluxus-model-rail__role">
+            {textOrFallback(person.jobTitle, "Cargo não informado")}
+            {hasText(person.department) ? ` · ${person.department}` : ""}
+          </p>
+          <div className={`fluxus-model-signal ${signalTone}`}>
+            <strong>{person.result.sustentabilidade}</strong>
+            <span>
+              Índice {formatScore(person.result.indiceSustentabilidade)} / 7
+            </span>
+          </div>
+
+          <section className="fluxus-model-rail__section">
+            <p className="fluxus-model-rail__kicker">Aderência à função</p>
+            <strong>{analysis.fitLabel}</strong>
+            <p>{analysis.fitText}</p>
+          </section>
+
+          <section className="fluxus-model-rail__section">
+            <p className="fluxus-model-rail__kicker">Pontos fortes</p>
+            <ul>
               {(analysis.strengths.length
                 ? analysis.strengths
                 : [
@@ -996,12 +1053,11 @@ function IndividualSheet({
                 <li key={item}>{item}</li>
               ))}
             </ul>
-          </div>
-          <div className="persona-executive-person-section persona-executive-person-overview-block">
-            <div className="persona-executive-section-heading">
-              <h3>Atenções para conversa</h3>
-            </div>
-            <ul className="persona-executive-bullet-list">
+          </section>
+
+          <section className="fluxus-model-rail__section">
+            <p className="fluxus-model-rail__kicker">Pede atenção</p>
+            <ul>
               {(analysis.attention.length
                 ? analysis.attention
                 : [
@@ -1011,65 +1067,66 @@ function IndividualSheet({
                 <li key={item}>{item}</li>
               ))}
             </ul>
-          </div>
-        </section>
-        <section className="persona-executive-person-overview-column persona-executive-person-overview-column--profile">
-          <section className="persona-executive-person-section persona-executive-person-summary">
-            <div className="persona-executive-section-heading">
-              <p className="persona-executive-kicker">Hipótese de leitura</p>
-              <h3>Quem é no trabalho</h3>
-            </div>
-            <p>{analysis.summary}</p>
-            <p className="persona-executive-fit-label">
-              <strong>{analysis.fitLabel}</strong> · {analysis.fitText}
-            </p>
           </section>
-          <section className="persona-executive-person-section persona-executive-person-chart">
-            <div className="persona-executive-section-heading">
-              <p className="persona-executive-kicker">Comparação orientadora</p>
-              <h3>Perfil comportamental × função percebida</h3>
-              <p>
+        </aside>
+
+        <div className="fluxus-model-content">
+          <header className="fluxus-model-hero">
+            <div>
+              <p className="fluxus-model-content__kicker">
+                Hipótese de leitura
+              </p>
+              <h3>Quem é, no trabalho</h3>
+              <p>{analysis.summary}</p>
+            </div>
+            <FluxusPersonaLogo className="fluxus-model-logo" />
+          </header>
+
+          <div className="fluxus-model-visual-grid">
+            <section className="fluxus-model-panel fluxus-model-profile-panel">
+              <h3>Perfil × função percebida</h3>
+              <p className="fluxus-model-panel__note">
                 A função percebida não é cargo oficial e nenhuma pontuação
                 comprova aptidão.
               </p>
+              <ScoreBars
+                result={person.result}
+                chartId={`persona-executive-profile-chart-${person.assessmentId}`}
+              />
+            </section>
+            <section className="fluxus-model-panel fluxus-model-moment-panel">
+              <h3>Como está hoje</h3>
+              <p className="fluxus-model-panel__note">
+                Sete condições autorrelatadas do ciclo, em escala de 1 a 7.
+              </p>
+              <IndividualMoment result={person.result} />
+            </section>
+          </div>
+
+          <section className="fluxus-model-actions">
+            <div className="fluxus-model-actions__heading">
+              <p className="fluxus-model-content__kicker">Desenvolvimento</p>
+              <h3>Como desenvolver</h3>
             </div>
-            <ScoreBars
-              result={person.result}
-              chartId={`persona-executive-profile-chart-${person.assessmentId}`}
-            />
+            <div className="persona-executive-action-list fluxus-model-action-grid">
+              {analysis.actions.slice(0, 3).map((action, index) => (
+                <article
+                  className="persona-executive-action-card fluxus-model-action-card"
+                  key={`${action.title}-${index}`}
+                >
+                  <span>{index + 1}</span>
+                  <div>
+                    <h4>{action.title}</h4>
+                    <p>{action.text}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
-        </section>
-        <section className="persona-executive-person-overview-column persona-executive-person-overview-column--context">
-          <IndividualMoment
-            result={person.result}
-            idSuffix={String(person.assessmentId)}
-          />
-          <IndividualIndicators
-            result={person.result}
-            idSuffix={String(person.assessmentId)}
-          />
-        </section>
-      </div>
-      <section className="persona-executive-person-section persona-executive-person-actions">
-        <div className="persona-executive-section-heading">
-          <p className="persona-executive-kicker">Desenvolvimento</p>
-          <h3>Três caminhos para conversar</h3>
-        </div>
-        <div className="persona-executive-action-list">
-          {analysis.actions.slice(0, 3).map((action, index) => (
-            <article
-              className="persona-executive-action-card"
-              key={`${action.title}-${index}`}
-            >
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <div>
-                <h4>{action.title}</h4>
-                <p>{action.text}</p>
-              </div>
-            </article>
-          ))}
         </div>
       </section>
+
+      <IndividualDetails person={person} />
       <ConsultantNotes
         entries={[
           { label: "Síntese da consultoria", value: individualNotes.summary },
@@ -1082,7 +1139,7 @@ function IndividualSheet({
       />
       <DocumentFooter people={[person]} generatedAt={data.generatedAt} />
       <FluxusExecutiveComplementary person={person} />
-    </section>
+    </>
   );
 }
 
@@ -1134,13 +1191,16 @@ function TeamDocument({ data, notes }: FluxusExecutiveDocumentProps) {
 export function FluxusExecutiveDocument({
   data,
   notes,
+  focusIndividual = false,
 }: FluxusExecutiveDocumentProps) {
   if (data.mode === "individual") {
     const person = data.people[0];
     if (!person) return null;
     return (
-      <div className="persona-executive-document persona-executive-document--individual">
-        <Cover data={data} notes={notes} />
+      <div
+        className={`persona-executive-document persona-executive-document--individual persona-executive-document--model${focusIndividual ? " persona-executive-document--focus-individual" : ""}`}
+      >
+        {!focusIndividual ? <Cover data={data} notes={notes} /> : null}
         <IndividualSheet person={person} notes={notes} data={data} />
       </div>
     );

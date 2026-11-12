@@ -91,6 +91,28 @@ export default function FluxusHomePage() {
             <Download className="h-4 w-4" /> Salvar PDF do colaborador
           </Button>
         </div>
+        {isBeta2 ? (
+          <section className="mb-5 rounded-2xl border border-orange-500/40 bg-card p-5 print:hidden">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Seu relatório visual, pronto para ler
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Seu perfil, gráficos e caminhos de desenvolvimento. QP e
+                  Sabotadores próprios confirmados aparecem junto, sem
+                  selecionar a equipe.
+                </p>
+              </div>
+              <Button
+                className="shrink-0 gap-2"
+                onClick={() => navigate("/fluxus/meu-relatorio")}
+              >
+                Meu relatório integrado <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </section>
+        ) : null}
         <FluxusComplementaryInvitation />
         <FluxusReportTabs
           result={assessment.result!}

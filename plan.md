@@ -128,3 +128,10 @@ Usuária não reconheceu qual PDF enviar, se ambos eram permitidos, e não perce
 ## PDF maior dentro do limite — 12/11/2026
 
 Depois de alinhar a identificação do relatório, a usuária encontrou erro interno 500. Reproduzido defeito concreto em `decodeCanonicalPdf`: a regex de grupos repetidos de Base64 excede a pilha do V8 em arquivos de 4–5 MiB, apesar do limite anunciado de 5 MiB. A correção substitui essa expressão por checagem linear de alfabeto e comprimento, mantendo comparação de round-trip canônico e toda a segurança atual. Cobrir o limite completo e a importação cifrada de um PDF grande válido em banco descartável. Nenhuma mudança de interface, fórmula, cadastro, consentimento, limite, permissão, schema ou hospedagem; reutilizar a mensagem visível e publicar a correção no serviço Google existente.
+
+
+## Correção de acesso próprio e fidelidade ao PPT — 12/11/2026
+
+A sessão de gestor atualmente lista apenas liderados na Visão executiva, tornando inacessível o relatório do próprio titular. Acrescentar `/fluxus/meu-relatorio`, com API sem parâmetros de alvo/empresa que derive a própria identidade da sessão, carregue somente a avaliação Beta 2 canônica concluída própria e os complementos próprios confirmados. Não ampliar o escopo gerencial, não abrir notas privadas da consultoria, não alterar papéis/consentimento nem exigir reimportação. A home e a navegação oferecem 'Meu relatório integrado', abrindo o documento pronto em vez de configuração.
+
+Restabelecer na ficha individual a referência aprovada do PPT Vertical (páginas 9–10): coluna azul-marinho de identidade/sinal/aderência/forças/atenções, narrativa à direita, perfil versus função em azul/laranja, sete barras de condições atuais e três cartões de desenvolvimento. Indicadores e notas extensas podem ter seção detalhada adicional, sem cortar dados ou mudar fórmulas. Manter os resultados complementares visualmente separados e a impressão revalidada. Recolher por padrão o editor de notas da consultoria na montagem gerencial para tornar a seleção e a prévia mais acessíveis.

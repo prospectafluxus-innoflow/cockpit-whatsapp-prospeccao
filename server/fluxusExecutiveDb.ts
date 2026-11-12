@@ -38,10 +38,13 @@ import { recordFluxusAudit } from "./fluxusDb";
 const GENERIC_SELECTION_MESSAGE =
   "As avaliações selecionadas não estão disponíveis para este relatório.";
 const GENERIC_REPORT_MESSAGE = "Relatório executivo não encontrado.";
+const GENERIC_SELF_REPORT_MESSAGE =
+  "Seu relatório Persona Beta 2 concluído não está disponível para este acesso.";
 
 type ExecutiveCompany = {
   id: number;
   name: string;
+  active: number;
   reportVisibility: string;
   beta2OrganizationAccessApprovedAt: Date | null;
   minimumAggregateSize: number;
@@ -100,6 +103,7 @@ async function getExecutiveCompany(
     .select({
       id: fluxusCompanies.id,
       name: fluxusCompanies.name,
+      active: fluxusCompanies.active,
       reportVisibility: fluxusCompanies.reportVisibility,
       beta2OrganizationAccessApprovedAt:
         fluxusCompanies.beta2OrganizationAccessApprovedAt,
@@ -163,7 +167,8 @@ function canonicalResult(result: unknown) {
 
 async function loadCanonicalAssessments(
   companyId: number,
-  assessmentIds?: readonly number[]
+  assessmentIds?: readonly number[],
+  ownerUserId?: number
 ): Promise<ExecutiveAssessmentRow[]> {
   const conditions = [
     eq(fluxusAssessments.companyId, companyId),
@@ -179,8 +184,11 @@ async function loadCanonicalAssessments(
   if (assessmentIds) {
     conditions.push(inArray(fluxusAssessments.id, [...assessmentIds]));
   }
+  if (ownerUserId !== undefined) {
+    conditions.push(eq(fluxusAssessments.userId, ownerUserId));
+  }
 
-  const rows = await db
+  const query = db
     .select({
       assessmentId: fluxusAssessments.id,
       userId: fluxusAssessments.userId,
@@ -199,6 +207,9 @@ async function loadCanonicalAssessments(
     .innerJoin(users, eq(users.id, fluxusAssessments.userId))
     .where(and(...conditions))
     .orderBy(desc(fluxusAssessments.completedAt), desc(fluxusAssessments.id));
+  // Filter result metadata before the caller takes rows[0]: an invalid newer
+  // row must not hide the most recent valid assessment belonging to this owner.
+  const rows = await query;
 
   return rows.filter(row => canonicalResult(row.result));
 }
@@ -398,6 +409,64 @@ async function makeDocument(
     enrichedPeople,
     minimumRespondents(company)
   );
+}
+
+function failSelfReport(): never {
+  throw new TRPCError({
+    code: "NOT_FOUND",
+    message: GENERIC_SELF_REPORT_MESSAGE,
+  });
+}
+
+/**
+ * Retorna somente a ficha própria mais recente e canônica da Beta 2.
+ * Este namespace não aceita alvo, empresa, seleção, notas salvas ou modo equipe.
+ */
+export async function getMyExecutiveReport(
+  viewer: ExecutiveViewer
+): Promise<ExecutivePreviewResponse> {
+  const companyId = viewer.companyId;
+  if (companyId === null) failSelfReport();
+  if (
+    viewer.accountType !== "fluxus" ||
+    !Number.isSafeInteger(viewer.id) ||
+    viewer.id <= 0 ||
+    !Number.isSafeInteger(companyId) ||
+    companyId <= 0
+  ) {
+    failSelfReport();
+  }
+
+  const company = await getExecutiveCompany(companyId);
+  if (!company || company.active !== 1) failSelfReport();
+
+  const rows = await loadCanonicalAssessments(company.id, undefined, viewer.id);
+  const row = rows[0];
+  if (!row || row.companyId !== company.id || row.userId !== viewer.id) {
+    failSelfReport();
+  }
+
+  const selection: ExecutiveSelection = {
+    companyId: company.id,
+    mode: "individual",
+    assessmentIds: [row.assessmentId],
+  };
+  const data = await makeDocument(viewer.id, company, selection, [
+    rowToPerson(row),
+  ]);
+  await recordFluxusAudit({
+    actorUserId: viewer.id,
+    companyId: company.id,
+    action: "executive.read",
+    resourceType: "executive_report",
+    metadata: { mode: "individual", count: 1, scope: "self" },
+  });
+  return {
+    data,
+    notes: emptyExecutiveNotes(),
+    report: null,
+    canEdit: false,
+  };
 }
 
 export async function getExecutiveDirectory(

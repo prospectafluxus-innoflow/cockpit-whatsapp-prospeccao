@@ -134,13 +134,13 @@ describe("FluxusExecutiveDocument", () => {
     expect(data.aggregate).toBeNull();
     expect(data.departments).toHaveLength(0);
     expect(markup).toContain("Ficha individual");
-    expect(markup).toContain("Quem é no trabalho");
+    expect(markup).toContain("Quem é, no trabalho");
     expect(markup).not.toContain("Retrato da equipe");
     expect(markup).not.toContain("Média do recorte");
-    expect(markup).toContain("Quem é no trabalho");
+    expect(markup).toContain("Quem é, no trabalho");
   });
 
-  it("compacta a ficha individual em três colunas e omite notas vazias", () => {
+  it("compõe a ficha individual no modelo horizontal e omite notas vazias", () => {
     const data = buildExecutiveDocument(
       syntheticCompany,
       "individual",
@@ -150,22 +150,53 @@ describe("FluxusExecutiveDocument", () => {
 
     const markup = renderDocument(data);
 
-    expect(markup).toContain("persona-executive-person-overview");
-    expect(markup).toContain(
-      "persona-executive-person-overview-column--signals"
-    );
-    expect(markup).toContain(
-      "persona-executive-person-overview-column--profile"
-    );
-    expect(markup).toContain(
-      "persona-executive-person-overview-column--context"
-    );
-    expect(markup).toContain("persona-executive-moment-grid");
-    expect(markup).toContain("persona-executive-indicator-grid--compact");
-    expect(markup).toContain("persona-executive-person-actions");
-    expect(markup.match(/persona-executive-action-card/g)).toHaveLength(3);
+    expect(markup).toContain("persona-executive-document--model");
+    expect(markup).toContain("fluxus-model-sheet");
+    expect(markup).toContain("fluxus-model-rail");
+    expect(markup).toContain("fluxus-model-content");
+    expect(markup).toContain("fluxus-model-profile-panel");
+    expect(markup).toContain("fluxus-model-moment-panel");
+    expect(markup).toContain("fluxus-model-details-sheet");
+    expect(markup).toContain("fluxus-model-indicators-grid");
+    expect(
+      markup.match(
+        /class="persona-executive-moment-card fluxus-model-moment-row /g
+      )
+    ).toHaveLength(7);
+    expect(markup.match(/fluxus-model-action-card/g)).toHaveLength(3);
+    expect(
+      markup.match(
+        /class="persona-executive-indicator-card persona-executive-indicator-card--compact/g
+      )
+    ).toHaveLength(5);
+    expect(markup).not.toContain("persona-executive-person-overview");
     expect(markup).not.toContain("O que representa");
     expect(markup).not.toContain("persona-executive-consultant-notes");
+  });
+
+  it("com foco individual começa na ficha e mantém detalhes depois dela", () => {
+    const data = buildExecutiveDocument(
+      syntheticCompany,
+      "individual",
+      [syntheticPerson(11)],
+      5
+    );
+
+    const markup = renderToStaticMarkup(
+      React.createElement(FluxusExecutiveDocument, {
+        data,
+        notes: emptyExecutiveNotes(),
+        focusIndividual: true,
+      })
+    );
+
+    expect(markup).not.toContain("persona-executive-cover");
+    expect(markup.indexOf("fluxus-model-sheet")).toBeGreaterThanOrEqual(0);
+    expect(markup.indexOf("fluxus-model-sheet")).toBeLessThan(
+      markup.indexOf("fluxus-model-details-sheet")
+    );
+    expect(markup).toContain("Cinco indicadores para orientar apoio");
+    expect(markup).not.toContain("persona-executive-complementary");
   });
 
   it("preserva integralmente cada nota consultiva preenchida e não cria blocos vazios", () => {

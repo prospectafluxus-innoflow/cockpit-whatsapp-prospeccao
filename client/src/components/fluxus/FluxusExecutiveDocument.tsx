@@ -20,6 +20,7 @@ import {
   type FluxusV2Result,
 } from "@shared/fluxusV2";
 import { FluxusPersonaLogo } from "./FluxusBrand";
+import { FluxusExecutiveComplementary } from "./FluxusExecutiveComplementary";
 
 export type FluxusExecutiveDocumentProps = {
   data: ExecutiveDocumentData;
@@ -1080,6 +1081,7 @@ function IndividualSheet({
         ]}
       />
       <DocumentFooter people={[person]} generatedAt={data.generatedAt} />
+      <FluxusExecutiveComplementary person={person} />
     </section>
   );
 }

@@ -26,8 +26,10 @@ const mocks = vi.hoisted(() => {
         dbOps.push({ operation: `${operation}.returning`, args });
         return chain;
       }),
-      then: (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
-        Promise.resolve(rows).then(resolve, reject),
+      then: (
+        resolve: (value: unknown[]) => unknown,
+        reject?: (reason: unknown) => unknown
+      ) => Promise.resolve(rows).then(resolve, reject),
     };
     return chain;
   };
@@ -58,6 +60,7 @@ const mocks = vi.hoisted(() => {
     insert,
     getFluxusDirectTeamUserIds: vi.fn(),
     recordFluxusAudit: vi.fn(),
+    readExecutiveComplementarySources: vi.fn().mockResolvedValue({}),
   };
 });
 
@@ -74,13 +77,19 @@ vi.mock("./fluxusOrganization", () => ({
 vi.mock("./fluxusDb", () => ({
   recordFluxusAudit: mocks.recordFluxusAudit,
 }));
+vi.mock("./fluxusComplementaryDb", () => ({
+  readExecutiveComplementarySources: mocks.readExecutiveComplementarySources,
+}));
 
 import {
   CURRENT_FLUXUS_FORMULA_VERSION,
   CURRENT_FLUXUS_INSTRUMENT_VERSION,
 } from "../shared/fluxusVersioning";
 import { FLUXUS_V2_ITEMS, calculateFluxusV2Result } from "../shared/fluxusV2";
-import { emptyExecutiveNotes, type ExecutiveNotes } from "../shared/fluxusExecutive";
+import {
+  emptyExecutiveNotes,
+  type ExecutiveNotes,
+} from "../shared/fluxusExecutive";
 import {
   getExecutiveDirectory,
   getExecutivePreview,
@@ -186,7 +195,9 @@ beforeEach(() => {
   mocks.insertRows.length = 0;
   mocks.dbOps.length = 0;
   vi.clearAllMocks();
-  mocks.getFluxusDirectTeamUserIds.mockResolvedValue(new Set([USER_ID, OTHER_USER_ID]));
+  mocks.getFluxusDirectTeamUserIds.mockResolvedValue(
+    new Set([USER_ID, OTHER_USER_ID])
+  );
 });
 
 describe("segurança da visão executiva Fluxus", () => {
@@ -220,6 +231,7 @@ describe("segurança da visão executiva Fluxus", () => {
       COMPANY_ID
     );
     expect(result.people).toHaveLength(1);
+    expect(result.people[0]).not.toHaveProperty("complementary");
     expect(mocks.recordFluxusAudit).toHaveBeenCalledTimes(1);
   });
 
@@ -248,7 +260,9 @@ describe("segurança da visão executiva Fluxus", () => {
     mocks.getFluxusDirectTeamUserIds.mockResolvedValue(new Set());
     queueSelect([company()], [assessment()]);
 
-    const result = await getExecutiveDirectory(viewer(6, { fluxusRole: "manager" }));
+    const result = await getExecutiveDirectory(
+      viewer(6, { fluxusRole: "manager" })
+    );
 
     expect(result.people).toEqual([]);
     expect(mocks.recordFluxusAudit).toHaveBeenCalledWith(
@@ -275,7 +289,9 @@ describe("segurança da visão executiva Fluxus", () => {
   });
 
   it("nega manager que tenta ler usuário que não pertence ao seu escopo direto", async () => {
-    mocks.getFluxusDirectTeamUserIds.mockResolvedValue(new Set([OTHER_USER_ID]));
+    mocks.getFluxusDirectTeamUserIds.mockResolvedValue(
+      new Set([OTHER_USER_ID])
+    );
     queueSelect([company()], [assessment(ASSESSMENT_ID, USER_ID)]);
 
     await expectCode(
@@ -354,6 +370,43 @@ describe("segurança da visão executiva Fluxus", () => {
     expect(mocks.recordFluxusAudit).not.toHaveBeenCalled();
   });
 
+  it("anexa fontes atuais somente à ficha depois de validar a seleção", async () => {
+    const complementary = {
+      [String(ASSESSMENT_ID)]: {
+        pq: {
+          id: 700,
+          revision: 2,
+          userId: USER_ID,
+          assessmentId: ASSESSMENT_ID,
+          kind: "pq",
+          sourceDate: "2026-11-11",
+          confirmedAt: "2026-11-12T10:00:00.000Z",
+          values: { pq: 47, saboteurs: {}, critic: {} },
+          context: null,
+        },
+      },
+    };
+    mocks.readExecutiveComplementarySources.mockResolvedValueOnce(
+      complementary
+    );
+    queueSelect([company()], [assessment()]);
+
+    const result = await previewExecutive(viewer(17), {
+      companyId: COMPANY_ID,
+      mode: "individual",
+      assessmentIds: [ASSESSMENT_ID],
+    });
+
+    expect(result.data.people[0]?.complementary).toEqual(
+      complementary[String(ASSESSMENT_ID)]
+    );
+    expect(mocks.readExecutiveComplementarySources).toHaveBeenCalledWith(
+      17,
+      COMPANY_ID,
+      [{ userId: USER_ID, assessmentId: ASSESSMENT_ID }]
+    );
+  });
+
   it("permite leitura salva a manager autorizada que não é a criadora, mas mantém read-only", async () => {
     const report = savedReport({ createdBy: 999 });
     queueSelect([report], [company()], [assessment()]);
@@ -367,7 +420,10 @@ describe("segurança da visão executiva Fluxus", () => {
     expect(result.canEdit).toBe(false);
     expect(result.data.people[0]?.assessmentId).toBe(ASSESSMENT_ID);
     expect(mocks.recordFluxusAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "executive.read", resourceType: "executive_report" })
+      expect.objectContaining({
+        action: "executive.read",
+        resourceType: "executive_report",
+      })
     );
   });
 
@@ -474,7 +530,11 @@ describe("segurança da visão executiva Fluxus", () => {
       notes: emptyExecutiveNotes(),
     });
 
-    expect(result).toMatchObject({ id: 901, companyId: COMPANY_ID, revision: 1 });
+    expect(result).toMatchObject({
+      id: 901,
+      companyId: COMPANY_ID,
+      revision: 1,
+    });
     expect(mocks.insert).toHaveBeenCalledTimes(1);
     expect(mocks.dbOps.map(({ operation }) => operation)).toEqual([
       "select",
@@ -483,7 +543,10 @@ describe("segurança da visão executiva Fluxus", () => {
       "insert.values",
       "insert.returning",
     ]);
-    expect(mocks.dbOps.find(({ operation }) => operation === "insert.values")?.args[0]).toMatchObject({
+    expect(
+      mocks.dbOps.find(({ operation }) => operation === "insert.values")
+        ?.args[0]
+    ).toMatchObject({
       companyId: COMPANY_ID,
       createdBy: 17,
       mode: "individual",
@@ -491,7 +554,10 @@ describe("segurança da visão executiva Fluxus", () => {
       revision: 1,
     });
     expect(mocks.recordFluxusAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "executive.save", resourceType: "executive_report" })
+      expect.objectContaining({
+        action: "executive.save",
+        resourceType: "executive_report",
+      })
     );
   });
 });

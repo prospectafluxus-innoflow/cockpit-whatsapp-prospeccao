@@ -38,6 +38,10 @@ import {
   type CriticKey,
   type SaboteurKey,
 } from "../shared/fluxusComplementary";
+import type {
+  ExecutiveComplementaryBundle,
+  ExecutiveComplementarySource,
+} from "../shared/fluxusManagerialComplementary";
 import { db } from "./db";
 import {
   complementaryEncryptionConfigured,
@@ -103,6 +107,35 @@ type SnapshotRow = Pick<
   companyActive: number;
 };
 type DownloadRow = SnapshotRow & { pdfCiphertext: string | null };
+type ReaderAccessRow = Pick<
+  SnapshotRow,
+  | "userId"
+  | "companyId"
+  | "status"
+  | "recipientSnapshot"
+  | "ownerApprovalStatus"
+  | "ownerPrivacyDeletedAt"
+  | "ownerAccountType"
+  | "ownerRole"
+  | "ownerCompanyId"
+  | "companyActive"
+>;
+type ExecutiveComplementaryRow = ReaderAccessRow &
+  Pick<
+    SnapshotRow,
+    | "id"
+    | "assessmentId"
+    | "kind"
+    | "revision"
+    | "termsVersion"
+    | "sourceDate"
+    | "values"
+    | "context"
+    | "confirmedAt"
+  >;
+
+const EXECUTIVE_COMPLEMENTARY_MAX_PEOPLE = 200;
+const EXECUTIVE_COMPLEMENTARY_MAX_SOURCES_PER_PERSON = 20;
 
 const snapshotFields = {
   id: fluxusComplementaryReports.id,
@@ -619,7 +652,7 @@ async function loadReportWithOwner(
   const rows = lockForRead ? await query.for("share") : await query;
   return rows[0] ?? null;
 }
-function rowOwnerIsLive(row: SnapshotRow): boolean {
+function rowOwnerIsLive(row: ReaderAccessRow): boolean {
   return (
     row.companyActive === 1 &&
     row.ownerApprovalStatus === "approved" &&
@@ -631,7 +664,7 @@ function rowOwnerIsLive(row: SnapshotRow): boolean {
 async function requireReaderAccess(
   executor: Executor,
   viewerId: number,
-  row: SnapshotRow,
+  row: ReaderAccessRow,
   ownerOnly = false
 ): Promise<{ viewer: LiveUser; isOwner: boolean }> {
   const viewer = await loadLiveUser(executor, viewerId, true);
@@ -819,6 +852,200 @@ export function candidateIsEligible(
   companyId: number
 ): boolean {
   return isCandidateForCompany(user, companyId);
+}
+
+function safeExecutiveSourceDate(value: Date | string | null): string | null {
+  const normalized = dateOnly(value);
+  if (!normalized || !DATE_ONLY.test(normalized)) return null;
+  const [year, month, day] = normalized.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+function safeExecutiveConfirmedAt(value: Date | string | null): string | null {
+  if (!value) return null;
+  try {
+    const normalized = iso(value);
+    return Number.isNaN(Date.parse(normalized)) ? null : normalized;
+  } catch {
+    return null;
+  }
+}
+
+function safeExecutiveValues(
+  value: unknown,
+  kind: ComplementaryKind
+): ComplementaryValues | null {
+  if (value === null || value === undefined) return null;
+  try {
+    return normalizeComplementaryValues(value, kind);
+  } catch {
+    // Dados inválidos no armazenamento não são convertidos em zero nem expostos.
+    return null;
+  }
+}
+
+function executiveSourceFromRow(
+  row: ExecutiveComplementaryRow
+): ExecutiveComplementarySource | null {
+  const sourceDate = safeExecutiveSourceDate(row.sourceDate);
+  const confirmedAt = safeExecutiveConfirmedAt(row.confirmedAt);
+  const values = safeExecutiveValues(row.values, row.kind);
+  if (!sourceDate || !confirmedAt || !values) return null;
+  return {
+    id: row.id,
+    revision: row.revision,
+    userId: row.userId,
+    assessmentId: row.assessmentId,
+    kind: row.kind,
+    sourceDate,
+    confirmedAt,
+    values,
+    context: row.context,
+  };
+}
+
+/**
+ * Lê somente os complementos que o leitor recebeu nominalmente para a mesma
+ * avaliação Persona. A consulta não projeta PDF, nome de arquivo ou nome
+ * extraído; cada fonte selecionada é protegida por row lock compartilhado
+ * contra uma retirada concorrente.
+ */
+export async function readExecutiveComplementarySources(
+  viewerId: number,
+  companyId: number,
+  people: readonly { userId: number; assessmentId: number }[]
+): Promise<Record<string, ExecutiveComplementaryBundle>> {
+  ensurePositiveId(viewerId, "Leitor");
+  ensurePositiveId(companyId, "Empresa");
+  if (people.length > EXECUTIVE_COMPLEMENTARY_MAX_PEOPLE) {
+    badRequest("A leitura executiva excede o limite de duzentas pessoas.");
+  }
+
+  const uniquePeople = Array.from(
+    new Map(
+      people.map(person => {
+        ensurePositiveId(person.userId, "Colaborador");
+        ensurePositiveId(person.assessmentId, "Avaliação");
+        return [`${person.userId}:${person.assessmentId}`, person] as const;
+      })
+    ).values()
+  );
+  if (!uniquePeople.length) return {};
+
+  return db.transaction(async rawTx => {
+    const tx = rawTx as unknown as Executor;
+    const result: Record<string, ExecutiveComplementaryBundle> = {};
+
+    for (const person of uniquePeople) {
+      // A autorização nominativa e o estado vivo do titular/empresa entram no
+      // filtro antes da ordenação: uma fonte privada não pode deslocar a última
+      // fonte que o leitor realmente pode ver.
+      const recipientMatch = sql`${fluxusComplementaryReports.recipientSnapshot} @> ${JSON.stringify([{ id: viewerId }])}::jsonb`;
+      const rows = (await tx
+        .select({
+          id: fluxusComplementaryReports.id,
+          companyId: fluxusComplementaryReports.companyId,
+          userId: fluxusComplementaryReports.userId,
+          assessmentId: fluxusComplementaryReports.assessmentId,
+          kind: fluxusComplementaryReports.kind,
+          status: fluxusComplementaryReports.status,
+          revision: fluxusComplementaryReports.revision,
+          termsVersion: fluxusComplementaryReports.termsVersion,
+          sourceDate: fluxusComplementaryReports.sourceDate,
+          values: fluxusComplementaryReports.values,
+          context: fluxusComplementaryReports.context,
+          recipientSnapshot: fluxusComplementaryReports.recipientSnapshot,
+          confirmedAt: fluxusComplementaryReports.confirmedAt,
+          ownerApprovalStatus: users.approvalStatus,
+          ownerPrivacyDeletedAt: users.privacyDeletedAt,
+          ownerAccountType: users.accountType,
+          ownerRole: users.role,
+          ownerCompanyId: users.companyId,
+          companyActive: fluxusCompanies.active,
+        })
+        .from(fluxusComplementaryReports)
+        .innerJoin(users, eq(users.id, fluxusComplementaryReports.userId))
+        .innerJoin(
+          fluxusCompanies,
+          eq(fluxusCompanies.id, fluxusComplementaryReports.companyId)
+        )
+        .where(
+          and(
+            eq(fluxusComplementaryReports.companyId, companyId),
+            eq(fluxusComplementaryReports.userId, person.userId),
+            eq(fluxusComplementaryReports.assessmentId, person.assessmentId),
+            eq(fluxusComplementaryReports.status, "confirmed"),
+            eq(
+              fluxusComplementaryReports.termsVersion,
+              COMPLEMENTARY_TERMS_VERSION
+            ),
+            isNotNull(fluxusComplementaryReports.sourceDate),
+            isNotNull(fluxusComplementaryReports.confirmedAt),
+            isNotNull(fluxusComplementaryReports.values),
+            or(eq(fluxusComplementaryReports.userId, viewerId), recipientMatch),
+            eq(users.companyId, companyId),
+            eq(users.approvalStatus, "approved"),
+            isNull(users.privacyDeletedAt),
+            or(eq(users.role, "admin"), eq(users.accountType, "fluxus")),
+            eq(fluxusCompanies.active, 1)
+          )
+        )
+        .orderBy(
+          sql`${fluxusComplementaryReports.sourceDate} DESC NULLS LAST`,
+          desc(fluxusComplementaryReports.confirmedAt),
+          desc(fluxusComplementaryReports.id)
+        )
+        .limit(EXECUTIVE_COMPLEMENTARY_MAX_SOURCES_PER_PERSON)
+        .for("share")) as ExecutiveComplementaryRow[];
+
+      const bundle: ExecutiveComplementaryBundle = {};
+      for (const row of rows) {
+        if (row.termsVersion !== COMPLEMENTARY_TERMS_VERSION) continue;
+        if (row.kind === "pq" && bundle.pq) continue;
+        if (row.kind === "saboteurs" && bundle.saboteurs) continue;
+        try {
+          await requireReaderAccess(tx, viewerId, row);
+        } catch (error) {
+          // Uma retirada/cadastro inválido concorrente remove a fonte deste
+          // painel, sem transformar a leitura executiva em um oracle privado.
+          if (error instanceof TRPCError && error.code === "NOT_FOUND") {
+            continue;
+          }
+          throw error;
+        }
+        const source = executiveSourceFromRow(row);
+        if (!source) continue;
+        if (source.kind === "pq") bundle.pq = source;
+        else bundle.saboteurs = source;
+        if (bundle.pq && bundle.saboteurs) break;
+      }
+
+      if (!bundle.pq && !bundle.saboteurs) continue;
+      result[String(person.assessmentId)] = bundle;
+      for (const source of [bundle.pq, bundle.saboteurs]) {
+        if (!source) continue;
+        await insertAudit(tx, {
+          actorUserId: viewerId,
+          subjectUserId: source.userId,
+          companyId,
+          action: "complementary.view",
+          reportId: source.id,
+          status: "confirmed",
+          revision: source.revision,
+          scope: viewerId === source.userId ? "owner" : "recipient",
+        });
+      }
+    }
+    return result;
+  });
 }
 
 export async function getComplementaryAvailability(

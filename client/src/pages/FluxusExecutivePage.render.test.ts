@@ -106,6 +106,14 @@ function button(markup: string, label: string) {
   );
 }
 describe("ações da visão executiva com dados fictícios", () => {
+  it("bloqueia todas as ações e sinaliza a conferência antes de imprimir", () => {
+    mocks.states[9] = true;
+    const markup = render();
+    expect(markup).toMatch(/<fieldset[^>]*disabled=""/);
+    expect(button(markup, "Salvar relatório")).toContain('disabled=""');
+    expect(button(markup, "Conferindo acesso")).toContain('disabled=""');
+    expect(markup).toContain("Ctrl+P direto");
+  });
   it("permite salvar a primeira prévia sem obrigar notas consultivas", () => {
     const markup = render();
     expect(button(markup, "Salvar relatório")).toBeDefined();

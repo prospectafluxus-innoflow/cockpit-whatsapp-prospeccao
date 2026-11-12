@@ -31,6 +31,7 @@ import {
 } from "../shared/fluxusExecutive";
 import { buildExecutiveDocument } from "../shared/fluxusExecutiveAnalysis";
 import { db } from "./db";
+import { readExecutiveComplementarySources } from "./fluxusComplementaryDb";
 import { getFluxusDirectTeamUserIds } from "./fluxusOrganization";
 import { recordFluxusAudit } from "./fluxusDb";
 
@@ -377,14 +378,24 @@ function canEditReport(
 }
 
 async function makeDocument(
+  viewerId: number,
   company: ExecutiveCompany,
   selection: ExecutiveSelection,
   people: ExecutivePerson[]
 ): Promise<ExecutiveDocumentData> {
+  const complementary = await readExecutiveComplementarySources(
+    viewerId,
+    company.id,
+    people.map(({ userId, assessmentId }) => ({ userId, assessmentId }))
+  );
+  const enrichedPeople = people.map(person => {
+    const sources = complementary[String(person.assessmentId)];
+    return sources ? { ...person, complementary: sources } : person;
+  });
   return buildExecutiveDocument(
     { id: company.id, name: company.name },
     selection.mode,
-    people,
+    enrichedPeople,
     minimumRespondents(company)
   );
 }
@@ -447,7 +458,12 @@ export async function previewExecutive(
   const authorization = await authorizeCompany(viewer, companyId);
   const normalized = normalizeSelection(selection, companyId);
   const people = await validateSelection(viewer, normalized, authorization);
-  const data = await makeDocument(authorization.company, normalized, people);
+  const data = await makeDocument(
+    viewer.id,
+    authorization.company,
+    normalized,
+    people
+  );
   await recordFluxusAudit({
     actorUserId: viewer.id,
     companyId,
@@ -593,7 +609,12 @@ export async function getExecutivePreview(
   const selection = reportSelection(report);
   const authorization = await authorizeCompany(viewer, report.companyId);
   const people = await validateSelection(viewer, selection, authorization);
-  const data = await makeDocument(authorization.company, selection, people);
+  const data = await makeDocument(
+    viewer.id,
+    authorization.company,
+    selection,
+    people
+  );
   const saved = toSavedReport(report);
   await recordFluxusAudit({
     actorUserId: viewer.id,

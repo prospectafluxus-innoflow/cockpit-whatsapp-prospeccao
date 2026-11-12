@@ -1,6 +1,8 @@
 import { FluxusExecutiveDocument } from "@/components/fluxus/FluxusExecutiveDocument";
 import { FluxusPersonaLogo } from "@/components/fluxus/FluxusBrand";
 import { trpc } from "@/lib/trpc";
+import { revalidateExecutiveExport } from "@/lib/fluxusExecutiveExport";
+import { flushSync } from "react-dom";
 import {
   EXECUTIVE_MAX_PEOPLE,
   emptyExecutiveNotes,
@@ -540,8 +542,11 @@ export default function FluxusExecutivePage({
     queryParams.reportId ?? null
   );
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
+  const [isPrinting, setIsPrinting] = useState(false);
   const initialisedFromUrl = useRef(false);
   const dirtyRef = useRef(false);
+  const mountedRef = useRef(true);
+  const printingRef = useRef(false);
   const companyId = routeCompanyId;
   const canEdit = preview?.canEdit ?? true;
   const isDirty = JSON.stringify(notes) !== JSON.stringify(snapshotNotes);
@@ -639,7 +644,15 @@ export default function FluxusExecutivePage({
     const response = getQuery.data;
     if (!response?.report || dirtyRef.current) return;
     const key = `saved:${response.report.id}:${response.report.revision}`;
-    if (hydratedKey === key) return;
+    if (hydratedKey === key) {
+      // Consent and optional sources can change without a saved-report revision.
+      setPreview(current =>
+        current
+          ? { ...current, data: response.data, canEdit: response.canEdit }
+          : current
+      );
+      return;
+    }
     setMode(response.report.mode);
     setSelectedIds(response.report.assessmentIds);
     setSubmittedSelection({
@@ -658,7 +671,15 @@ export default function FluxusExecutivePage({
     const response = previewQuery.data;
     if (!response || dirtyRef.current || requestedReportId !== null) return;
     const key = `preview:${JSON.stringify(submittedSelection)}:${response.report?.id ?? "new"}:${response.report?.revision ?? 0}`;
-    if (hydratedKey === key) return;
+    if (hydratedKey === key) {
+      // Consent and optional sources can change without a saved-report revision.
+      setPreview(current =>
+        current
+          ? { ...current, data: response.data, canEdit: response.canEdit }
+          : current
+      );
+      return;
+    }
     setPreview(response);
     setSavedReport(response.report);
     setNotes(response.notes || emptyNotes());
@@ -696,6 +717,14 @@ export default function FluxusExecutivePage({
   }, [reportReady]);
 
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      document.body.classList.remove("persona-executive-print-revalidated");
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const handler = (event: BeforeUnloadEvent) => {
       if (!dirtyRef.current) return;
@@ -707,7 +736,7 @@ export default function FluxusExecutivePage({
   }, []);
 
   const handleToggle = (assessmentId: number, checked: boolean) => {
-    if (!canEdit) return;
+    if (!canEdit || isPrinting) return;
     if (mode === "individual") {
       setSelectedIds(checked ? [assessmentId] : []);
       return;
@@ -723,14 +752,14 @@ export default function FluxusExecutivePage({
   };
 
   const handleModeChange = (nextMode: ExecutiveSelection["mode"]) => {
-    if (!canEdit) return;
+    if (!canEdit || isPrinting) return;
     setMode(nextMode);
     if (nextMode === "individual" && selectedIds.length > 1)
       setSelectedIds(selectedIds.slice(0, 1));
   };
 
   const handleGenerate = () => {
-    if (!selectionValid || !canEdit || saveMutation.isPending) return;
+    if (!selectionValid || !canEdit || controlsBusy) return;
     const nextSelection: ExecutiveSelection = {
       companyId,
       mode,
@@ -754,6 +783,7 @@ export default function FluxusExecutivePage({
   };
 
   const handleOpenSaved = (reportId: number) => {
+    if (controlsBusy) return;
     if (
       !confirmDiscard(
         "Há complementos não salvos. Abrir este relatório descartará essas alterações. Continuar?"
@@ -768,7 +798,7 @@ export default function FluxusExecutivePage({
   };
 
   const handleNotesChange = (patch: Partial<ExecutiveNotes>) => {
-    if (!canEdit) return;
+    if (!canEdit || isPrinting) return;
     setNotes(current => ({ ...current, ...patch }));
   };
 
@@ -804,6 +834,8 @@ export default function FluxusExecutivePage({
     },
   });
 
+  const controlsBusy = saveMutation.isPending || isPrinting;
+
   const handleSave = () => {
     if (
       !preview?.data ||
@@ -811,7 +843,7 @@ export default function FluxusExecutivePage({
       !canEdit ||
       (!isDirty && Boolean(savedReport || preview.report)) ||
       !reportReady ||
-      saveMutation.isPending
+      controlsBusy
     )
       return;
     saveMutation.mutate(
@@ -824,30 +856,61 @@ export default function FluxusExecutivePage({
     );
   };
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (
       !reportReady ||
+      !submittedSelection ||
       isDirty ||
-      saveMutation.isPending ||
+      controlsBusy ||
+      printingRef.current ||
       typeof window === "undefined" ||
       typeof document === "undefined"
     )
       return;
-    const previousTitle = document.title;
-    const title =
-      notes.title.trim() ||
-      (preview?.data.mode === "team"
-        ? `Visão executiva · ${preview.data.company.name}`
-        : "Visão executiva · Perfil comportamental");
-    document.title = title;
-    window.print();
-    window.setTimeout(() => {
-      document.title = previousTitle;
-    }, 0);
+    printingRef.current = true;
+    setIsPrinting(true);
+    let previousTitle: string | undefined;
+    let marked = false;
+    try {
+      const fresh = await revalidateExecutiveExport({
+        selection: submittedSelection,
+        reportId: savedReport?.id ?? preview?.report?.id,
+        revision: savedReport?.revision ?? preview?.report?.revision,
+        fetchSaved: reportId =>
+          utils.fluxusExecutive.get.fetch({ reportId }, { staleTime: 0 }),
+        fetchPreview: selection =>
+          utils.fluxusExecutive.preview.fetch(selection, { staleTime: 0 }),
+      });
+      if (!mountedRef.current) return;
+      flushSync(() => setPreview(fresh));
+      previousTitle = document.title;
+      document.title =
+        notes.title.trim() || `Visão executiva · ${fresh.data.company.name}`;
+      document.body.classList.add("persona-executive-print-revalidated");
+      marked = true;
+      window.print();
+    } catch (error) {
+      if (mountedRef.current) {
+        setPreview(null);
+        setHydratedKey(null);
+        toast.error(
+          errorMessage(
+            error,
+            "Não foi possível conferir o acesso atual. Reabra a prévia antes de imprimir."
+          )
+        );
+      }
+    } finally {
+      if (marked)
+        document.body.classList.remove("persona-executive-print-revalidated");
+      if (previousTitle !== undefined) document.title = previousTitle;
+      printingRef.current = false;
+      if (mountedRef.current) setIsPrinting(false);
+    }
   };
 
   const goBack = () => {
-    if (saveMutation.isPending) return;
+    if (controlsBusy) return;
     if (
       !confirmDiscard(
         "Há complementos não salvos. Sair desta visão descartará essas alterações. Continuar?"
@@ -875,7 +938,7 @@ export default function FluxusExecutivePage({
           type="button"
           className="persona-executive-button persona-executive-button--subtle"
           onClick={goBack}
-          disabled={saveMutation.isPending}
+          disabled={controlsBusy}
         >
           <ArrowLeft size={16} /> Voltar
         </button>
@@ -888,6 +951,13 @@ export default function FluxusExecutivePage({
             Monte uma leitura individual ou de equipe a partir de avaliações
             Beta 2 concluídas. O sistema gera uma prévia pronta para conversa e
             PDF; não cria nem importa PowerPoint.
+          </p>
+          <p>
+            QP e Sabotadores aparecem nas fichas quando os relatórios opcionais
+            foram confirmados e compartilhados com você para este ciclo. Use
+            Imprimir / PDF para conferir as autorizações atuais; Ctrl+P direto
+            não exporta esses complementos. Cópias já exportadas não podem ser
+            recolhidas automaticamente.
           </p>
         </div>
         <div className="persona-executive-intro-badge">
@@ -933,7 +1003,7 @@ export default function FluxusExecutivePage({
               people={people}
               selectedIds={selectedIds}
               mode={mode}
-              canEdit={canEdit && !saveMutation.isPending}
+              canEdit={canEdit && !controlsBusy}
               isLoading={directoryQuery.isLoading}
               truncated={Boolean(directoryQuery.data?.truncated)}
               onModeChange={handleModeChange}
@@ -947,10 +1017,7 @@ export default function FluxusExecutivePage({
               }
               onClear={() => setSelectedIds([])}
             />
-            <fieldset
-              disabled={saveMutation.isPending}
-              className="min-w-0 border-0 p-0"
-            >
+            <fieldset disabled={controlsBusy} className="min-w-0 border-0 p-0">
               <NotesEditor
                 mode={mode}
                 people={visiblePeople}
@@ -961,7 +1028,7 @@ export default function FluxusExecutivePage({
             </fieldset>
             <SavedReports
               reports={reports}
-              disabled={isDirty || saveMutation.isPending}
+              disabled={isDirty || controlsBusy}
               onOpen={handleOpenSaved}
             />
           </aside>
@@ -994,9 +1061,7 @@ export default function FluxusExecutivePage({
                   type="button"
                   className="persona-executive-button persona-executive-button--primary"
                   disabled={
-                    !selectionValid ||
-                    previewQuery.isFetching ||
-                    saveMutation.isPending
+                    !selectionValid || previewQuery.isFetching || controlsBusy
                   }
                   onClick={handleGenerate}
                 >
@@ -1017,7 +1082,7 @@ export default function FluxusExecutivePage({
                   disabled={
                     !reportReady ||
                     (!isDirty && Boolean(savedReport || preview?.report)) ||
-                    saveMutation.isPending
+                    controlsBusy
                   }
                   onClick={handleSave}
                 >
@@ -1031,10 +1096,11 @@ export default function FluxusExecutivePage({
                 <button
                   type="button"
                   className="persona-executive-button persona-executive-button--subtle"
-                  disabled={!reportReady || isDirty || saveMutation.isPending}
+                  disabled={!reportReady || isDirty || controlsBusy}
                   onClick={handlePrint}
                 >
-                  <Printer size={16} /> Imprimir / PDF
+                  <Printer size={16} />{" "}
+                  {isPrinting ? "Conferindo acesso…" : "Imprimir / PDF"}
                 </button>
               </div>
               {isDirty ? (
@@ -1060,7 +1126,8 @@ export default function FluxusExecutivePage({
                 disabled={!reportReady}
                 onClick={handlePrint}
               >
-                <Printer size={16} /> Imprimir / PDF
+                <Printer size={16} />{" "}
+                {isPrinting ? "Conferindo acesso…" : "Imprimir / PDF"}
               </button>
             </div>
           )}

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { FluxusDimension } from "./fluxus";
+import type { ExecutiveComplementaryBundle } from "./fluxusManagerialComplementary";
 import type {
   FluxusMomentDimension,
   FluxusSustainabilityIndicator,
@@ -66,8 +67,12 @@ export type ExecutivePerson = {
   cycleLabel: string | null;
   completedAt: string;
   result: FluxusV2Result;
+  complementary?: ExecutiveComplementaryBundle;
 };
-export type ExecutiveDirectoryEntry = Omit<ExecutivePerson, "result">;
+export type ExecutiveDirectoryEntry = Omit<
+  ExecutivePerson,
+  "result" | "complementary"
+>;
 export type ExecutiveAction = { title: string; text: string };
 export type ExecutiveIndividualAnalysis = {
   summary: string;

@@ -15,19 +15,23 @@ import { protectedProcedure, router } from "../_core/trpc";
 const companyInputSchema = z.object({
   companyId: z.number().int().positive().optional(),
 });
+const executiveProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  ctx.res?.setHeader?.("Cache-Control", "private, no-store");
+  return next();
+});
 
 export const fluxusExecutiveRouter = router({
-  directory: protectedProcedure
+  directory: executiveProcedure
     .input(companyInputSchema)
     .query(({ ctx, input }) =>
       getExecutiveDirectory(ctx.user, input.companyId)
     ),
 
-  preview: protectedProcedure
+  preview: executiveProcedure
     .input(executiveSelectionSchema)
     .query(({ ctx, input }) => previewExecutive(ctx.user, input)),
 
-  save: protectedProcedure
+  save: executiveProcedure
     .input(
       z.object({
         selection: executiveSelectionSchema,
@@ -38,11 +42,11 @@ export const fluxusExecutiveRouter = router({
     )
     .mutation(({ ctx, input }) => saveExecutiveReport(ctx.user, input)),
 
-  get: protectedProcedure
+  get: executiveProcedure
     .input(z.object({ reportId: z.number().int().positive() }))
     .query(({ ctx, input }) => getExecutivePreview(ctx.user, input.reportId)),
 
-  list: protectedProcedure
+  list: executiveProcedure
     .input(companyInputSchema)
     .query(({ ctx, input }) => listExecutiveReports(ctx.user, input.companyId)),
 });

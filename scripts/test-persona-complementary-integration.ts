@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import postgres from "postgres";
-import { complementaryConsentText } from "../shared/fluxusComplementary";
+import {
+  complementaryConsentText,
+  COMPLEMENTARY_TERMS_VERSION,
+} from "../shared/fluxusComplementary";
 
 async function main() {
   if (
@@ -98,7 +101,7 @@ async function main() {
     fileName: "teste-ficticio.pdf",
     pdfBase64: syntheticPdf().toString("base64"),
     recipientUserIds: [20, 40],
-    termsVersion: "2026-11-11.v1",
+    termsVersion: COMPLEMENTARY_TERMS_VERSION,
     consentText: complementaryConsentText([
       { id: 20, name: "Gestora Exemplo", roleLabel: "Gestor" },
       {
@@ -481,6 +484,40 @@ async function main() {
       identityConfirmed: true,
     });
     await check(
+      "visão executiva lê somente o ciclo autorizado, sem bypass administrativo",
+      async () => {
+        const visible = await service.readExecutiveComplementarySources(20, 1, [
+          { userId: 10, assessmentId: 101 },
+        ]);
+        assert.equal(visible["101"]?.pq?.id, linear.id);
+        assert.deepEqual(
+          await service.readExecutiveComplementarySources(20, 1, [
+            { userId: 10, assessmentId: 102 },
+          ]),
+          {}
+        );
+        assert.deepEqual(
+          await service.readExecutiveComplementarySources(41, 1, [
+            { userId: 10, assessmentId: 101 },
+          ]),
+          {}
+        );
+      }
+    );
+    await check(
+      "visão gerencial não presume finalidade nova de consentimento antigo",
+      async () => {
+        await sql`update fluxus_complementary_reports set "termsVersion"='2026-11-11.v1' where id=${linear.id}`;
+        assert.deepEqual(
+          await service.readExecutiveComplementarySources(20, 1, [
+            { userId: 10, assessmentId: 101 },
+          ]),
+          {}
+        );
+        await sql`update fluxus_complementary_reports set "termsVersion"=${COMPLEMENTARY_TERMS_VERSION} where id=${linear.id}`;
+      }
+    );
+    await check(
       "download bloqueado atrás de uma retirada não retorna o PDF após a revogação",
       async () => {
         let result: Promise<{ error?: unknown }>;
@@ -494,6 +531,17 @@ async function main() {
           await tx`update fluxus_complementary_reports set status='revoked',revision=revision+1,"pdfCiphertext"=null,"fileHash"=null,"fileName"=null,"sourceName"=null,"sourceDate"=null,values=null,warnings='[]',context=null,"confirmedAt"=null,"revokedAt"=now(),"updatedAt"=now() where id=${linear.id}`;
         });
         assert.ok((await result!).error);
+      }
+    );
+    await check(
+      "retirada remove a fonte da próxima leitura executiva",
+      async () => {
+        assert.deepEqual(
+          await service.readExecutiveComplementarySources(20, 1, [
+            { userId: 10, assessmentId: 101 },
+          ]),
+          {}
+        );
       }
     );
     await check(

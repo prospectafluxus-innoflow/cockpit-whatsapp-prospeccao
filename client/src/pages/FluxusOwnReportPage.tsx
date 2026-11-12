@@ -125,6 +125,11 @@ export default function FluxusOwnReportPage() {
             vinculados a este ciclo. Esta página não compartilha seus resultados
             com ninguém.
           </p>
+          <p>
+            Para exportar, escolha “Salvar como PDF” do navegador e formato A4
+            horizontal (Paisagem). Essa opção evita a conversão de orientação do
+            “Microsoft Print to PDF”.
+          </p>
         </div>
         <div className="persona-executive-toolbar-actions">
           <button

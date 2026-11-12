@@ -959,6 +959,11 @@ export default function FluxusExecutivePage({
             não exporta esses complementos. Cópias já exportadas não podem ser
             recolhidas automaticamente.
           </p>
+          <p>
+            Para exportar, escolha “Salvar como PDF” do navegador e formato A4
+            horizontal (Paisagem). Essa opção evita a conversão de orientação do
+            “Microsoft Print to PDF”.
+          </p>
         </div>
         <div className="persona-executive-intro-badge">
           <Sparkles size={18} />

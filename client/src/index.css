@@ -759,6 +759,10 @@ body[data-persona-ui="true"]
 }
 @media print {
   body[data-persona-executive-report="true"] {
+    /* Keep the outer flow on the same named page as the document. */
+    page: persona-executive;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff !important;
     color: #172c25 !important;
   }

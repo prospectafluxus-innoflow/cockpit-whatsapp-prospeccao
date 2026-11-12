@@ -1129,11 +1129,24 @@ export async function uploadComplementaryReport(input: {
     badRequest("Não foi possível validar o PDF do relatório complementar.");
   }
   const sourceName = safeSourceName(parsed.sourceName);
+  if (
+    parsed.warnings.includes(
+      "Modelo de relatório não reconhecido para o tipo solicitado."
+    )
+  ) {
+    badRequest(
+      input.kind === "pq"
+        ? "Este PDF não foi reconhecido como relatório QP. Envie o PDF de resultado do QP; para o relatório de Sabotadores, altere o Tipo de relatório para Sabotadores e envie esse outro PDF separadamente."
+        : "Este PDF não foi reconhecido como relatório de Sabotadores. Envie o PDF de resultado dos Sabotadores; para o relatório QP, altere o Tipo de relatório para QP e envie esse outro PDF separadamente."
+    );
+  }
   if (!sourceName)
-    badRequest("O nome do titular não foi encontrado no relatório.");
+    badRequest(
+      "Não foi possível identificar seu nome no PDF. Envie o relatório de resultado gerado pelo teste, com o nome do titular no conteúdo; mudar apenas o nome do arquivo não resolve."
+    );
   if (!namesCorrelate(access.user.name!, sourceName)) {
     badRequest(
-      "O titular identificado no PDF não corresponde ao usuário autenticado."
+      "O titular identificado no PDF não corresponde ao seu cadastro. Confira o nome dentro do relatório e entre na conta da mesma pessoa. Não é permitido importar o relatório de outra pessoa."
     );
   }
   const sourceDate =

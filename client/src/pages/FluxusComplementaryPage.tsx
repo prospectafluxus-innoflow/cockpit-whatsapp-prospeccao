@@ -145,6 +145,38 @@ export function emptyDraft(): DraftValues {
   };
 }
 
+type UploadPhase = "reading" | "sending" | null;
+
+export type UploadFeedback = {
+  tone: "error" | "status" | "success";
+  message: string;
+};
+
+export function UploadFeedbackMessage({
+  feedback,
+}: {
+  feedback: UploadFeedback | null;
+}) {
+  if (!feedback) return null;
+  const isError = feedback.tone === "error";
+  return (
+    <div
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      aria-atomic="true"
+      className={`rounded-xl border p-3 text-sm leading-relaxed ${
+        isError
+          ? "border-destructive/40 bg-destructive/5 text-destructive"
+          : feedback.tone === "success"
+            ? "border-emerald-500/40 bg-emerald-500/5 text-emerald-700 dark:text-emerald-300"
+            : "border-primary/30 bg-primary/5 text-foreground"
+      }`}
+    >
+      {feedback.message}
+    </div>
+  );
+}
+
 export function draftToValues(draft: DraftValues): ComplementaryValues {
   return {
     pq: draft.pq.trim() === "" ? null : Number(draft.pq),
@@ -205,7 +237,15 @@ export default function FluxusComplementaryPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [recipientUserIds, setRecipientUserIds] = useState<number[]>([]);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
+  const [uploadFeedback, setUploadFeedback] = useState<UploadFeedback | null>(
+    null
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadBusyRef = useRef(false);
+  const conferenceRef = useRef<HTMLDivElement>(null);
+  const focusConferenceAfterUploadRef = useRef(false);
 
   const availabilityQuery = trpc.fluxusComplementary.availability.useQuery(
     undefined,
@@ -225,6 +265,7 @@ export default function FluxusComplementaryPage() {
   );
   const uploadMutation = trpc.fluxusComplementary.upload.useMutation({
     onSuccess: detail => {
+      focusConferenceAfterUploadRef.current = true;
       setSelectedReportId(detail.id);
       setSelectedDetail(detail);
       setDraft(detail.status === "pending" ? draftFromDetail(detail) : null);
@@ -233,10 +274,28 @@ export default function FluxusComplementaryPage() {
       setConsentAccepted(false);
       setFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setTab("mine");
+      setMineOffset(0);
+      setUploadFeedback({
+        tone: "success",
+        message:
+          "PDF recebido. A conferência pendente foi aberta abaixo; revise os dados antes de confirmar.",
+      });
+      void Promise.resolve(utils.fluxusComplementary.mine.invalidate()).catch(
+        () => undefined
+      );
       toast.success("PDF recebido. Confira os dados antes de confirmar.");
     },
-    onError: error =>
-      toast.error(error.message || "Não foi possível enviar o PDF."),
+    onError: error => {
+      const message = error.message || "Não foi possível enviar o PDF.";
+      setUploadFeedback({ tone: "error", message });
+      toast.error(message);
+    },
+    onSettled: () => {
+      uploadBusyRef.current = false;
+      setUploadBusy(false);
+      setUploadPhase(null);
+    },
   });
   const confirmMutation = trpc.fluxusComplementary.confirm.useMutation({
     onSuccess: async () => {
@@ -297,6 +356,21 @@ export default function FluxusComplementaryPage() {
     }
   }, [detailQuery.data, selectedReportId]);
 
+  useEffect(() => {
+    if (
+      !focusConferenceAfterUploadRef.current ||
+      selectedReportId === null ||
+      !selectedDetail
+    ) {
+      return;
+    }
+    const conference = conferenceRef.current;
+    if (!conference) return;
+    focusConferenceAfterUploadRef.current = false;
+    conference.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    conference.focus({ preventScroll: true });
+  }, [selectedDetail, selectedReportId]);
+
   const availability = availabilityQuery.data;
   const termsVersionCurrent =
     availability?.termsVersion === COMPLEMENTARY_TERMS_VERSION;
@@ -317,6 +391,7 @@ export default function FluxusComplementaryPage() {
       ? isCompleteComplementaryDraft(draft, selectedDetail.kind)
       : false;
   const saving =
+    uploadBusy ||
     uploadMutation.isPending ||
     confirmMutation.isPending ||
     revokeMutation.isPending;
@@ -327,6 +402,7 @@ export default function FluxusComplementaryPage() {
       isValidComplementaryPdf(file) &&
       consentAccepted &&
       termsVersionCurrent &&
+      !uploadBusy &&
       !uploadMutation.isPending
   );
   const consentText = useMemo(
@@ -395,6 +471,7 @@ export default function FluxusComplementaryPage() {
 
   function handleFileChange(nextFile: File | null) {
     setFileError(null);
+    setUploadFeedback(null);
     setConsentAccepted(false);
     if (!nextFile) {
       setFile(null);
@@ -421,12 +498,14 @@ export default function FluxusComplementaryPage() {
   }
 
   async function handleUpload() {
+    if (uploadBusyRef.current || uploadMutation.isPending) return;
     if (!availability?.enabled || !availability.eligible) return;
     if (!termsVersionCurrent) {
       setConsentAccepted(false);
-      toast.error(
-        "O termo de consentimento foi atualizado. Revise a versão vigente antes de enviar."
-      );
+      const message =
+        "O termo de consentimento foi atualizado. Revise a versão vigente antes de enviar.";
+      setUploadFeedback({ tone: "error", message });
+      toast.error(message);
       return;
     }
     if (!file || !isValidComplementaryPdf(file)) {
@@ -434,28 +513,61 @@ export default function FluxusComplementaryPage() {
       return;
     }
     if (!consentAccepted) {
-      toast.error("Leia e autorize a importação antes de enviar.");
+      const message = "Leia e autorize a importação antes de enviar.";
+      setUploadFeedback({ tone: "error", message });
+      toast.error(message);
       return;
     }
+    const selectedFile = file;
+    uploadBusyRef.current = true;
+    setUploadBusy(true);
+    setUploadPhase("reading");
+    setUploadFeedback({
+      tone: "status",
+      message: "Lendo o PDF localmente… aguarde antes de clicar novamente.",
+    });
     try {
       // O arquivo só é lido localmente depois do consentimento explícito.
-      const pdfBase64 = await readFileAsBase64(file);
-      uploadMutation.mutate({
-        kind,
-        fileName: file.name,
-        pdfBase64,
-        consentAccepted: true,
-        termsVersion: COMPLEMENTARY_TERMS_VERSION,
-        consentText,
-        recipientUserIds,
-        context: context.trim() || undefined,
+      const pdfBase64 = await readFileAsBase64(selectedFile);
+      setUploadPhase("sending");
+      setUploadFeedback({
+        tone: "status",
+        message:
+          "PDF lido localmente. Enviando para criar a conferência pendente…",
       });
+      try {
+        await uploadMutation.mutateAsync({
+          kind,
+          fileName: selectedFile.name,
+          pdfBase64,
+          consentAccepted: true,
+          termsVersion: COMPLEMENTARY_TERMS_VERSION,
+          consentText,
+          recipientUserIds,
+          context: context.trim() || undefined,
+        });
+      } catch (error) {
+        // O callback da mutação também mantém o erro visível; este fallback
+        // cobre adaptadores que rejeitam sem executar o callback configurado.
+        setUploadFeedback({
+          tone: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Não foi possível enviar o PDF.",
+        });
+      }
     } catch (error) {
-      toast.error(
+      const message =
         error instanceof Error
           ? error.message
-          : "Não foi possível ler o PDF localmente."
-      );
+          : "Não foi possível ler o PDF localmente.";
+      setUploadFeedback({ tone: "error", message });
+      toast.error(message);
+    } finally {
+      uploadBusyRef.current = false;
+      setUploadBusy(false);
+      setUploadPhase(null);
     }
   }
 
@@ -638,6 +750,7 @@ export default function FluxusComplementaryPage() {
           onKindChange={nextKind => {
             setKind(nextKind);
             setConsentAccepted(false);
+            setUploadFeedback(null);
           }}
           file={file}
           fileError={fileError}
@@ -652,7 +765,9 @@ export default function FluxusComplementaryPage() {
           setContext={setContext}
           onUpload={handleUpload}
           uploadReady={uploadReady}
-          pending={uploadMutation.isPending}
+          pending={uploadBusy || uploadMutation.isPending}
+          phase={uploadPhase}
+          feedback={uploadFeedback}
         />
       ) : null}
 
@@ -757,80 +872,86 @@ export default function FluxusComplementaryPage() {
       </section>
 
       {selectedReportId !== null ? (
-        <Card className="border-primary/20 shadow-md">
-          <CardHeader className="border-b border-border/60">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle>
-                  {selectedIsPending
-                    ? "Conferir relatório pendente"
-                    : "Detalhes da avaliação complementar"}
-                </CardTitle>
-                <CardDescription className="mt-2">
-                  {selectedIsPending
-                    ? "Confira cada campo. O sistema não inventa pontuações quando o gráfico não fornece texto."
-                    : "Leitura protegida e separada do Persona/Feedback; estes dados não são uma medida de desempenho."}
-                </CardDescription>
+        <div
+          ref={conferenceRef}
+          tabIndex={-1}
+          className="scroll-mt-6 outline-none"
+        >
+          <Card className="border-primary/20 shadow-md">
+            <CardHeader className="border-b border-border/60">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <CardTitle>
+                    {selectedIsPending
+                      ? "Conferir relatório pendente"
+                      : "Detalhes da avaliação complementar"}
+                  </CardTitle>
+                  <CardDescription className="mt-2">
+                    {selectedIsPending
+                      ? "Confira cada campo. O sistema não inventa pontuações quando o gráfico não fornece texto."
+                      : "Leitura protegida e separada do Persona/Feedback; estes dados não são uma medida de desempenho."}
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  onClick={requestCloseDetail}
+                  disabled={saving}
+                >
+                  Fechar
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                onClick={requestCloseDetail}
-                disabled={saving}
-              >
-                Fechar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6">
-            {selectedDetailLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-20 rounded-xl" />
-                <Skeleton className="h-40 rounded-xl" />
-              </div>
-            ) : selectedDetailError ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Não foi possível abrir este relatório. Os demais relatórios
-                  continuam acessíveis. {detailQuery.error?.message}
-                </AlertDescription>
-              </Alert>
-            ) : selectedDetail && selectedIsPending && draft ? (
-              <PendingEditor
-                detail={selectedDetail}
-                draft={draft}
-                sourceDate={sourceDate}
-                setSourceDate={setSourceDate}
-                identityConfirmed={identityConfirmed}
-                setIdentityConfirmed={setIdentityConfirmed}
-                updateDraft={updateDraft}
-                onConfirm={handleConfirm}
-                onDiscard={requestCloseDetail}
-                onRevoke={() => requestRevoke(selectedDetail)}
-                canConfirm={Boolean(
-                  availability?.enabled &&
-                    availability.eligible &&
-                    sourceDate &&
-                    selectedValuesComplete &&
-                    identityConfirmed
-                )}
-                saving={saving}
-              />
-            ) : selectedDetail ? (
-              <ConfirmedDetail
-                detail={selectedDetail}
-                onDownload={() => handleDownload(selectedDetail)}
-                downloading={downloadMutation.isPending}
-                onRevoke={
-                  selectedDetail.isOwner
-                    ? () => requestRevoke(selectedDetail)
-                    : undefined
-                }
-                revoking={revokeMutation.isPending}
-              />
-            ) : null}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="p-6">
+              {selectedDetailLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-20 rounded-xl" />
+                  <Skeleton className="h-40 rounded-xl" />
+                </div>
+              ) : selectedDetailError ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Não foi possível abrir este relatório. Os demais relatórios
+                    continuam acessíveis. {detailQuery.error?.message}
+                  </AlertDescription>
+                </Alert>
+              ) : selectedDetail && selectedIsPending && draft ? (
+                <PendingEditor
+                  detail={selectedDetail}
+                  draft={draft}
+                  sourceDate={sourceDate}
+                  setSourceDate={setSourceDate}
+                  identityConfirmed={identityConfirmed}
+                  setIdentityConfirmed={setIdentityConfirmed}
+                  updateDraft={updateDraft}
+                  onConfirm={handleConfirm}
+                  onDiscard={requestCloseDetail}
+                  onRevoke={() => requestRevoke(selectedDetail)}
+                  canConfirm={Boolean(
+                    availability?.enabled &&
+                      availability.eligible &&
+                      sourceDate &&
+                      selectedValuesComplete &&
+                      identityConfirmed
+                  )}
+                  saving={saving}
+                />
+              ) : selectedDetail ? (
+                <ConfirmedDetail
+                  detail={selectedDetail}
+                  onDownload={() => handleDownload(selectedDetail)}
+                  downloading={downloadMutation.isPending}
+                  onRevoke={
+                    selectedDetail.isOwner
+                      ? () => requestRevoke(selectedDetail)
+                      : undefined
+                  }
+                  revoking={revokeMutation.isPending}
+                />
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
       ) : null}
 
       <AlertDialog
@@ -888,6 +1009,8 @@ function UploadCard({
   onUpload,
   uploadReady,
   pending,
+  phase,
+  feedback,
 }: {
   availability: {
     termsVersion: string;
@@ -910,6 +1033,8 @@ function UploadCard({
   onUpload: () => void;
   uploadReady: boolean;
   pending: boolean;
+  phase: UploadPhase;
+  feedback: UploadFeedback | null;
 }) {
   return (
     <Card className="border-orange-500/30 shadow-sm">
@@ -919,9 +1044,15 @@ function UploadCard({
           Importar um PDF seu
         </CardTitle>
         <CardDescription>
-          Envie um PDF por vez. A leitura fica local até este consentimento ser
-          marcado; nenhum PDF é enviado a serviço externo de IA.
+          Você pode importar QP e Sabotadores separadamente, sempre um PDF por
+          vez. Selecione o tipo correspondente ao arquivo; a leitura fica local
+          até este consentimento ser marcado e nenhum PDF é enviado a serviço
+          externo de IA.
         </CardDescription>
+        <p className="text-xs text-muted-foreground">
+          Cada envio exige um novo consentimento. Para importar os dois tipos,
+          autorize cada PDF separadamente.
+        </p>
       </CardHeader>
       <CardContent>
         <fieldset disabled={pending} className="space-y-5">
@@ -965,6 +1096,10 @@ function UploadCard({
                 A fonte oficial abre em nova aba. O Fluxus não preenche
                 formulários externos.
               </p>
+              <p className="text-xs text-muted-foreground">
+                Exemplos: <code>PQ_Assessment_Report</code> para QP e{" "}
+                <code>Saboteur_Assessment_Results</code> para Sabotadores.
+              </p>
             </div>
           </div>
 
@@ -987,13 +1122,24 @@ function UploadCard({
               PDF não vazio, máximo de 5 MiB. O nome e o tipo também serão
               validados no servidor.
             </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Envie o relatório de resultado do próprio titular. O nome dentro
+              do PDF deve corresponder ao cadastro; renomear o arquivo não muda
+              o titular.
+            </p>
             {file ? (
               <p className="mt-2 text-sm text-foreground">
                 Selecionado: {file.name}
               </p>
             ) : null}
             {fileError ? (
-              <p className="mt-2 text-sm text-destructive">{fileError}</p>
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="mt-2 text-sm text-destructive"
+              >
+                {fileError}
+              </p>
             ) : null}
           </div>
 
@@ -1078,6 +1224,7 @@ function UploadCard({
           </label>
 
           <div className="flex flex-wrap items-center gap-3">
+            <UploadFeedbackMessage feedback={feedback} />
             <Button
               onClick={onUpload}
               disabled={!uploadReady}
@@ -1088,7 +1235,11 @@ function UploadCard({
               ) : (
                 <FileUp className="h-4 w-4" />
               )}
-              {pending ? "Enviando PDF..." : "Enviar para conferir"}
+              {pending
+                ? phase === "reading"
+                  ? "Lendo PDF..."
+                  : "Enviando PDF..."
+                : "Enviar para conferir"}
             </Button>
             <p className="text-xs text-muted-foreground">
               O envio só libera a conferência; nada é compartilhado antes da

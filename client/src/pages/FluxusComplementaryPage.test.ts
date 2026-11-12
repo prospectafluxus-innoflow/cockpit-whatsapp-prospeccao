@@ -7,6 +7,7 @@ import {
   formatCalendarDate,
   isCompleteComplementaryDraft,
   PendingEditor,
+  UploadFeedbackMessage,
   type DraftValues,
 } from "./FluxusComplementaryPage";
 
@@ -148,6 +149,46 @@ describe("página de avaliações complementares", () => {
     expect(markup).not.toContain(
       "Leitores escolhidos por mim: Gestora (Gestora)"
     );
+  });
+
+  it("explicita QP e Sabotadores como envios separados com exemplos de arquivo", () => {
+    const markup = renderPage();
+    expect(markup).toContain(
+      "Você pode importar QP e Sabotadores separadamente"
+    );
+    expect(markup).toContain("sempre um PDF por vez");
+    expect(markup).toContain("PQ_Assessment_Report");
+    expect(markup).toContain("Saboteur_Assessment_Results");
+    expect(markup).toContain("Cada envio exige um novo consentimento");
+    expect(markup).toContain("relatório de resultado do próprio titular");
+    expect(markup).toContain("renomear o arquivo não muda o titular");
+  });
+
+  it("mantém erros como alertas e progresso/sucesso como status no formulário", () => {
+    const errorMarkup = renderToStaticMarkup(
+      React.createElement(UploadFeedbackMessage, {
+        feedback: { tone: "error", message: "Falha fictícia do servidor" },
+      })
+    );
+    const statusMarkup = renderToStaticMarkup(
+      React.createElement(UploadFeedbackMessage, {
+        feedback: {
+          tone: "status",
+          message: "Lendo o PDF localmente… aguarde antes de clicar novamente.",
+        },
+      })
+    );
+    const successMarkup = renderToStaticMarkup(
+      React.createElement(UploadFeedbackMessage, {
+        feedback: { tone: "success", message: "PDF recebido" },
+      })
+    );
+    expect(errorMarkup).toContain('role="alert"');
+    expect(errorMarkup).toContain("Falha fictícia do servidor");
+    expect(statusMarkup).toContain('role="status"');
+    expect(statusMarkup).toContain("Lendo o PDF localmente");
+    expect(successMarkup).toContain('role="status"');
+    expect(successMarkup).toContain("PDF recebido");
   });
 
   it("preserva a lista própria e o acesso à rotina mesmo com a integração desligada", () => {

@@ -134,7 +134,14 @@ export function hasKnownFeedbackMembership(
     person.membershipId > 0 &&
     person.membershipRole !== null &&
     person.membershipRole !== undefined &&
-    ["collaborator", "manager", "supermanager", "hr", "company_admin"].includes(
+    [
+      "collaborator",
+      "manager",
+      "supermanager",
+      "hr",
+      "director",
+      "company_admin",
+    ].includes(
       person.membershipRole
     )
   );
@@ -144,7 +151,8 @@ export function feedbackRoleReach(
   role: FeedbackRole,
   scopedDepartments: readonly string[]
 ): string {
-  if (role === "company_admin" || role === "hr") return "empresa inteira";
+  if (role === "company_admin" || role === "hr" || role === "director")
+    return "empresa inteira";
   if (role === "manager") return "equipe direta";
   if (role === "supermanager")
     return scopedDepartments.length

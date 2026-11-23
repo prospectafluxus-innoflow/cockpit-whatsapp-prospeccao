@@ -473,6 +473,7 @@ async function requireAccessTx(
       (role === "manager" ||
         role === "supermanager" ||
         role === "hr" ||
+        role === "director" ||
         role === "company_admin")
   );
   const canOperateContent = canReadContent;
@@ -539,6 +540,7 @@ async function requireAccess(
       (role === "manager" ||
         role === "supermanager" ||
         role === "hr" ||
+        role === "director" ||
         role === "company_admin")
   );
   const canOperateContent = Boolean(
@@ -680,7 +682,8 @@ async function hasScopeForDepartment(
   role: FeedbackRole | null
 ) {
   if (departmentId === null) return false;
-  if (role === "hr" || role === "company_admin") return true;
+  if (role === "hr" || role === "director" || role === "company_admin")
+    return true;
   if (role !== "supermanager") return false;
   const now = nowDate();
   const scopes = await db
@@ -716,7 +719,8 @@ async function hasScopeForDepartmentTx(
   role: FeedbackRole | null
 ) {
   if (departmentId === null) return false;
-  if (role === "hr" || role === "company_admin") return true;
+  if (role === "hr" || role === "director" || role === "company_admin")
+    return true;
   if (role !== "supermanager") return false;
   const now = nowDate();
   const [scopes, departments] = await Promise.all([
@@ -765,7 +769,11 @@ async function canReadParticipant(
     !CONTENT_READER_ROLES.includes(membership.role)
   )
     return false;
-  if (membership.role === "hr" || membership.role === "company_admin")
+  if (
+    membership.role === "hr" ||
+    membership.role === "director" ||
+    membership.role === "company_admin"
+  )
     return true;
   const assignments = await getCurrentAssignments(companyId);
   const assignment = assignments.find(
@@ -797,7 +805,11 @@ async function canReadParticipantTx(
     !CONTENT_READER_ROLES.includes(membership.role)
   )
     return false;
-  if (membership.role === "hr" || membership.role === "company_admin")
+  if (
+    membership.role === "hr" ||
+    membership.role === "director" ||
+    membership.role === "company_admin"
+  )
     return true;
   const assignments = await getCurrentAssignmentsTx(tx, companyId);
   const assignment = assignments.find(
@@ -830,7 +842,8 @@ async function canEvaluateParticipant(
     !CONTENT_READER_ROLES.includes(membership.role)
   )
     return false;
-  if (["hr", "company_admin"].includes(membership.role)) return true;
+  if (["hr", "director", "company_admin"].includes(membership.role))
+    return true;
   const assignments = await getCurrentAssignments(companyId);
   const assignment = assignments.find(
     item => item.userId === participantUserId
@@ -866,7 +879,8 @@ async function canEvaluateParticipantTx(
     !CONTENT_READER_ROLES.includes(membership.role)
   )
     return false;
-  if (["hr", "company_admin"].includes(membership.role)) return true;
+  if (["hr", "director", "company_admin"].includes(membership.role))
+    return true;
   const assignments = await getCurrentAssignmentsTx(tx, companyId);
   const assignment = assignments.find(
     item => item.userId === participantUserId
@@ -1129,7 +1143,9 @@ async function getDirectory(companyId: number) {
     );
   const globalEvaluatorIds = new Set(
     evaluatorMemberships
-      .filter(item => ["hr", "company_admin"].includes(item.membership!.role))
+      .filter(item =>
+        ["hr", "director", "company_admin"].includes(item.membership!.role)
+      )
       .map(item => item.person.id)
   );
   const managerEvaluatorIds = new Set(
@@ -1217,7 +1233,13 @@ async function getDirectory(companyId: number) {
       managerEligible: Boolean(
         ["manager", "hr"].includes(person.fluxusRole ?? "") ||
           (membership &&
-            ["manager", "supermanager", "company_admin", "hr"].includes(
+            [
+              "manager",
+              "supermanager",
+              "company_admin",
+              "hr",
+              "director",
+            ].includes(
               membership.role
             ))
       ),
@@ -3084,7 +3106,7 @@ export async function workspace(
         evaluation.participantUserId === actor.id &&
         isFeedbackVisibleToParticipant(evaluation.status)
     );
-  } else if (!(role === "hr" || role === "company_admin")) {
+  } else if (!(role === "hr" || role === "director" || role === "company_admin")) {
     const visibleIds = new Set<number>(
       directory.people
         .filter(
@@ -3108,17 +3130,22 @@ export async function workspace(
     allowedEvaluations.map(evaluation => evaluation.cycleId)
   );
   const cycles =
-    access.canConfigure || role === "hr" || role === "company_admin"
+    access.canConfigure ||
+    role === "hr" ||
+    role === "director" ||
+    role === "company_admin"
       ? allCycles
       : allCycles.filter(cycle => cycleIds.has(cycle.id));
   const readableParticipantIds = new Set<number>(
-    directory.people
-      .filter(
-        person =>
-          person.id === actor.id ||
-          person.allowedEvaluatorIds.includes(actor.id)
-      )
-      .map(person => person.id)
+    role === "director" || role === "hr" || role === "company_admin"
+      ? directory.people.map(person => person.id)
+      : directory.people
+          .filter(
+            person =>
+              person.id === actor.id ||
+              person.allowedEvaluatorIds.includes(actor.id)
+          )
+          .map(person => person.id)
   );
   const feedbacks = await visibleEvaluationList(
     actor,

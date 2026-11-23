@@ -6,6 +6,7 @@ export const FEEDBACK_ROLES = [
   "manager",
   "supermanager",
   "hr",
+  "director",
   "company_admin",
 ] as const;
 export type FeedbackRole = (typeof FEEDBACK_ROLES)[number];
@@ -47,6 +48,7 @@ export const FEEDBACK_ROLE_LABELS: Record<FeedbackRole, string> = {
   manager: "Gestor",
   supermanager: "Gestor de áreas (Supergestor)",
   hr: "RH",
+  director: "Diretor",
   company_admin: "Administrador da empresa",
 };
 export type FeedbackCompetency = {

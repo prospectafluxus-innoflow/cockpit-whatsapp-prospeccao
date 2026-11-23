@@ -65,7 +65,9 @@ export function FluxusLayout({ children }: { children: React.ReactNode }) {
     },
     { path: "/fluxus/avaliacao", label: "Avaliação", icon: ClipboardCheck },
     { path: "/fluxus/historico", label: "Histórico", icon: History },
-    ...(user.fluxusRole === "manager" || user.fluxusRole === "hr"
+    ...(user.fluxusRole === "manager" ||
+    user.fluxusRole === "hr" ||
+    user.fluxusRole === "director"
       ? [{ path: "/fluxus/equipe", label: "Equipe", icon: UsersRound }]
       : []),
     { path: "/fluxus/metodologia", label: "Método", icon: BookOpenCheck },

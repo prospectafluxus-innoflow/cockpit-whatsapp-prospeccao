@@ -28,7 +28,7 @@ export function canAccessFluxusIndividualReport(
   if (viewer.fluxusRole === "manager") {
     return policy === "participant_manager_hr";
   }
-  if (viewer.fluxusRole === "hr") {
+  if (viewer.fluxusRole === "hr" || viewer.fluxusRole === "director") {
     return policy === "participant_manager_hr" || policy === "participant_hr";
   }
   return false;

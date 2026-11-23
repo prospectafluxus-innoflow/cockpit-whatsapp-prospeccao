@@ -270,7 +270,7 @@ export async function updateFluxusCompanyGovernance(
 export async function setFluxusUserRole(
   userId: number,
   companyId: number,
-  fluxusRole: "collaborator" | "manager" | "hr"
+  fluxusRole: "collaborator" | "manager" | "hr" | "director"
 ) {
   const rows = await db
     .update(users)

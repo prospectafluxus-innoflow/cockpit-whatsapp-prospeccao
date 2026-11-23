@@ -98,7 +98,11 @@ function requireFluxusOrganizationAccess(user: {
   fluxusRole?: string | null;
 }) {
   requireFluxusAccount(user);
-  if (user.fluxusRole !== "manager" && user.fluxusRole !== "hr") {
+  if (
+    user.fluxusRole !== "manager" &&
+    user.fluxusRole !== "hr" &&
+    user.fluxusRole !== "director"
+  ) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Acesso restrito à gestão autorizada da empresa." });
   }
 }
@@ -769,7 +773,7 @@ export const fluxusRouter = router({
     }),
 
   setCollaboratorRole: adminProcedure
-    .input(z.object({ userId: z.number().int().positive(), companyId: z.number().int().positive(), fluxusRole: z.enum(["collaborator", "manager", "hr"]) }))
+    .input(z.object({ userId: z.number().int().positive(), companyId: z.number().int().positive(), fluxusRole: z.enum(["collaborator", "manager", "hr", "director"]) }))
     .mutation(async ({ ctx, input }) => {
       const user = await setFluxusUserRole(input.userId, input.companyId, input.fluxusRole);
       if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado nesta empresa." });

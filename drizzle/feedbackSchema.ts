@@ -49,7 +49,7 @@ export const feedbackMemberships = pgTable(
       .where(sql`${t.endsAt} IS NULL`),
     check(
       "feedback_membership_role",
-      sql`${t.role} IN ('collaborator','manager','supermanager','hr','company_admin')`
+      sql`${t.role} IN ('collaborator','manager','supermanager','hr','director','company_admin')`
     ),
     check(
       "feedback_membership_period",

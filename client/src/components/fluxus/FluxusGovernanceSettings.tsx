@@ -42,7 +42,7 @@ type Person = {
   id: number;
   name: string | null;
   email?: string | null;
-  fluxusRole: "collaborator" | "manager" | "hr";
+  fluxusRole: "collaborator" | "manager" | "hr" | "director";
 };
 type DirectoryPerson = FeedbackHierarchyPerson & {
   isCompanyAdmin: boolean;
@@ -510,6 +510,7 @@ export function FluxusGovernanceSettings({
                           <option value="collaborator">Colaborador</option>
                           <option value="manager">Gestor</option>
                           <option value="hr">RH</option>
+                          <option value="director">Diretor</option>
                         </select>
                       </label>
                       <label className="space-y-1">

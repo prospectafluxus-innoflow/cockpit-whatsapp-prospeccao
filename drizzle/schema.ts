@@ -35,6 +35,7 @@ export const fluxusAccessRoleEnum = pgEnum("fluxus_access_role", [
   "collaborator",
   "manager",
   "hr",
+  "director",
 ]);
 export const fluxusPrivacyRequestTypeEnum = pgEnum(
   "fluxus_privacy_request_type",
